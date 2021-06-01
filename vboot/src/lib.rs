@@ -1,0 +1,21 @@
+#![no_std]
+
+extern crate alloc;
+
+pub mod rimpl;
+
+#[allow(clippy::missing_safety_doc)]
+#[allow(dead_code)]
+#[allow(non_camel_case_types)]
+#[allow(non_snake_case)]
+pub mod vboot_sys {
+    include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
+
+    // ctypes
+    use core::ffi::c_void;
+    type c_char = i8;
+    type c_int = i32;
+    type c_ulong = u64;
+}
+
+pub use vboot_sys::vb2_return_code as return_code;
