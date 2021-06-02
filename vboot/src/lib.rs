@@ -12,7 +12,6 @@ pub mod vboot_sys {
     include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
 
     // ctypes
-    use core::ffi::c_void;
     type c_char = i8;
     type c_int = i32;
     type c_ulong = u64;
