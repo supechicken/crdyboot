@@ -1,0 +1,16 @@
+[package]
+name = "crdyboot"
+version = "0.1.0"
+authors = ["Nicholas Bishop <nicholasbishop@google.com>"]
+edition = "2018"
+resolver = "2"
+
+[dependencies]
+uefi = "0.11.0"
+uefi-services = "0.8.0"
+
+vboot = { path = "../vboot" }
+
+[patch.crates-io]
+# Branch: "bishop-no-128-panic"
+num-bigint = { package = "num-bigint-dig", git = "https://github.com/nicholasbishop/num-bigint.git", rev = "a2dc57562dd459dca0edaf539acca610bc4807d8" }
