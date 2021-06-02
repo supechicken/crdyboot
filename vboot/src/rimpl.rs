@@ -176,7 +176,8 @@ impl PublicKey {
         // F4 exponent.
         let e = rsa::BigUint::from_slice(&[65537]);
 
-        let key = rsa::RSAPublicKey::new(n, e).map_err(CryptoError::InvalidKey)?;
+        let key =
+            rsa::RSAPublicKey::new(n, e).map_err(CryptoError::InvalidKey)?;
 
         Ok(PublicKey {
             key,
@@ -223,7 +224,9 @@ impl KeyBlockHeader {
                 &buf[u64_to_usize(VB2_KEYBLOCK_HASH_OFFSET)..],
             )?,
             keyblock_flags: header.keyblock_flags,
-            data_key: PublicKey::from_le_bytes(&buf[u64_to_usize(VB2_KEYBLOCK_KEY_OFFSET)..])?,
+            data_key: PublicKey::from_le_bytes(
+                &buf[u64_to_usize(VB2_KEYBLOCK_KEY_OFFSET)..],
+            )?,
         };
 
         // We only support VB2_ALG_RSA8192_SHA256 for the
@@ -254,7 +257,10 @@ impl KeyBlockHeader {
 ///
 /// See 2lib/include/2struct.h for the declaration of `struct
 /// vb2_keyblock`.
-fn verify_keyblock(buf: &[u8], key: &rsa::RSAPublicKey) -> Result<(), CryptoError> {
+fn verify_keyblock(
+    buf: &[u8],
+    key: &rsa::RSAPublicKey,
+) -> Result<(), CryptoError> {
     let header = KeyBlockHeader::from_le_bytes(buf)?;
 
     // Get sha256 hash of the data covered by the signature.
@@ -285,7 +291,8 @@ mod tests {
     #[test]
     fn test_unpack_key_buffer() {
         // Decode the PEM-encoded public key.
-        let test_key_pub_pem = include_bytes!("../test_keys/kernel_key.pub.pem");
+        let test_key_pub_pem =
+            include_bytes!("../test_keys/kernel_key.pub.pem");
         let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
         let expected_public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
 
@@ -300,9 +307,11 @@ mod tests {
 
     #[test]
     fn test_keyblock_header() -> Result<(), CryptoError> {
-        let test_keyblock = include_bytes!("../test_keys/kernel_data_key.keyblock");
+        let test_keyblock =
+            include_bytes!("../test_keys/kernel_data_key.keyblock");
 
-        let test_key_vbpubk = include_bytes!("../test_keys/kernel_data_key.vbpubk");
+        let test_key_vbpubk =
+            include_bytes!("../test_keys/kernel_data_key.vbpubk");
         let public_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
         let header = KeyBlockHeader::from_le_bytes(test_keyblock)?;
@@ -317,12 +326,14 @@ mod tests {
     fn test_verify_keyblock() {
         // Get the public key whose private half was used to sign the
         // keyblock.
-        let test_key_pub_pem = include_bytes!("../test_keys/kernel_key.pub.pem");
+        let test_key_pub_pem =
+            include_bytes!("../test_keys/kernel_key.pub.pem");
         let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
         let public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
 
         // Get the signed keyblock.
-        let test_keyblock = include_bytes!("../test_keys/kernel_data_key.keyblock");
+        let test_keyblock =
+            include_bytes!("../test_keys/kernel_data_key.keyblock");
 
         verify_keyblock(test_keyblock, &public_key).unwrap();
     }

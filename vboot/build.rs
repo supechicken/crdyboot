@@ -39,7 +39,9 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .allowlist_var("VB2_KEYBLOCK_KEY_OFFSET")
         .derive_partialeq(true)
         .impl_partialeq(true)
-        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
+        .default_enum_style(bindgen::EnumVariation::NewType {
+            is_bitfield: false,
+        })
         .translate_enum_integer_types(true)
         // Block-listing these types avoids some unnecessary
         // generation of ctype typedefs.
