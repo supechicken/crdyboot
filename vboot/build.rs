@@ -8,8 +8,25 @@ fn gen_fwlib_bindings(firmware: &Path) {
 
     println!("cargo:rerun-if-changed={}", header_path);
 
+    // TODO: this is a hack to work around missing headers for some
+    // targets. We are only using bindgen to create Rust definitions
+    // of some packed structures of numeric types, so it should be
+    // safe to just use the host system's target here. The expected
+    // size of structures is checked before using them. It would be
+    // nice to fix this properly though.
+    let target = env::var("TARGET").unwrap();
+    let target = if matches!(
+        target.as_str(),
+        "x86_64-unknown-uefi" | "i686-unknown-uefi"
+    ) {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        &target
+    };
+
     let bindings = bindgen::Builder::default()
         .header(header_path)
+        .clang_arg(format!("--target={}", target))
         // TODO: check for what is still needed
         .clang_arg(format!("-I{}", firmware.join("include").display()))
         .clang_arg(format!("-I{}", firmware.join("lib/include").display()))
