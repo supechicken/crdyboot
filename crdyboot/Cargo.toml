@@ -6,11 +6,12 @@ edition = "2018"
 resolver = "2"
 
 [dependencies]
-uefi = "0.11.0"
-uefi-services = "0.8.0"
+uefi = { path = "../third_party/uefi-rs", features = ["exts"] }
+uefi-services = { path = "../third_party/uefi-rs/uefi-services" }
 
 vboot = { path = "../vboot" }
 
 [patch.crates-io]
 # Branch: "bishop-no-128-panic"
 num-bigint = { package = "num-bigint-dig", git = "https://github.com/nicholasbishop/num-bigint.git", rev = "a2dc57562dd459dca0edaf539acca610bc4807d8" }
+uefi = { path = "../third_party/uefi-rs" }
