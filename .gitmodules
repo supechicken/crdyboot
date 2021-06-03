@@ -1,3 +1,6 @@
 [submodule "third_party/vboot_reference"]
 	path = third_party/vboot_reference
 	url = https://chromium.googlesource.com/chromiumos/platform/vboot_reference
+[submodule "third_party/uefi-rs"]
+	path = third_party/uefi-rs
+	url = https://github.com/nicholasbishop/uefi-rs
