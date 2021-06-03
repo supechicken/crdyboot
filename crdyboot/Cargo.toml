@@ -6,6 +6,8 @@ edition = "2018"
 resolver = "2"
 
 [dependencies]
+log = "0.4"
+
 uefi = { path = "../third_party/uefi-rs", features = ["exts"] }
 uefi-services = { path = "../third_party/uefi-rs/uefi-services" }
 
