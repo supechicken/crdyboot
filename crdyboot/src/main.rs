@@ -14,9 +14,59 @@ use uefi::proto::media::file::{
     File, FileAttribute, FileInfo, FileMode, FileType,
 };
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::{Char16, Result};
+use uefi::proto::media::partition::{
+    GptPartitionEntry, GptPartitionType, PartitionInfo,
+};
+use uefi::{Char16, Guid, Result};
+
+const KERNEL_TYPE_GUID: Guid = Guid::from_values(
+    0xfe3a2a5d,
+    0x4f32,
+    0x41a7,
+    0xb725,
+    [0xac, 0xcc, 0x32, 0x85, 0xa3, 0x09],
+);
+
+fn get_kernel_partitions(
+    _image: Handle,
+    bt: &BootServices,
+) -> Result<Vec<GptPartitionEntry>> {
+    info!("partition info");
+
+    let handles = bt
+        .find_handles::<PartitionInfo>()
+        .expect_success("Failed to get handles for `PartitionInfo` protocol");
+
+    // We expect to find three: KERN-A, KERN-B, and KERN-C.
+    let mut v = Vec::with_capacity(3);
+
+    // TODO: use blockio instead just to have less reliance on UEFI
+    // implementations working correctly?
+    //
+    // TODO: what happens if there are multiple disks? How do we pick
+    // the one we booted from? Presumably there's some way to use the
+    // image handle for this.
+    for handle in handles {
+        let pi = bt
+            .handle_protocol::<PartitionInfo>(handle)
+            .expect_success("Failed to get partition info");
+        let pi = unsafe { &*pi.get() };
+
+        if let Some(gpt) = pi.gpt_partition_entry() {
+            if { gpt.partition_type_guid } == GptPartitionType(KERNEL_TYPE_GUID)
+            {
+                v.push(gpt.clone());
+            }
+        }
+    }
+
+    Status::SUCCESS.into_with_val(|| v)
+}
 
 fn run(image: Handle, bt: &BootServices) -> Result<()> {
+    let kernel_partitions = get_kernel_partitions(image, bt).log_warning()?;
+    info!("kernel partitions: {:?}", kernel_partitions);
+
     let sfs = bt.locate_protocol::<SimpleFileSystem>()?;
     let sfs = sfs.expect("Cannot open `SimpleFileSystem` protocol");
     let sfs = unsafe { &mut *sfs.get() };
