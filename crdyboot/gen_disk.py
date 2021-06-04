@@ -42,9 +42,14 @@ def main():
     vboot_reference_dir = os.path.join(
         script_dir, '../third_party/vboot_reference')
     futility = os.path.join(vboot_reference_dir, 'build/futility/futility')
-    # TODO: for now just use a pregenerated test key.
-    private_signing_key = os.path.join(
-        script_dir, '../vboot/test_data/kernel_key.vbprivk')
+
+    # TODO: for now just use a pregenerated test keys.
+    kernel_key_public = os.path.join(
+        script_dir, '../vboot/test_data/kernel_key.vbpubk')
+    kernel_data_key_base = os.path.join(
+        script_dir, '../vboot/test_data/kernel_data_key')
+    kernel_data_key_private = kernel_data_key_base + '.vbprivk'
+    kernel_data_key_keyblock = kernel_data_key_base + '.keyblock'
 
     # Ensure the vboot_reference "futility" tool has been built.
     run('make', '-C', vboot_reference_dir, 'futil')
@@ -93,8 +98,15 @@ def main():
                 # Sign it.
                 run('sudo', futility, 'vbutil_kernel',
                     '--repack', signed_kernel_partition,
-                    '--signprivate', private_signing_key,
+                    '--signprivate', kernel_data_key_private,
+                    '--keyblock', kernel_data_key_keyblock,
                     '--oldblob', unsigned_kernel_partition)
+
+                # Verify it.
+                run('sudo', futility, 'vbutil_kernel',
+                    '--verify', signed_kernel_partition,
+                    '--signpubkey', kernel_key_public,
+                    '--verbose')
 
                 # Copy it back to the partition.
                 run('sudo', 'cp', signed_kernel_partition, part_dev)
