@@ -39,6 +39,11 @@ def is_disk_using_partition_layout_27(lo_dev):
 def main():
     script_dir = os.path.dirname(os.path.realpath(__file__))
     volatile_dir = os.path.join(script_dir, 'volatile')
+    vboot_reference_dir = os.path.join(
+        script_dir, '../third_party/vboot_reference')
+
+    # Ensure the vboot_reference "futility" tool has been built.
+    run('make', '-C', vboot_reference_dir, 'futil')
 
     disk_bin = os.path.join(volatile_dir, 'disk.bin')
 
