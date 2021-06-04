@@ -369,13 +369,21 @@ pub fn verify_kernel_vblock() {
 mod tests {
     use {super::*, core::convert::TryFrom};
 
+    fn key_from_pem_bytes(pem_bytes: &[u8]) -> PublicKey {
+        let pem = rsa::pem::parse(pem_bytes).unwrap();
+        PublicKey {
+            algorithm: Algorithm::Rsa8192Sha256,
+            key: rsa::RSAPublicKey::try_from(pem).unwrap(),
+            key_version: 0,
+        }
+    }
+
     #[test]
     fn test_unpack_key_buffer() {
         // Decode the PEM-encoded public key.
         let test_key_pub_pem =
             include_bytes!("../test_data/kernel_key.pub.pem");
-        let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
-        let expected_public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
+        let expected_public_key = key_from_pem_bytes(test_key_pub_pem);
 
         // Decode the vbpubk-encoded public key.
         let test_key_vbpubk = include_bytes!("../test_data/kernel_key.vbpubk");
@@ -383,7 +391,7 @@ mod tests {
 
         // The two keys should be identical, just different file
         // representations.
-        assert_eq!(public_key.key, expected_public_key);
+        assert_eq!(public_key.key, expected_public_key.key);
     }
 
     #[test]
@@ -409,12 +417,7 @@ mod tests {
         // keyblock.
         let test_key_pub_pem =
             include_bytes!("../test_data/kernel_key.pub.pem");
-        let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
-        let public_key = PublicKey {
-            algorithm: Algorithm::Rsa8192Sha256,
-            key: rsa::RSAPublicKey::try_from(pem).unwrap(),
-            key_version: 0,
-        };
+        let public_key = key_from_pem_bytes(test_key_pub_pem);
 
         // Get the signed keyblock.
         let test_keyblock =
