@@ -233,6 +233,24 @@ impl PublicKey {
             key_version,
         })
     }
+
+    fn verify(
+        &self,
+        data_to_verify: &[u8],
+        expected_signature: &Signature,
+    ) -> Result<(), CryptoError> {
+        // Get hash of the data covered by the signature.
+        // TODO: move this to Algorithm
+        let digest = Sha256::digest(data_to_verify);
+
+        self.key
+            .verify(
+                self.algorithm.padding_scheme(),
+                &digest,
+                &expected_signature.signature,
+            )
+            .map_err(CryptoError::SignatureVerificationFailed)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -305,19 +323,11 @@ impl KeyBlockHeader {
 fn verify_keyblock(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
     let header = KeyBlockHeader::from_le_bytes(buf)?;
 
-    // Get sha256 hash of the data covered by the signature.
-    let digest = Sha256::digest(
-        buf.get(..header.keyblock_signature.data_size)
-            .ok_or(CryptoError::BufferTooSmall)?,
-    );
+    let data_to_verify = buf
+        .get(..header.keyblock_signature.data_size)
+        .ok_or(CryptoError::BufferTooSmall)?;
 
-    key.key
-        .verify(
-            key.algorithm.padding_scheme(),
-            &digest,
-            &header.keyblock_signature.signature,
-        )
-        .map_err(CryptoError::SignatureVerificationFailed)
+    key.verify(data_to_verify, &header.keyblock_signature)
 }
 
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
