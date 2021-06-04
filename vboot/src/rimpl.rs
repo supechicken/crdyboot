@@ -23,6 +23,8 @@
 // TODO: use constants from vboot_reference for verification, maybe
 // also offset_of for member fields?
 
+// TODO: for now only VB2_ALG_RSA8192_SHA256 is supported.
+
 // TODO
 #![allow(dead_code)]
 
@@ -48,7 +50,22 @@ enum CryptoError {
     KeyBlockNotCompletelySigned,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Algorithm {
+    Rsa8192Sha256,
+}
+
+impl Algorithm {
+    fn from_vb2(alg: vb2_crypto_algorithm) -> Result<Algorithm, CryptoError> {
+        if alg == vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256 {
+            Ok(Algorithm::Rsa8192Sha256)
+        } else {
+            Err(CryptoError::UnsupportedAlgorithm(alg))
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SignatureKind {
     /// SHA-512 hash (not signed).
     Sha512,
@@ -152,7 +169,7 @@ impl Signature {
 #[derive(Debug, PartialEq)]
 struct PublicKey {
     key: rsa::RSAPublicKey,
-    algorithm: vb2_crypto_algorithm,
+    algorithm: Algorithm,
     key_version: u32,
 }
 
@@ -164,20 +181,14 @@ impl PublicKey {
     ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_packed_key`.
-    ///
-    /// TODO: for now this only handles
-    /// vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256.
     fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, CryptoError> {
         let header = unsafe { transmute_from_bytes::<vb2_packed_key>(buf) }?;
 
         let key_offset = u32_to_usize(header.key_offset);
         let key_size = u32_to_usize(header.key_size);
-        let algorithm = vb2_crypto_algorithm(header.algorithm);
+        let algorithm =
+            Algorithm::from_vb2(vb2_crypto_algorithm(header.algorithm))?;
         let key_version = header.key_version;
-
-        if algorithm != vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256 {
-            return Err(CryptoError::UnsupportedAlgorithm(algorithm));
-        }
 
         let key_range = key_offset..key_offset + key_size;
         let key_data = buf.get(key_range).ok_or(CryptoError::BufferTooSmall)?;
