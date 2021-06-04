@@ -49,13 +49,18 @@ def main():
 
     with set_up_loopback_device(disk_bin) as lo_dev:
         layout27 = is_disk_using_partition_layout_27(lo_dev)
+        efi_partnum = 12
+        kern_a_partnum = 2
+        kern_b_partnum = 4
         if layout27:
-            efi_partnum = 27
-        else:
-            efi_partnum = 12
+            offset = 15
+            efi_partnum += offset
+            kern_a_partnum += offset
+            kern_b_partnum += offset
 
         efi_partition_dev = '{}p{}'.format(lo_dev, efi_partnum)
 
+        # Replace both grub executables with crdyboot.
         with mount(efi_partition_dev) as mountpoint:
             run('sudo', 'ls', '-lR', mountpoint)
             targets = {
@@ -69,6 +74,9 @@ def main():
                 run('sudo', 'cp', src, dst)
 
             run('sudo', 'ls', '-lR', mountpoint)
+
+        # Sign both kernel partitions.
+        # TODO
 
 
 if __name__ == '__main__':
