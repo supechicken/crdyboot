@@ -37,7 +37,7 @@ To build both 64-bit and 32-bit UEFI targets:
 To generate a bootable test image:
 
     cp /path/to/cloudready.bin volatile/disk.bin
-    ./gen_disk.py <efi-partition>
+    ./gen_disk.py
     
 Then run it in QEMU:
 

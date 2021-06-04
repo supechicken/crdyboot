@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
 import contextlib
 import os
 import subprocess
@@ -32,21 +31,27 @@ def mount(dev):
             run('sudo', 'umount', mountpoint)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('partition', type=int,
-                        help='EFI partition number, probably 12 or 27')
-    args = parser.parse_args()
+def is_disk_using_partition_layout_27(lo_dev):
+    p27 = lo_dev + 'p27'
+    return os.path.exists(p27)
 
+
+def main():
     script_dir = os.path.dirname(os.path.realpath(__file__))
     volatile_dir = os.path.join(script_dir, 'volatile')
 
     disk_bin = os.path.join(volatile_dir, 'disk.bin')
 
     with set_up_loopback_device(disk_bin) as lo_dev:
-        partition_dev = '{}p{}'.format(lo_dev, args.partition)
+        layout27 = is_disk_using_partition_layout_27(lo_dev)
+        if layout27:
+            efi_partnum = 27
+        else:
+            efi_partnum = 12
 
-        with mount(partition_dev) as mountpoint:
+        efi_partition_dev = '{}p{}'.format(lo_dev, efi_partnum)
+
+        with mount(efi_partition_dev) as mountpoint:
             run('sudo', 'ls', '-lR', mountpoint)
             targets = {
                 'x86_64-unknown-uefi': 'grubx64.efi',
