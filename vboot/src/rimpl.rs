@@ -82,7 +82,9 @@ unsafe fn transmute_from_bytes<T>(buf: &[u8]) -> Result<&T, CryptoError> {
         return Err(CryptoError::BufferTooSmall);
     }
 
-    Ok(mem::transmute(&buf[0]))
+    let ptr = buf.as_ptr() as *const T;
+
+    Ok(&*ptr)
 }
 
 #[derive(Debug, PartialEq)]
