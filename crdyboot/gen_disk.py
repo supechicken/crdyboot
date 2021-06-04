@@ -41,6 +41,10 @@ def main():
     volatile_dir = os.path.join(script_dir, 'volatile')
     vboot_reference_dir = os.path.join(
         script_dir, '../third_party/vboot_reference')
+    futility = os.path.join(vboot_reference_dir, 'build/futility/futility')
+    # TODO: for now just use a pregenerated test key.
+    private_signing_key = os.path.join(
+        script_dir, '../vboot/test_data/kernel_key.vbprivk')
 
     # Ensure the vboot_reference "futility" tool has been built.
     run('make', '-C', vboot_reference_dir, 'futil')
@@ -76,7 +80,24 @@ def main():
             run('sudo', 'ls', '-lR', mountpoint)
 
         # Sign both kernel partitions.
-        # TODO
+        with tempfile.TemporaryDirectory(prefix='crdyboot') as tmpdir:
+            for partnum in (kern_a_partnum, kern_b_partnum):
+                unsigned_kernel_partition = os.path.join(
+                    tmpdir, 'kernel_partition')
+                signed_kernel_partition = unsigned_kernel_partition + '.signed'
+
+                # Copy the whole partition to a temporary file.
+                part_dev = '{}p{}'.format(lo_dev, partnum)
+                run('sudo', 'cp', part_dev, unsigned_kernel_partition)
+
+                # Sign it.
+                run('sudo', futility, 'vbutil_kernel',
+                    '--repack', signed_kernel_partition,
+                    '--signprivate', private_signing_key,
+                    '--oldblob', unsigned_kernel_partition)
+
+                # Copy it back to the partition.
+                run('sudo', 'cp', signed_kernel_partition, part_dev)
 
 
 if __name__ == '__main__':
