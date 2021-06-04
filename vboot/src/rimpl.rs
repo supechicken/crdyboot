@@ -350,11 +350,73 @@ impl KeyBlockHeader {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct KernelPreamble {
+    preamble_size: usize,
+    preamble_signature: Signature,
+    body_signature: Signature,
+}
+
+impl KernelPreamble {
+    /// Load a KernelPreamble from a byte slice. The slice starts with
+    /// the vb2_kernel_preamble structure and includes the data for
+    /// the body and preamble signatures.
+    ///
+    /// After the preamble is parsed, its signature is checked against
+    /// the data key from `keyblock`, and an error is returned if
+    /// validation fails.
+    fn parse_and_verify(
+        buf: &[u8],
+        keyblock: &KeyBlockHeader,
+    ) -> Result<KernelPreamble, CryptoError> {
+        let header =
+            unsafe { transmute_from_bytes::<vb2_kernel_preamble>(buf) }?;
+
+        if header.header_version_major != 2 {
+            return Err(CryptoError::BadVersion);
+        }
+        if header.header_version_minor != 2 {
+            return Err(CryptoError::BadVersion);
+        }
+
+        let preamble = KernelPreamble {
+            preamble_size: u32_to_usize(header.preamble_size),
+            preamble_signature: Signature::from_le_bytes(
+                &buf[offset_of!(vb2_kernel_preamble, preamble_signature)..],
+                SignatureKind::Rsa8192,
+            )?,
+            body_signature: Signature::from_le_bytes(
+                &buf[offset_of!(vb2_kernel_preamble, body_signature)..],
+                SignatureKind::Rsa8192,
+            )?,
+        };
+
+        // TODO: check what signature covers
+
+        keyblock
+            .data_key
+            .verify_partial(buf, &preamble.preamble_signature)?;
+
+        Ok(preamble)
+    }
+}
+
+// TODO: think about naming
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
-pub fn verify_kernel_vblock() {
-    // TODO: check flags
-    // Check preamble
-    // Check body
+fn verify_kernel(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
+    let keyblock = KeyBlockHeader::parse_and_verify(buf, key)?;
+
+    let rest = buf
+        .get(keyblock.keyblock_size..)
+        .ok_or(CryptoError::BufferTooSmall)?;
+
+    let _preamble = KernelPreamble::parse_and_verify(rest, &keyblock)?;
+
+    // TODO: check version/flags/etc
+
+    // Check body (separate func)
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -410,5 +472,19 @@ mod tests {
         assert_eq!(header.keyblock_flags, 5);
         assert_eq!(header.keyblock_signature.data_size, 2168);
         assert_eq!(header.data_key, kernel_data_key);
+    }
+
+    #[test]
+    fn test_verify_kernel() {
+        // Get the public key whose private half was used to sign the
+        // keyblock.
+        let kernel_key_pub_pem =
+            include_bytes!("../test_data/kernel_key.pub.pem");
+        let kernel_key = key_from_pem_bytes(kernel_key_pub_pem);
+
+        // Get the signed kernel.
+        let test_kernel = include_bytes!("../test_data/fake_signed_kernel");
+
+        verify_kernel(test_kernel, &kernel_key).unwrap();
     }
 }
