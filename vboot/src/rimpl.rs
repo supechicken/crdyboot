@@ -199,8 +199,9 @@ struct KeyBlockHeader {
 }
 
 impl KeyBlockHeader {
-    /// Load a KeyBlockHeader from a byte slice. The slice just needs
-    /// to include the header, not the rest of the packed data.
+    /// Load a KeyBlockHeader from a byte slice. The slice starts with
+    /// the header and needs to include the data key and signature
+    /// data as well.
     ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_keyblock`.
