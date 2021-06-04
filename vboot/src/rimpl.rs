@@ -185,7 +185,7 @@ impl PublicKey {
     ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_packed_key`.
-    fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, CryptoError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, CryptoError> {
         let header = unsafe { transmute_from_bytes::<vb2_packed_key>(buf) }?;
 
         let key_offset = u32_to_usize(header.key_offset);
