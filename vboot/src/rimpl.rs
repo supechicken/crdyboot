@@ -48,6 +48,26 @@ enum CryptoError {
     KeyBlockNotCompletelySigned,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum SignatureKind {
+    /// SHA-512 hash (not signed).
+    Sha512,
+
+    /// RSA-8192 signature.
+    Rsa8192,
+}
+
+impl SignatureKind {
+    fn size_in_bytes(&self) -> usize {
+        match self {
+            SignatureKind::Sha512 => 512 / 8,
+
+            // Based on vb2_rsa_sig_size (2lib/2rsa.c).
+            SignatureKind::Rsa8192 => 8192 / 8,
+        }
+    }
+}
+
 fn u32_to_usize(v: u32) -> usize {
     // OK to unwrap since u32 should always fit in usize on the
     // required targets.
@@ -105,7 +125,10 @@ impl Signature {
     ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_signature`.
-    fn from_le_bytes(buf: &[u8]) -> Result<Signature, CryptoError> {
+    fn from_le_bytes(
+        buf: &[u8],
+        kind: SignatureKind,
+    ) -> Result<Signature, CryptoError> {
         let header = unsafe { transmute_from_bytes::<vb2_signature>(buf) }?;
 
         let sig_offset = u32_to_usize(header.sig_offset);
@@ -114,6 +137,10 @@ impl Signature {
 
         let sig_range = sig_offset..sig_offset + sig_size;
         let sig_data = buf.get(sig_range).ok_or(CryptoError::BufferTooSmall)?;
+
+        if sig_data.len() != kind.size_in_bytes() {
+            return Err(CryptoError::BadSignatureSize);
+        }
 
         Ok(Signature {
             signature: sig_data.to_vec(),
@@ -223,21 +250,17 @@ impl KeyBlockHeader {
             keyblock_size: u32_to_usize(header.keyblock_size),
             keyblock_signature: Signature::from_le_bytes(
                 &buf[offset_of!(vb2_keyblock, keyblock_signature)..],
+                SignatureKind::Rsa8192,
             )?,
             keyblock_hash: Signature::from_le_bytes(
                 &buf[offset_of!(vb2_keyblock, keyblock_hash)..],
+                SignatureKind::Sha512,
             )?,
             keyblock_flags: header.keyblock_flags,
             data_key: PublicKey::from_le_bytes(
                 &buf[offset_of!(vb2_keyblock, data_key)..],
             )?,
         };
-
-        // We only support VB2_ALG_RSA8192_SHA256 for the
-        // keyblock_signature, verify the size is as expected.
-        if header.keyblock_signature.signature.len() != 1024 {
-            return Err(CryptoError::BadSignatureSize);
-        }
 
         // The signature should cover the entire keyblock buffer,
         // except for the two signatures at the end.
