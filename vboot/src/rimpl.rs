@@ -403,7 +403,13 @@ impl KernelPreamble {
 
 // TODO: think about naming
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
-fn verify_kernel(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
+//
+// Returns the kernel body data. TODO: for now it is actually
+// returning `buf[kernel_body_data..]`.
+fn verify_kernel<'a>(
+    buf: &'a [u8],
+    key: &PublicKey,
+) -> Result<&'a [u8], CryptoError> {
     let keyblock = KeyBlockHeader::parse_and_verify(buf, key)?;
 
     let rest = buf
@@ -422,7 +428,7 @@ fn verify_kernel(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
 
     // TODO: check version/flags/etc
 
-    Ok(())
+    Ok(body)
 }
 
 #[cfg(test)]
