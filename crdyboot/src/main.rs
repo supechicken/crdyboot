@@ -4,6 +4,8 @@
 
 extern crate alloc;
 
+mod truncate;
+
 use alloc::{vec, vec::Vec};
 use core::convert::TryFrom;
 use log::info;
