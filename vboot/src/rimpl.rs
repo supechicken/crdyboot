@@ -247,7 +247,7 @@ impl PublicKey {
 
     /// Verify that the signature of `data_to_verify` matches the
     /// `expected_signature`.
-    fn verify(
+    fn verify_all(
         &self,
         data_to_verify: &[u8],
         expected_signature: &Signature,
@@ -262,6 +262,20 @@ impl PublicKey {
                 &expected_signature.signature,
             )
             .map_err(CryptoError::SignatureVerificationFailed)
+    }
+
+    /// Verify that the signature of the first `signature.data_size`
+    /// bytes of `buf` matches `signature.signature`.
+    fn verify_partial(
+        &self,
+        buf: &[u8],
+        signature: &Signature,
+    ) -> Result<(), CryptoError> {
+        let data_to_verify = buf
+            .get(..signature.data_size)
+            .ok_or(CryptoError::BufferTooSmall)?;
+
+        self.verify_all(data_to_verify, &signature)
     }
 }
 
@@ -326,20 +340,22 @@ impl KeyBlockHeader {
     }
 }
 
-/// Verify a keyblock using a public key.
+/// Verify a keyblock using a public key. If successful, the parsed
+/// KeyBlockHeader is returned.
 ///
 /// Based on vb2_verify_keyblock (2lib/2common.c).
 ///
 /// See 2lib/include/2struct.h for the declaration of `struct
 /// vb2_keyblock`.
-fn verify_keyblock(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
+fn verify_keyblock(
+    buf: &[u8],
+    key: &PublicKey,
+) -> Result<KeyBlockHeader, CryptoError> {
     let header = KeyBlockHeader::from_le_bytes(buf)?;
 
-    let data_to_verify = buf
-        .get(..header.keyblock_signature.data_size)
-        .ok_or(CryptoError::BufferTooSmall)?;
+    key.verify_partial(buf, &header.keyblock_signature)?;
 
-    key.verify(data_to_verify, &header.keyblock_signature)
+    Ok(header)
 }
 
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
