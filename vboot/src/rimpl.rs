@@ -63,6 +63,12 @@ impl Algorithm {
             Err(CryptoError::UnsupportedAlgorithm(alg))
         }
     }
+
+    fn padding_scheme(&self) -> rsa::PaddingScheme {
+        rsa::PaddingScheme::PKCS1v15Sign {
+            hash: Some(rsa::Hash::SHA2_256),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -297,6 +303,7 @@ impl KeyBlockHeader {
 /// vb2_keyblock`.
 fn verify_keyblock(
     buf: &[u8],
+    algorithm: Algorithm,
     key: &rsa::RSAPublicKey,
 ) -> Result<(), CryptoError> {
     let header = KeyBlockHeader::from_le_bytes(buf)?;
@@ -307,12 +314,12 @@ fn verify_keyblock(
             .ok_or(CryptoError::BufferTooSmall)?,
     );
 
-    // Based on the `crypto_to_hash` map in `2lib/2crypto.c`.
-    let padding = rsa::PaddingScheme::PKCS1v15Sign {
-        hash: Some(rsa::Hash::SHA2_256),
-    };
-    key.verify(padding, &digest, &header.keyblock_signature.signature)
-        .map_err(CryptoError::SignatureVerificationFailed)
+    key.verify(
+        algorithm.padding_scheme(),
+        &digest,
+        &header.keyblock_signature.signature,
+    )
+    .map_err(CryptoError::SignatureVerificationFailed)
 }
 
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
@@ -373,6 +380,7 @@ mod tests {
         let test_keyblock =
             include_bytes!("../test_data/kernel_data_key.keyblock");
 
-        verify_keyblock(test_keyblock, &public_key).unwrap();
+        verify_keyblock(test_keyblock, Algorithm::Rsa8192Sha256, &public_key)
+            .unwrap();
     }
 }
