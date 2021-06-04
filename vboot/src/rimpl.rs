@@ -30,6 +30,7 @@ use {
     crate::vboot_sys::*,
     alloc::vec::Vec,
     core::{convert::TryInto, mem},
+    memoffset::offset_of,
     rsa::PublicKey as _,
     sha2::{Digest, Sha256},
 };
@@ -221,14 +222,14 @@ impl KeyBlockHeader {
         let header = KeyBlockHeader {
             keyblock_size: u32_to_usize(header.keyblock_size),
             keyblock_signature: Signature::from_le_bytes(
-                &buf[u64_to_usize(VB2_KEYBLOCK_SIGNATURE_OFFSET)..],
+                &buf[offset_of!(vb2_keyblock, keyblock_signature)..],
             )?,
             keyblock_hash: Signature::from_le_bytes(
-                &buf[u64_to_usize(VB2_KEYBLOCK_HASH_OFFSET)..],
+                &buf[offset_of!(vb2_keyblock, keyblock_hash)..],
             )?,
             keyblock_flags: header.keyblock_flags,
             data_key: PublicKey::from_le_bytes(
-                &buf[u64_to_usize(VB2_KEYBLOCK_KEY_OFFSET)..],
+                &buf[offset_of!(vb2_keyblock, data_key)..],
             )?,
         };
 
