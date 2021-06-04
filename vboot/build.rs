@@ -37,6 +37,7 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .allowlist_type("vb2_error_t")
         .allowlist_type("vb2_keyblock")
         .allowlist_type("vb2_packed_key")
+        .allowlist_type("vb2_kernel_preamble")
         .allowlist_type("vb2_public_key")
         .allowlist_type("vb2_return_code")
         .allowlist_type("vb2_signature")
