@@ -37,8 +37,9 @@ use {
     sha2::{Digest, Sha256},
 };
 
+// TODO: rename to KernelError, VbootError, or something like that?
 #[derive(Debug)]
-enum CryptoError {
+pub enum CryptoError {
     UnsupportedAlgorithm(vb2_crypto_algorithm),
     BufferTooSmall,
     InvalidKeyData,
@@ -184,7 +185,7 @@ impl Signature {
 }
 
 #[derive(Debug, PartialEq)]
-struct PublicKey {
+pub struct PublicKey {
     key: rsa::RSAPublicKey,
     algorithm: Algorithm,
     // TODO: using this for anything?
@@ -406,7 +407,7 @@ impl KernelPreamble {
 //
 // Returns the kernel body data. TODO: for now it is actually
 // returning `buf[kernel_body_data..]`.
-fn verify_kernel<'a>(
+pub fn verify_kernel<'a>(
     buf: &'a [u8],
     key: &PublicKey,
 ) -> Result<&'a [u8], CryptoError> {
