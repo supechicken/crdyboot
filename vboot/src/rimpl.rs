@@ -65,8 +65,16 @@ impl Algorithm {
     }
 
     fn padding_scheme(&self) -> rsa::PaddingScheme {
-        rsa::PaddingScheme::PKCS1v15Sign {
-            hash: Some(rsa::Hash::SHA2_256),
+        match self {
+            Algorithm::Rsa8192Sha256 => rsa::PaddingScheme::PKCS1v15Sign {
+                hash: Some(rsa::Hash::SHA2_256),
+            },
+        }
+    }
+
+    fn digest(&self, data: &[u8]) -> Vec<u8> {
+        match self {
+            Algorithm::Rsa8192Sha256 => Sha256::digest(data).to_vec(),
         }
     }
 }
@@ -234,14 +242,15 @@ impl PublicKey {
         })
     }
 
+    /// Verify that the signature of `data_to_verify` matches the
+    /// `expected_signature`.
     fn verify(
         &self,
         data_to_verify: &[u8],
         expected_signature: &Signature,
     ) -> Result<(), CryptoError> {
         // Get hash of the data covered by the signature.
-        // TODO: move this to Algorithm
-        let digest = Sha256::digest(data_to_verify);
+        let digest = self.algorithm.digest(data_to_verify);
 
         self.key
             .verify(
