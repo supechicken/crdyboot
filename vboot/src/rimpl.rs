@@ -45,7 +45,7 @@ enum CryptoError {
     InvalidKey(rsa::errors::Error),
     BadMagic,
     BadVersion,
-    BadSignatureSize,
+    BadSignatureSize(usize, usize),
     SignatureVerificationFailed(rsa::errors::Error),
     KeyBlockNotCompletelySigned,
 }
@@ -170,7 +170,10 @@ impl Signature {
         let sig_data = buf.get(sig_range).ok_or(CryptoError::BufferTooSmall)?;
 
         if sig_data.len() != kind.size_in_bytes() {
-            return Err(CryptoError::BadSignatureSize);
+            return Err(CryptoError::BadSignatureSize(
+                sig_data.len(),
+                kind.size_in_bytes(),
+            ));
         }
 
         Ok(Signature {
