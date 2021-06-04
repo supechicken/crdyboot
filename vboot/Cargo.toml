@@ -12,6 +12,11 @@ rsa = { version = "0.4.0", default-features = false, features = ["alloc"] }
 [build-dependencies]
 bindgen = "0.58.1"
 
+[dev-dependencies]
+# TODO: we really just want the pem feature, but for some reason it's
+# not working correctly without std.
+rsa = { version = "0.4.0", default-features = false, features = ["std", "pem"] }
+
 [patch.crates-io]
 # Branch: "bishop-no-128-panic"
 num-bigint = { package = "num-bigint-dig", git = "https://github.com/nicholasbishop/num-bigint.git", rev = "a2dc57562dd459dca0edaf539acca610bc4807d8" }
