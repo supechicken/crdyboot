@@ -25,9 +25,6 @@
 
 // TODO: for now only VB2_ALG_RSA8192_SHA256 is supported.
 
-// TODO
-#![allow(dead_code)]
-
 use {
     crate::vboot_sys::*,
     alloc::vec::Vec,
@@ -104,18 +101,6 @@ fn u32_to_usize(v: u32) -> usize {
     // OK to unwrap since u32 should always fit in usize on the
     // required targets.
     v.try_into().unwrap()
-}
-
-fn u64_to_usize(v: u64) -> usize {
-    // OK to unwrap since u64 should always fit in usize on the
-    // required targets.
-    v.try_into().unwrap()
-}
-
-fn read_u32_from_le_bytes(buf: &[u8], offset: usize) -> u32 {
-    let slice = &buf[offset..offset + 4];
-    let array: [u8; 4] = slice.try_into().unwrap();
-    u32::from_le_bytes(array)
 }
 
 /// Get an &T backed by a byte slice. The slice is checked to make
