@@ -60,6 +60,18 @@ def gen_keyblock(futility_path, kernel_key, kernel_data_key):
         kernel_data_key.keyblock())
 
 
+def gen_kernel(futility_path, kernel_data_key):
+    run(futility_path, '--vb1', 'sign',
+        '--signprivate', kernel_data_key.vbprivk(),
+        '--keyblock', kernel_data_key.keyblock(),
+        '--version', '0x1988',
+        '--bootloader', 'fake_bootloader',
+        '--config', 'kernel_commandline.txt',
+        '--arch', 'amd64',
+        'fake_kernel.vmlinuz',
+        'fake_signed_kernel')
+
+
 def main():
     script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -80,6 +92,7 @@ def main():
     gen_keypair(futility_path, kernel_key)
     gen_keypair(futility_path, kernel_data_key)
     gen_keyblock(futility_path, kernel_key, kernel_data_key)
+    gen_kernel(futility_path, kernel_data_key)
 
 
 if __name__ == '__main__':

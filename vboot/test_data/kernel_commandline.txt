@@ -1,0 +1,1 @@
+init=/sbin/init boot=local rootwait ro noresume noswap loglevel=7 noinitrd i915.modeset=1 cros_efi cros_debug root=/dev/sda18
