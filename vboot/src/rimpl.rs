@@ -292,12 +292,12 @@ mod tests {
     fn test_unpack_key_buffer() {
         // Decode the PEM-encoded public key.
         let test_key_pub_pem =
-            include_bytes!("../test_keys/kernel_key.pub.pem");
+            include_bytes!("../test_data/kernel_key.pub.pem");
         let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
         let expected_public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
 
         // Decode the vbpubk-encoded public key.
-        let test_key_vbpubk = include_bytes!("../test_keys/kernel_key.vbpubk");
+        let test_key_vbpubk = include_bytes!("../test_data/kernel_key.vbpubk");
         let public_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
         // The two keys should be identical, just different file
@@ -308,10 +308,10 @@ mod tests {
     #[test]
     fn test_keyblock_header() -> Result<(), CryptoError> {
         let test_keyblock =
-            include_bytes!("../test_keys/kernel_data_key.keyblock");
+            include_bytes!("../test_data/kernel_data_key.keyblock");
 
         let test_key_vbpubk =
-            include_bytes!("../test_keys/kernel_data_key.vbpubk");
+            include_bytes!("../test_data/kernel_data_key.vbpubk");
         let public_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
         let header = KeyBlockHeader::from_le_bytes(test_keyblock)?;
@@ -327,13 +327,13 @@ mod tests {
         // Get the public key whose private half was used to sign the
         // keyblock.
         let test_key_pub_pem =
-            include_bytes!("../test_keys/kernel_key.pub.pem");
+            include_bytes!("../test_data/kernel_key.pub.pem");
         let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
         let public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
 
         // Get the signed keyblock.
         let test_keyblock =
-            include_bytes!("../test_keys/kernel_data_key.keyblock");
+            include_bytes!("../test_data/kernel_data_key.keyblock");
 
         verify_keyblock(test_keyblock, &public_key).unwrap();
     }
