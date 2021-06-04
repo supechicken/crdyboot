@@ -293,9 +293,17 @@ impl KeyBlockHeader {
     /// the header and needs to include the data key and signature
     /// data as well.
     ///
+    /// After the header is parsed, its signature is checked against
+    /// `key`, and an error is returned if validation fails.
+    ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_keyblock`.
-    fn from_le_bytes(buf: &[u8]) -> Result<KeyBlockHeader, CryptoError> {
+    ///
+    /// Based in part on vb2_verify_keyblock (2lib/2common.c).
+    fn parse_and_verify(
+        buf: &[u8],
+        key: &PublicKey,
+    ) -> Result<KeyBlockHeader, CryptoError> {
         let header = unsafe { transmute_from_bytes::<vb2_keyblock>(buf) }?;
 
         if &header.magic != b"CHROMEOS" {
@@ -334,28 +342,12 @@ impl KeyBlockHeader {
             return Err(CryptoError::KeyBlockNotCompletelySigned);
         }
 
+        key.verify_partial(buf, &header.keyblock_signature)?;
+
         // TODO: are other checks from `vb2_check_keyblock` needed?
 
         Ok(header)
     }
-}
-
-/// Verify a keyblock using a public key. If successful, the parsed
-/// KeyBlockHeader is returned.
-///
-/// Based on vb2_verify_keyblock (2lib/2common.c).
-///
-/// See 2lib/include/2struct.h for the declaration of `struct
-/// vb2_keyblock`.
-fn verify_keyblock(
-    buf: &[u8],
-    key: &PublicKey,
-) -> Result<KeyBlockHeader, CryptoError> {
-    let header = KeyBlockHeader::from_le_bytes(buf)?;
-
-    key.verify_partial(buf, &header.keyblock_signature)?;
-
-    Ok(header)
 }
 
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
@@ -374,7 +366,7 @@ mod tests {
         PublicKey {
             algorithm: Algorithm::Rsa8192Sha256,
             key: rsa::RSAPublicKey::try_from(pem).unwrap(),
-            key_version: 0,
+            key_version: 1,
         }
     }
 
@@ -395,34 +387,28 @@ mod tests {
     }
 
     #[test]
-    fn test_keyblock_header() -> Result<(), CryptoError> {
-        let test_keyblock =
-            include_bytes!("../test_data/kernel_data_key.keyblock");
-
-        let test_key_vbpubk =
-            include_bytes!("../test_data/kernel_data_key.vbpubk");
-        let public_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
-
-        let header = KeyBlockHeader::from_le_bytes(test_keyblock)?;
-        assert_eq!(header.keyblock_size, 3256);
-        assert_eq!(header.keyblock_flags, 5);
-        assert_eq!(header.keyblock_signature.data_size, 2168);
-        assert_eq!(header.data_key, public_key);
-        Ok(())
-    }
-
-    #[test]
     fn test_verify_keyblock() {
         // Get the public key whose private half was used to sign the
         // keyblock.
-        let test_key_pub_pem =
+        let kernel_key_pub_pem =
             include_bytes!("../test_data/kernel_key.pub.pem");
-        let public_key = key_from_pem_bytes(test_key_pub_pem);
+        let kernel_key = key_from_pem_bytes(kernel_key_pub_pem);
+
+        // Get the public key for the kernel data.
+        let kernel_data_key_pub_pem =
+            include_bytes!("../test_data/kernel_data_key.pub.pem");
+        let kernel_data_key = key_from_pem_bytes(kernel_data_key_pub_pem);
 
         // Get the signed keyblock.
         let test_keyblock =
             include_bytes!("../test_data/kernel_data_key.keyblock");
 
-        verify_keyblock(test_keyblock, &public_key).unwrap();
+        let header =
+            KeyBlockHeader::parse_and_verify(test_keyblock, &kernel_key)
+                .unwrap();
+        assert_eq!(header.keyblock_size, 3256);
+        assert_eq!(header.keyblock_flags, 5);
+        assert_eq!(header.keyblock_signature.data_size, 2168);
+        assert_eq!(header.data_key, kernel_data_key);
     }
 }
