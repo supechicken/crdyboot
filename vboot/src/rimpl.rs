@@ -176,6 +176,7 @@ impl Signature {
 struct PublicKey {
     key: rsa::RSAPublicKey,
     algorithm: Algorithm,
+    // TODO: using this for anything?
     key_version: u32,
 }
 
@@ -301,11 +302,7 @@ impl KeyBlockHeader {
 ///
 /// See 2lib/include/2struct.h for the declaration of `struct
 /// vb2_keyblock`.
-fn verify_keyblock(
-    buf: &[u8],
-    algorithm: Algorithm,
-    key: &rsa::RSAPublicKey,
-) -> Result<(), CryptoError> {
+fn verify_keyblock(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
     let header = KeyBlockHeader::from_le_bytes(buf)?;
 
     // Get sha256 hash of the data covered by the signature.
@@ -314,12 +311,13 @@ fn verify_keyblock(
             .ok_or(CryptoError::BufferTooSmall)?,
     );
 
-    key.verify(
-        algorithm.padding_scheme(),
-        &digest,
-        &header.keyblock_signature.signature,
-    )
-    .map_err(CryptoError::SignatureVerificationFailed)
+    key.key
+        .verify(
+            key.algorithm.padding_scheme(),
+            &digest,
+            &header.keyblock_signature.signature,
+        )
+        .map_err(CryptoError::SignatureVerificationFailed)
 }
 
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
@@ -374,13 +372,16 @@ mod tests {
         let test_key_pub_pem =
             include_bytes!("../test_data/kernel_key.pub.pem");
         let pem = rsa::pem::parse(test_key_pub_pem).unwrap();
-        let public_key = rsa::RSAPublicKey::try_from(pem).unwrap();
+        let public_key = PublicKey {
+            algorithm: Algorithm::Rsa8192Sha256,
+            key: rsa::RSAPublicKey::try_from(pem).unwrap(),
+            key_version: 0,
+        };
 
         // Get the signed keyblock.
         let test_keyblock =
             include_bytes!("../test_data/kernel_data_key.keyblock");
 
-        verify_keyblock(test_keyblock, Algorithm::Rsa8192Sha256, &public_key)
-            .unwrap();
+        verify_keyblock(test_keyblock, &public_key).unwrap();
     }
 }
