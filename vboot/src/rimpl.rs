@@ -410,11 +410,17 @@ fn verify_kernel(buf: &[u8], key: &PublicKey) -> Result<(), CryptoError> {
         .get(keyblock.keyblock_size..)
         .ok_or(CryptoError::BufferTooSmall)?;
 
-    let _preamble = KernelPreamble::parse_and_verify(rest, &keyblock)?;
+    let preamble = KernelPreamble::parse_and_verify(rest, &keyblock)?;
+
+    // Verify the body (kernel code, config, bootloader).
+    let body = rest
+        .get(preamble.preamble_size..)
+        .ok_or(CryptoError::BufferTooSmall)?;
+    keyblock
+        .data_key
+        .verify_partial(body, &preamble.body_signature)?;
 
     // TODO: check version/flags/etc
-
-    // Check body (separate func)
 
     Ok(())
 }
