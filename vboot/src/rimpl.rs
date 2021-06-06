@@ -403,7 +403,7 @@ impl KernelPreamble {
 
 pub struct Kernel<'a> {
     pub data: &'a [u8],
-    pub command_line: &'a [u8],
+    pub command_line: &'a str,
 }
 
 // TODO: think about naming
@@ -437,6 +437,13 @@ pub fn verify_kernel<'a>(
                 ..preamble.command_line_start + u32_to_usize(CROS_CONFIG_SIZE),
         )
         .ok_or(CryptoError::BufferTooSmall)?;
+
+    // Find the null terminator.
+    //
+    // TODO: don't unwrap
+    let command_line_end = command_line.iter().position(|b| *b == 0).unwrap();
+    let command_line =
+        core::str::from_utf8(&command_line[..command_line_end]).unwrap();
 
     // TODO: check version/flags/etc
 
