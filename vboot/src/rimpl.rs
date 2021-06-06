@@ -97,6 +97,12 @@ impl SignatureKind {
     }
 }
 
+fn u64_to_usize(v: u64) -> usize {
+    // OK to unwrap since u32 should always fit in usize on the
+    // required targets.
+    v.try_into().unwrap()
+}
+
 fn u32_to_usize(v: u32) -> usize {
     // OK to unwrap since u32 should always fit in usize on the
     // required targets.
@@ -341,6 +347,7 @@ struct KernelPreamble {
     preamble_size: usize,
     preamble_signature: Signature,
     body_signature: Signature,
+    command_line_start: usize,
 }
 
 impl KernelPreamble {
@@ -365,6 +372,12 @@ impl KernelPreamble {
             return Err(CryptoError::BadVersion);
         }
 
+        // Based on `UnpackKernelBlob` in futility/vb1_helper.c.
+        let command_line_start = u64_to_usize(header.bootloader_address)
+            - u64_to_usize(header.body_load_address)
+            - u32_to_usize(CROS_PARAMS_SIZE)
+            - u32_to_usize(CROS_CONFIG_SIZE);
+
         let preamble = KernelPreamble {
             preamble_size: u32_to_usize(header.preamble_size),
             preamble_signature: Signature::from_le_bytes(
@@ -375,6 +388,7 @@ impl KernelPreamble {
                 &buf[offset_of!(vb2_kernel_preamble, body_signature)..],
                 SignatureKind::Rsa8192,
             )?,
+            command_line_start,
         };
 
         // TODO: check what signature covers
@@ -387,6 +401,11 @@ impl KernelPreamble {
     }
 }
 
+pub struct Kernel<'a> {
+    pub data: &'a [u8],
+    pub command_line: &'a [u8],
+}
+
 // TODO: think about naming
 // vb2_verify_kernel_vblock (lib/vboot_kernel.c)
 //
@@ -395,7 +414,7 @@ impl KernelPreamble {
 pub fn verify_kernel<'a>(
     buf: &'a [u8],
     key: &PublicKey,
-) -> Result<&'a [u8], CryptoError> {
+) -> Result<Kernel<'a>, CryptoError> {
     let keyblock = KeyBlockHeader::parse_and_verify(buf, key)?;
 
     let rest = buf
@@ -412,9 +431,19 @@ pub fn verify_kernel<'a>(
         .data_key
         .verify_partial(body, &preamble.body_signature)?;
 
+    let command_line = body
+        .get(
+            preamble.command_line_start
+                ..preamble.command_line_start + u32_to_usize(CROS_CONFIG_SIZE),
+        )
+        .ok_or(CryptoError::BufferTooSmall)?;
+
     // TODO: check version/flags/etc
 
-    Ok(body)
+    Ok(Kernel {
+        data: body,
+        command_line,
+    })
 }
 
 #[cfg(test)]

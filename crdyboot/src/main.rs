@@ -84,13 +84,18 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 
                 // Verifying!
 
-                let kernel_actual =
+                let kernel =
                     verify_kernel(&kernel_buffer, &kernel_key).unwrap();
 
                 info!("verified!");
 
+                info!(
+                    "params: {}",
+                    core::str::from_utf8(kernel.command_line).unwrap()
+                );
+
                 let kernel_image = bt
-                    .load_image_from_buffer(crdyboot_image, kernel_actual)
+                    .load_image_from_buffer(crdyboot_image, kernel.data)
                     .expect_success("lifb failed");
 
                 info!("loaded!");
