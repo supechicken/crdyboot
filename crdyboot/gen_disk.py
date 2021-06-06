@@ -94,30 +94,37 @@ def main():
                 config = os.path.join(tmpdir, 'config')
                 signed_kernel_partition = unsigned_kernel_partition + '.signed'
 
-                # TODO: make a fake bootloader for now.
+                # The bootloader isn't actually used, so just write an
+                # placeholder file. (Can't be empty as futility
+                # rejects it.)
                 with open(bootloader, 'w') as wfile:
                     wfile.write('not a real bootloader')
-
-                # TODO: make a fake config for now.
-                with open(config, 'w') as wfile:
-                    wfile.write('not a real config')
 
                 # Copy the whole partition to a temporary file.
                 part_dev = '{}p{}'.format(lo_dev, partnum)
                 run('sudo', 'cp', part_dev, unsigned_kernel_partition)
+
+                # Get the kernel command line and write it to a file.
+                command_line = run('sudo', futility, 'vbutil_kernel',
+                    '--verify', unsigned_kernel_partition,
+                    '--verbose', capture_output=True).stdout.splitlines()[-1]
+                with open(config, 'w') as wfile:
+                    wfile.write(command_line)
 
                 # Extract vmlinuz.
                 run('sudo', futility, 'vbutil_kernel',
                     '--get-vmlinuz', unsigned_kernel_partition,
                     '--vmlinuz-out', vmlinuz)
 
+                # TODO: give it a fake version for now.
+                version = 0x1988
+
                 # Sign it.
                 run('sudo', futility, 'vbutil_kernel',
                     '--pack', signed_kernel_partition,
                     '--keyblock', kernel_data_key_keyblock,
                     '--signprivate', kernel_data_key_private,
-                    # TODO
-                    '--version', str(0x1988),
+                    '--version', str(version),
                     '--vmlinuz', vmlinuz,
                     '--bootloader', bootloader,
                     '--config', config,
@@ -129,8 +136,7 @@ def main():
                 # Verify it.
                 run('sudo', futility, 'vbutil_kernel',
                     '--verify', signed_kernel_partition,
-                    '--signpubkey', kernel_key_public,
-                    '--verbose')
+                    '--signpubkey', kernel_key_public)
 
                 # Copy it back to the partition.
                 run('sudo', 'cp', signed_kernel_partition, part_dev)
