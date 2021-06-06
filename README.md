@@ -7,7 +7,9 @@ crdyboot will handle verifying and running the Linux kernel.
 Goals:
 
 1. Ensure that when secure boot is enabled, dm-verity is enabled for
-   the rootfs.
+   the rootfs. (This can only be fully verified if using custom Secure
+   Boot keys, otherwise a different OS signed with the Microsoft keys
+   could be used to avoid verifying the rootfs.)
 2. Use the ChromeOS GPT-attribute mechanism for determining which
    kernel to boot. Do not rely on writing BootOrder, which doesn't
    seem to work well on some machines.
