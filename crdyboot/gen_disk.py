@@ -89,18 +89,42 @@ def main():
             for partnum in (kern_a_partnum, kern_b_partnum):
                 unsigned_kernel_partition = os.path.join(
                     tmpdir, 'kernel_partition')
+                vmlinuz = os.path.join(tmpdir, 'vmlinuz')
+                bootloader = os.path.join(tmpdir, 'bootloader')
+                config = os.path.join(tmpdir, 'config')
                 signed_kernel_partition = unsigned_kernel_partition + '.signed'
+
+                # TODO: make a fake bootloader for now.
+                with open(bootloader, 'w') as wfile:
+                    wfile.write('not a real bootloader')
+
+                # TODO: make a fake config for now.
+                with open(config, 'w') as wfile:
+                    wfile.write('not a real config')
 
                 # Copy the whole partition to a temporary file.
                 part_dev = '{}p{}'.format(lo_dev, partnum)
                 run('sudo', 'cp', part_dev, unsigned_kernel_partition)
 
+                # Extract vmlinuz.
+                run('sudo', futility, 'vbutil_kernel',
+                    '--get-vmlinuz', unsigned_kernel_partition,
+                    '--vmlinuz-out', vmlinuz)
+
                 # Sign it.
                 run('sudo', futility, 'vbutil_kernel',
-                    '--repack', signed_kernel_partition,
-                    '--signprivate', kernel_data_key_private,
+                    '--pack', signed_kernel_partition,
                     '--keyblock', kernel_data_key_keyblock,
-                    '--oldblob', unsigned_kernel_partition)
+                    '--signprivate', kernel_data_key_private,
+                    # TODO
+                    '--version', str(0x1988),
+                    '--vmlinuz', vmlinuz,
+                    '--bootloader', bootloader,
+                    '--config', config,
+                    # TODO: the kernel is actually amd64, but pass in
+                    # arm64 so that vbutil won't do all the kernel
+                    # munging stuff it wants to.
+                    '--arch', 'arm64')
 
                 # Verify it.
                 run('sudo', futility, 'vbutil_kernel',
