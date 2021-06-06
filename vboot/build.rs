@@ -29,6 +29,8 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .clang_arg(format!("--target={}", target))
         // TODO: check for what is still needed
         .clang_arg(format!("-I{}", firmware.join("2lib/include").display()))
+        // TODO: pass in repo dir instead of firmware
+        .clang_arg(format!("-I{}", firmware.join("..").display()))
         .allowlist_type("LoadKernelParams")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("VbExStream_t")
@@ -42,9 +44,8 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .allowlist_type("vb2_return_code")
         .allowlist_type("vb2_signature")
         .allowlist_type("vb2_signature_algorithm")
-        .allowlist_var("VB2_KEYBLOCK_HASH_OFFSET")
-        .allowlist_var("VB2_KEYBLOCK_KEY_OFFSET")
-        .allowlist_var("VB2_KEYBLOCK_SIGNATURE_OFFSET")
+        .allowlist_var("CROS_CONFIG_SIZE")
+        .allowlist_var("CROS_PARAM_SIZE")
         .derive_partialeq(true)
         .impl_partialeq(true)
         .default_enum_style(bindgen::EnumVariation::NewType {
