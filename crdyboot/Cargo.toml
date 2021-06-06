@@ -8,7 +8,7 @@ resolver = "2"
 [dependencies]
 log = "0.4"
 
-uefi = { path = "../third_party/uefi-rs", features = ["exts"] }
+uefi = { path = "../third_party/uefi-rs", features = ["exts", "ignore-logger-errors"] }
 uefi-services = { path = "../third_party/uefi-rs/uefi-services" }
 
 vboot = { path = "../vboot" }
