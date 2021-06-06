@@ -37,10 +37,6 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
     let kernel_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
-    let a = 1u128;
-    let b = 12742837032881555980u128;
-    info!("BISH: modtest: {}", a % b);
-
     // TODO: use blockio instead just to have less reliance on UEFI
     // implementations working correctly?
     //
