@@ -70,6 +70,28 @@ fn get_kernel_partitions(
     Status::SUCCESS.into_with_val(|| v)
 }
 
+// TODO: check if uefi-rs already has a way to do this.
+fn str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
+    // The kernel command line should always be ASCII.
+    if !input.is_ascii() {
+        return None;
+    }
+
+    // Expect two bytes for each byte of the input, plus a null byte.
+    let mut output = Vec::with_capacity(input.len() + 1);
+
+    output.extend(
+        input
+            .encode_utf16()
+            // OK to unwrap because all ASCII characters are
+            // valid UCS-2.
+            .map(|c| Char16::try_from(c).unwrap()),
+    );
+    output.push(NUL_16);
+
+    Some(output)
+}
+
 fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
     // TODO
     let test_key_vbpubk =
@@ -125,20 +147,19 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 
         info!("loaded!");
 
-        let cmdline = kernel.command_line;
-        let load_options_str = cmdline.replace(
+        // Get the kernel command line and replace %U with the kernel
+        // partition GUID. (References to the rootfs partition are
+        // expressed as offsets from the kernel partition, so only the
+        // kernel partition's GUID is ever needed.)
+        let load_options_str = kernel.command_line.replace(
             "%U",
             &{ partition.entry.unique_partition_guid }.to_string(),
         );
-
         info!("command line: {}", load_options_str);
 
-        let mut load_options: Vec<Char16> = load_options_str
-            .encode_utf16()
-            .map(|c| Char16::try_from(c).unwrap())
-            .collect();
-        load_options.push(NUL_16);
-
+        // Convert the string to UCS-2, then set it in the image
+        // options.
+        let load_options = str_to_uefi_str(&load_options_str).unwrap();
         let loaded_image = bt
             .handle_protocol::<LoadedImage>(kernel_image)
             .log_warning()?;
