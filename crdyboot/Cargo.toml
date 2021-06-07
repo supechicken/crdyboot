@@ -19,3 +19,6 @@ num-bigint = { package = "num-bigint-dig", git = "https://github.com/nicholasbis
 uefi = { path = "../third_party/uefi-rs" }
 # Branch: "bishop-disable-u64-digit"
 rsa = { git = "https://github.com/nicholasbishop/RSA.git", rev = "8106a1890773c6ef898fd7eb0becc2023456d673", default-features = false, features = ["alloc"] }
+
+[profile.release]
+overflow-checks = true
