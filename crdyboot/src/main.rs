@@ -29,7 +29,7 @@ const KERNEL_TYPE_GUID: Guid = Guid::from_values(
 
 // TODO: open protocol vs handle protocol
 
-struct Partition {
+struct KernelPartition {
     handle: Handle,
     entry: GptPartitionEntry,
 }
@@ -40,10 +40,10 @@ struct Partition {
 // TODO: what happens if there are multiple disks? How do we pick
 // the one we booted from? Presumably there's some way to use the
 // image handle for this.
-fn get_partitions(
+fn get_kernel_partitions(
     _crdyboot_image: Handle,
     bt: &BootServices,
-) -> Result<Vec<Partition>> {
+) -> Result<Vec<KernelPartition>> {
     let handles = bt
         .find_handles::<PartitionInfo>()
         .expect_success("Failed to get handles for `PartitionInfo` protocol");
@@ -57,10 +57,13 @@ fn get_partitions(
         let pi = unsafe { &*pi.get() };
 
         if let Some(gpt) = pi.gpt_partition_entry() {
-            v.push(Partition {
-                handle,
-                entry: *gpt,
-            });
+            if { gpt.partition_type_guid } == GptPartitionType(KERNEL_TYPE_GUID)
+            {
+                v.push(KernelPartition {
+                    handle,
+                    entry: *gpt,
+                });
+            }
         }
     }
 
@@ -73,85 +76,81 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
     let kernel_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
-    let partitions = get_partitions(crdyboot_image, bt).log_warning()?;
+    let partitions = get_kernel_partitions(crdyboot_image, bt).log_warning()?;
 
     for partition in partitions {
-        if { partition.entry.partition_type_guid }
-            == GptPartitionType(KERNEL_TYPE_GUID)
-        {
-            // TODO: for now arbitrarily pick the first one found.
-            info!("kernel partition: {:x?}", partition.entry);
+        // TODO: for now arbitrarily pick the first one found.
+        info!("kernel partition: {:x?}", partition.entry);
 
-            // Read the whole kernel into memory.
+        // Read the whole kernel into memory.
 
-            let bio = bt
-                .handle_protocol::<BlockIO>(partition.handle)
-                .log_warning()?;
-            let bio = unsafe { &*bio.get() };
-
-            info!("got bio: {:?}", bio.media());
-
-            let num_blocks =
-                partition.entry.ending_lba - partition.entry.starting_lba + 1;
-            let num_bytes = num_blocks * bio.media().block_size() as u64;
-            info!("num_bytes: {}", num_bytes);
-
-            // TODO: maybe uninit
-            let mut kernel_buffer = vec![0; num_bytes as usize];
-            info!("allocated kernel buffer");
-
-            bio.read_blocks(
-                bio.media().media_id(),
-                // This bio is the partition, not the whole
-                // device, so this is 0 instead of starting_lba.
-                0,
-                &mut kernel_buffer,
-            )
+        let bio = bt
+            .handle_protocol::<BlockIO>(partition.handle)
             .log_warning()?;
+        let bio = unsafe { &*bio.get() };
 
-            info!("done reading blocks");
+        info!("got bio: {:?}", bio.media());
 
-            // Verifying!
+        let num_blocks =
+            partition.entry.ending_lba - partition.entry.starting_lba + 1;
+        let num_bytes = num_blocks * bio.media().block_size() as u64;
+        info!("num_bytes: {}", num_bytes);
 
-            let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
+        // TODO: maybe uninit
+        let mut kernel_buffer = vec![0; num_bytes as usize];
+        info!("allocated kernel buffer");
 
-            info!("verified!");
+        info!("reading kernel from disk");
+        bio.read_blocks(
+            bio.media().media_id(),
+            // This bio is the partition, not the whole
+            // device, so this is 0 instead of starting_lba.
+            0,
+            &mut kernel_buffer,
+        )
+        .log_warning()?;
+        info!("done reading blocks");
 
-            info!("params: {}", kernel.command_line);
+        // Verifying!
 
-            let kernel_image = bt
-                .load_image_from_buffer(crdyboot_image, kernel.data)
-                .expect_success("lifb failed");
+        let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
 
-            info!("loaded!");
+        info!("verified!");
 
-            let cmdline = kernel.command_line;
-            let load_options_str = cmdline.replace(
-                "%U",
-                &{ partition.entry.unique_partition_guid }.to_string(),
-            );
+        info!("params: {}", kernel.command_line);
 
-            info!("command line: {}", load_options_str);
+        let kernel_image = bt
+            .load_image_from_buffer(crdyboot_image, kernel.data)
+            .expect_success("lifb failed");
 
-            let mut load_options: Vec<Char16> = load_options_str
-                .encode_utf16()
-                .map(|c| Char16::try_from(c).unwrap())
-                .collect();
-            load_options.push(NUL_16);
+        info!("loaded!");
 
-            let loaded_image = bt
-                .handle_protocol::<LoadedImage>(kernel_image)
-                .log_warning()?;
-            let loaded_image = unsafe { &mut *loaded_image.get() };
-            loaded_image.set_load_options(
-                load_options.as_ptr(),
-                (2 * load_options.len()) as u32,
-            );
+        let cmdline = kernel.command_line;
+        let load_options_str = cmdline.replace(
+            "%U",
+            &{ partition.entry.unique_partition_guid }.to_string(),
+        );
 
-            info!("starting kernel...");
+        info!("command line: {}", load_options_str);
 
-            bt.start_image(kernel_image).log_warning()?;
-        }
+        let mut load_options: Vec<Char16> = load_options_str
+            .encode_utf16()
+            .map(|c| Char16::try_from(c).unwrap())
+            .collect();
+        load_options.push(NUL_16);
+
+        let loaded_image = bt
+            .handle_protocol::<LoadedImage>(kernel_image)
+            .log_warning()?;
+        let loaded_image = unsafe { &mut *loaded_image.get() };
+        loaded_image.set_load_options(
+            load_options.as_ptr(),
+            (2 * load_options.len()) as u32,
+        );
+
+        info!("starting kernel...");
+
+        bt.start_image(kernel_image).log_warning()?;
     }
 
     Status::SUCCESS.into()
