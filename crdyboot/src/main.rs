@@ -6,7 +6,7 @@ extern crate alloc;
 
 mod truncate;
 
-use alloc::{vec, vec::Vec};
+use alloc::{string::ToString, vec, vec::Vec};
 use core::convert::TryFrom;
 use log::info;
 use uefi::data_types::chars::NUL_16;
@@ -125,8 +125,14 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 
             info!("loaded!");
 
-            // TODO: root
-            let load_options_str = "init=/sbin/init boot=local rootwait ro noresume noswap loglevel=7 noinitrd i915.modeset=1 cros_efi cros_debug       root=/dev/sda18";
+            let cmdline = kernel.command_line;
+            let load_options_str = cmdline.replace(
+                "%U",
+                &{ partition.entry.unique_partition_guid }.to_string(),
+            );
+
+            info!("command line: {}", load_options_str);
+
             let mut load_options: Vec<Char16> = load_options_str
                 .encode_utf16()
                 .map(|c| Char16::try_from(c).unwrap())
