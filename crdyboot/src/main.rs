@@ -164,10 +164,12 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
             .handle_protocol::<LoadedImage>(kernel_image)
             .log_warning()?;
         let loaded_image = unsafe { &mut *loaded_image.get() };
-        loaded_image.set_load_options(
-            load_options.as_ptr(),
-            (2 * load_options.len()) as u32,
-        );
+        unsafe {
+            loaded_image.set_load_options(
+                load_options.as_ptr(),
+                (2 * load_options.len()) as u32,
+            );
+        }
 
         info!("starting kernel...");
 
