@@ -130,6 +130,56 @@ fn str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
     Some(output)
 }
 
+fn run_kernel(
+    crdyboot_image: Handle,
+    bt: &BootServices,
+    partition: &KernelPartition,
+    kernel_key: &PublicKey,
+) -> Result<()> {
+    // Read the whole kernel partition into memory.
+    let kernel_buffer = read_kernel_partition(bt, &partition).log_warning()?;
+
+    // Parse and verify the whole partition.
+    let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
+    info!("kernel verified");
+
+    // Load the kernel as a UEFI image.
+    let kernel_image = bt
+        .load_image_from_buffer(crdyboot_image, kernel.data)
+        .log_warning()?;
+    info!("image loaded");
+
+    // Get the kernel command line and replace %U with the kernel
+    // partition GUID. (References to the rootfs partition are
+    // expressed as offsets from the kernel partition, so only the
+    // kernel partition's GUID is ever needed.)
+    let load_options_str = kernel
+        .command_line
+        .replace("%U", &{ partition.entry.unique_partition_guid }.to_string());
+    info!("command line: {}", load_options_str);
+
+    // Convert the string to UCS-2, then set it in the image
+    // options.
+    let load_options = str_to_uefi_str(&load_options_str).unwrap();
+    let loaded_image = bt
+        .handle_protocol::<LoadedImage>(kernel_image)
+        .log_warning()?;
+    let loaded_image = unsafe { &mut *loaded_image.get() };
+    unsafe {
+        loaded_image.set_load_options(
+            load_options.as_ptr(),
+            (2 * load_options.len()) as u32,
+        );
+    }
+
+    info!("starting kernel...");
+    bt.start_image(kernel_image).log_warning()?;
+
+    // TODO: unload the image on failure?
+
+    Status::SUCCESS.into()
+}
+
 fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
     // TODO
     let test_key_vbpubk =
@@ -142,48 +192,8 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         // TODO: for now arbitrarily pick the first one found.
         info!("kernel partition: {:x?}", partition.entry);
 
-        // Read the whole kernel partition into memory.
-        let kernel_buffer =
-            read_kernel_partition(bt, &partition).log_warning()?;
-
-        // Parse and verify the whole partition.
-        let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
-        info!("kernel verified");
-
-        // Load the kernel as a UEFI image.
-        let kernel_image = bt
-            .load_image_from_buffer(crdyboot_image, kernel.data)
+        run_kernel(crdyboot_image, bt, &partition, &kernel_key)
             .log_warning()?;
-        info!("image loaded");
-
-        // Get the kernel command line and replace %U with the kernel
-        // partition GUID. (References to the rootfs partition are
-        // expressed as offsets from the kernel partition, so only the
-        // kernel partition's GUID is ever needed.)
-        let load_options_str = kernel.command_line.replace(
-            "%U",
-            &{ partition.entry.unique_partition_guid }.to_string(),
-        );
-        info!("command line: {}", load_options_str);
-
-        // Convert the string to UCS-2, then set it in the image
-        // options.
-        let load_options = str_to_uefi_str(&load_options_str).unwrap();
-        let loaded_image = bt
-            .handle_protocol::<LoadedImage>(kernel_image)
-            .log_warning()?;
-        let loaded_image = unsafe { &mut *loaded_image.get() };
-        unsafe {
-            loaded_image.set_load_options(
-                load_options.as_ptr(),
-                (2 * load_options.len()) as u32,
-            );
-        }
-
-        info!("starting kernel...");
-        bt.start_image(kernel_image).log_warning()?;
-
-        // TODO: unload the image on failure?
     }
 
     Status::SUCCESS.into()
