@@ -7,7 +7,7 @@ extern crate alloc;
 mod truncate;
 
 use alloc::{string::ToString, vec, vec::Vec};
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 use log::info;
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
@@ -32,6 +32,15 @@ const KERNEL_TYPE_GUID: Guid = Guid::from_values(
 struct KernelPartition {
     handle: Handle,
     entry: GptPartitionEntry,
+}
+
+impl KernelPartition {
+    fn num_bytes(&self, bio: &BlockIO) -> usize {
+        // TODO: use entry.num_blocks() once my PR adding that is merged.
+        let num_blocks = self.entry.ending_lba - self.entry.starting_lba + 1;
+        let num_bytes = num_blocks * bio.media().block_size() as u64;
+        num_bytes.try_into().unwrap()
+    }
 }
 
 // TODO: use blockio instead just to have less reliance on UEFI
@@ -81,13 +90,8 @@ fn read_kernel_partition(
 
     info!("got bio: {:?}", bio.media());
 
-    let num_blocks =
-        partition.entry.ending_lba - partition.entry.starting_lba + 1;
-    let num_bytes = num_blocks * bio.media().block_size() as u64;
-    info!("num_bytes: {}", num_bytes);
-
     // TODO: maybe uninit
-    let mut kernel_buffer = vec![0; num_bytes as usize];
+    let mut kernel_buffer = vec![0; partition.num_bytes(bio)];
     info!("allocated kernel buffer");
 
     info!("reading kernel from disk");
