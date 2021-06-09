@@ -138,24 +138,19 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         // TODO: for now arbitrarily pick the first one found.
         info!("kernel partition: {:x?}", partition.entry);
 
-        // Read the whole kernel into memory.
-
+        // Read the whole kernel partition into memory.
         let kernel_buffer =
             read_kernel_partition(bt, &partition).log_warning()?;
 
-        // Verifying!
-
+        // Parse and verify the whole partition.
         let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
+        info!("kernel verified");
 
-        info!("verified!");
-
-        info!("params: {}", kernel.command_line);
-
+        // Load the kernel as a UEFI image.
         let kernel_image = bt
             .load_image_from_buffer(crdyboot_image, kernel.data)
-            .expect_success("lifb failed");
-
-        info!("loaded!");
+            .log_warning()?;
+        info!("image loaded");
 
         // Get the kernel command line and replace %U with the kernel
         // partition GUID. (References to the rootfs partition are
@@ -182,8 +177,9 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         }
 
         info!("starting kernel...");
-
         bt.start_image(kernel_image).log_warning()?;
+
+        // TODO: unload the image on failure?
     }
 
     Status::SUCCESS.into()
