@@ -207,5 +207,5 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
 
     run(image, bt).expect_success("run failed");
 
-    todo!();
+    panic!("failed to run any kernel");
 }
