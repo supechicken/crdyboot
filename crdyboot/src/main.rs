@@ -70,6 +70,40 @@ fn get_kernel_partitions(
     Status::SUCCESS.into_with_val(|| v)
 }
 
+fn read_kernel_partition(
+    bt: &BootServices,
+    partition: &KernelPartition,
+) -> Result<Vec<u8>> {
+    let bio = bt
+        .handle_protocol::<BlockIO>(partition.handle)
+        .log_warning()?;
+    let bio = unsafe { &*bio.get() };
+
+    info!("got bio: {:?}", bio.media());
+
+    let num_blocks =
+        partition.entry.ending_lba - partition.entry.starting_lba + 1;
+    let num_bytes = num_blocks * bio.media().block_size() as u64;
+    info!("num_bytes: {}", num_bytes);
+
+    // TODO: maybe uninit
+    let mut kernel_buffer = vec![0; num_bytes as usize];
+    info!("allocated kernel buffer");
+
+    info!("reading kernel from disk");
+    bio.read_blocks(
+        bio.media().media_id(),
+        // This bio is the partition, not the whole
+        // device, so this is 0 instead of starting_lba.
+        0,
+        &mut kernel_buffer,
+    )
+    .log_warning()?;
+    info!("done reading blocks");
+
+    Status::SUCCESS.into_with_val(|| kernel_buffer)
+}
+
 // TODO: check if uefi-rs already has a way to do this.
 fn str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
     // The kernel command line should always be ASCII.
@@ -106,32 +140,8 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 
         // Read the whole kernel into memory.
 
-        let bio = bt
-            .handle_protocol::<BlockIO>(partition.handle)
-            .log_warning()?;
-        let bio = unsafe { &*bio.get() };
-
-        info!("got bio: {:?}", bio.media());
-
-        let num_blocks =
-            partition.entry.ending_lba - partition.entry.starting_lba + 1;
-        let num_bytes = num_blocks * bio.media().block_size() as u64;
-        info!("num_bytes: {}", num_bytes);
-
-        // TODO: maybe uninit
-        let mut kernel_buffer = vec![0; num_bytes as usize];
-        info!("allocated kernel buffer");
-
-        info!("reading kernel from disk");
-        bio.read_blocks(
-            bio.media().media_id(),
-            // This bio is the partition, not the whole
-            // device, so this is 0 instead of starting_lba.
-            0,
-            &mut kernel_buffer,
-        )
-        .log_warning()?;
-        info!("done reading blocks");
+        let kernel_buffer =
+            read_kernel_partition(bt, &partition).log_warning()?;
 
         // Verifying!
 
