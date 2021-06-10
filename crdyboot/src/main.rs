@@ -35,11 +35,10 @@ struct KernelPartition {
 }
 
 impl KernelPartition {
-    fn num_bytes(&self, bio: &BlockIO) -> usize {
-        // TODO: use entry.num_blocks() once my PR adding that is merged.
-        let num_blocks = self.entry.ending_lba - self.entry.starting_lba + 1;
-        let num_bytes = num_blocks * bio.media().block_size() as u64;
-        num_bytes.try_into().unwrap()
+    fn num_bytes(&self, bio: &BlockIO) -> Option<usize> {
+        let num_blocks: usize = self.entry.num_blocks()?.try_into().ok()?;
+        let block_size: usize = bio.media().block_size().try_into().ok()?;
+        num_blocks.checked_mul(block_size)
     }
 }
 
@@ -91,7 +90,7 @@ fn read_kernel_partition(
     info!("got bio: {:?}", bio.media());
 
     // TODO: maybe uninit
-    let mut kernel_buffer = vec![0; partition.num_bytes(bio)];
+    let mut kernel_buffer = vec![0; partition.num_bytes(bio).unwrap()];
     info!("allocated kernel buffer");
 
     info!("reading kernel from disk");
