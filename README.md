@@ -1,26 +1,41 @@
 # crdyboot
 
 This is a work-in-progress UEFI bootloader for CloudReady. It is
-intended to be run by [shim](https://github.com/rhboot/shim), then
-crdyboot will handle verifying and running the Linux kernel.
+intended to be run either as a second-stage bootloader after
+[shim](https://github.com/rhboot/shim) when using the Microsoft keys,
+or as the first-stage bootloader when using custom keys. Then crdyboot
+will handle loading, verifying, and running the Linux kernel.
 
 Goals:
 
 1. Ensure that when secure boot is enabled, dm-verity is enabled for
-   the rootfs. (This can only be fully verified if using custom Secure
-   Boot keys, otherwise a different OS signed with the Microsoft keys
-   could be used to avoid verifying the rootfs.)
-2. Use the ChromeOS GPT-attribute mechanism for determining which
-   kernel to boot. Do not rely on writing BootOrder, which doesn't
-   seem to work well on some machines.
-3. Use the ChromeOS kernel partitions rather than loading the kernel
+   the rootfs. (Note that this can only be fully verified if using
+   custom Secure Boot keys, otherwise a different OS signed with the
+   Microsoft keys could be used to avoid verifying the rootfs.)
+2. Use UEFI features as little as possible. We need to run on a lot of
+   hardware, and not all UEFI implementations work well.
+3. Use the ChromeOS GPT-attribute mechanism for determining which
+   kernel to boot.
+4. Use the ChromeOS kernel partitions rather than loading the kernel
    from the EFI partition. The kernel partitions include both the
    kernel data and command-line, as well as data structures to verify
    the signature of everything being loaded.
-4. Verify the signature of everything loaded from the kernel
+5. Verify the signature of everything loaded from the kernel
    partition.
-5. Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
+6. Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
    environments.
+   
+## Code layout
+
+The `vboot` subdirectory is a `no_std` library that implements just
+the necessary parts of vboot in Rust. It uses bindgen to access
+structs and constants from `vboot_reference`, but does not directly
+build any of the C code. This crate can be built for the host target
+so that tests can run.
+
+The `crdyboot` subdirectory contains the actual bootloader. It can
+only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
+targets.
 
 ## Building and testing
 
@@ -28,7 +43,7 @@ First make sure submodules are initialized:
 
     git submodule update --init
 
-The main firmware code is in the `crdyboot` subdirectory:
+The main bootloader code is in the `crdyboot` subdirectory:
 
     cd crdyboot
 
