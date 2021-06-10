@@ -304,8 +304,8 @@ struct KeyBlockHeader {
 
 impl KeyBlockHeader {
     /// Load a KeyBlockHeader from a byte slice. The slice starts with
-    /// the header and needs to include the data key and signature
-    /// data as well.
+    /// the `vb2_keyblock` header and needs to include the data key
+    /// and signature data as well.
     ///
     /// After the header is parsed, its signature is checked against
     /// `key`, and an error is returned if validation fails.
