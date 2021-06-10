@@ -34,9 +34,8 @@ use {
     sha2::{Digest, Sha256},
 };
 
-// TODO: rename to KernelError, VbootError, or something like that?
 #[derive(Debug)]
-pub enum CryptoError {
+pub enum VbootError {
     UnsupportedAlgorithm(vb2_crypto_algorithm),
     BufferTooSmall,
     InvalidKeyData,
@@ -54,11 +53,11 @@ enum Algorithm {
 }
 
 impl Algorithm {
-    fn from_vb2(alg: vb2_crypto_algorithm) -> Result<Algorithm, CryptoError> {
+    fn from_vb2(alg: vb2_crypto_algorithm) -> Result<Algorithm, VbootError> {
         if alg == vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256 {
             Ok(Algorithm::Rsa8192Sha256)
         } else {
-            Err(CryptoError::UnsupportedAlgorithm(alg))
+            Err(VbootError::UnsupportedAlgorithm(alg))
         }
     }
 
@@ -121,9 +120,9 @@ fn u32_to_usize(v: u32) -> usize {
 /// data with different types.
 ///
 /// TODO: get this reviewed by a Rust unsafe expert.
-unsafe fn transmute_from_bytes<T>(buf: &[u8]) -> Result<&T, CryptoError> {
+unsafe fn transmute_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
     if buf.len() < mem::size_of::<T>() {
-        return Err(CryptoError::BufferTooSmall);
+        return Err(VbootError::BufferTooSmall);
     }
 
     let ptr = buf.as_ptr() as *const T;
@@ -151,7 +150,7 @@ impl Signature {
     fn from_le_bytes(
         buf: &[u8],
         kind: SignatureKind,
-    ) -> Result<Signature, CryptoError> {
+    ) -> Result<Signature, VbootError> {
         let header = unsafe { transmute_from_bytes::<vb2_signature>(buf) }?;
 
         let sig_offset = u32_to_usize(header.sig_offset);
@@ -159,10 +158,10 @@ impl Signature {
         let data_size = u32_to_usize(header.data_size);
 
         let sig_range = sig_offset..sig_offset + sig_size;
-        let sig_data = buf.get(sig_range).ok_or(CryptoError::BufferTooSmall)?;
+        let sig_data = buf.get(sig_range).ok_or(VbootError::BufferTooSmall)?;
 
         if sig_data.len() != kind.size_in_bytes() {
-            return Err(CryptoError::BadSignatureSize(
+            return Err(VbootError::BadSignatureSize(
                 sig_data.len(),
                 kind.size_in_bytes(),
             ));
@@ -191,7 +190,7 @@ impl PublicKey {
     ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_packed_key`.
-    pub fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, CryptoError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, VbootError> {
         let header = unsafe { transmute_from_bytes::<vb2_packed_key>(buf) }?;
 
         let key_offset = u32_to_usize(header.key_offset);
@@ -201,14 +200,14 @@ impl PublicKey {
         let key_version = header.key_version;
 
         let key_range = key_offset..key_offset + key_size;
-        let key_data = buf.get(key_range).ok_or(CryptoError::BufferTooSmall)?;
+        let key_data = buf.get(key_range).ok_or(VbootError::BufferTooSmall)?;
 
         // The first four bytes contain the array size (pretending each
         // element is a u32).
         let arrsize = u32::from_le_bytes(
             key_data
                 .get(0..4)
-                .ok_or(CryptoError::InvalidKeyData)?
+                .ok_or(VbootError::InvalidKeyData)?
                 .try_into()
                 // Unwrap: just successfully got 4 bytes, so this cannot fail.
                 .unwrap(),
@@ -222,13 +221,13 @@ impl PublicKey {
         let n = rsa::BigUint::from_bytes_le(
             key_data
                 .get(n_start..n_end)
-                .ok_or(CryptoError::InvalidKeyData)?,
+                .ok_or(VbootError::InvalidKeyData)?,
         );
         // F4 exponent.
         let e = rsa::BigUint::from_slice(&[65537]);
 
         let key =
-            rsa::RSAPublicKey::new(n, e).map_err(CryptoError::InvalidKey)?;
+            rsa::RSAPublicKey::new(n, e).map_err(VbootError::InvalidKey)?;
 
         Ok(PublicKey {
             key,
@@ -243,7 +242,7 @@ impl PublicKey {
         &self,
         data_to_verify: &[u8],
         expected_signature: &Signature,
-    ) -> Result<(), CryptoError> {
+    ) -> Result<(), VbootError> {
         // Get hash of the data covered by the signature.
         let digest = self.algorithm.digest(data_to_verify);
 
@@ -253,7 +252,7 @@ impl PublicKey {
                 &digest,
                 &expected_signature.signature,
             )
-            .map_err(CryptoError::SignatureVerificationFailed)
+            .map_err(VbootError::SignatureVerificationFailed)
     }
 
     /// Verify that the signature of the first `signature.data_size`
@@ -262,10 +261,10 @@ impl PublicKey {
         &self,
         buf: &[u8],
         signature: &Signature,
-    ) -> Result<(), CryptoError> {
+    ) -> Result<(), VbootError> {
         let data_to_verify = buf
             .get(..signature.data_size)
-            .ok_or(CryptoError::BufferTooSmall)?;
+            .ok_or(VbootError::BufferTooSmall)?;
 
         self.verify_all(data_to_verify, &signature)
     }
@@ -295,17 +294,17 @@ impl KeyBlockHeader {
     fn parse_and_verify(
         buf: &[u8],
         key: &PublicKey,
-    ) -> Result<KeyBlockHeader, CryptoError> {
+    ) -> Result<KeyBlockHeader, VbootError> {
         let header = unsafe { transmute_from_bytes::<vb2_keyblock>(buf) }?;
 
         if &header.magic != b"CHROMEOS" {
-            return Err(CryptoError::BadMagic);
+            return Err(VbootError::BadMagic);
         }
 
         // Copying the logic from `vb2_check_keyblock`, only check the
         // major version.
         if header.header_version_major != 2 {
-            return Err(CryptoError::BadVersion);
+            return Err(VbootError::BadVersion);
         }
 
         let header = KeyBlockHeader {
@@ -331,7 +330,7 @@ impl KeyBlockHeader {
                 - header.keyblock_signature.signature.len()
                 - header.keyblock_hash.signature.len()
         {
-            return Err(CryptoError::KeyBlockNotCompletelySigned);
+            return Err(VbootError::KeyBlockNotCompletelySigned);
         }
 
         key.verify_partial(buf, &header.keyblock_signature)?;
@@ -361,15 +360,15 @@ impl KernelPreamble {
     fn parse_and_verify(
         buf: &[u8],
         keyblock: &KeyBlockHeader,
-    ) -> Result<KernelPreamble, CryptoError> {
+    ) -> Result<KernelPreamble, VbootError> {
         let header =
             unsafe { transmute_from_bytes::<vb2_kernel_preamble>(buf) }?;
 
         if header.header_version_major != 2 {
-            return Err(CryptoError::BadVersion);
+            return Err(VbootError::BadVersion);
         }
         if header.header_version_minor != 2 {
-            return Err(CryptoError::BadVersion);
+            return Err(VbootError::BadVersion);
         }
 
         // Based on `UnpackKernelBlob` in futility/vb1_helper.c.
@@ -414,19 +413,19 @@ pub struct Kernel<'a> {
 pub fn verify_kernel<'a>(
     buf: &'a [u8],
     key: &PublicKey,
-) -> Result<Kernel<'a>, CryptoError> {
+) -> Result<Kernel<'a>, VbootError> {
     let keyblock = KeyBlockHeader::parse_and_verify(buf, key)?;
 
     let rest = buf
         .get(keyblock.keyblock_size..)
-        .ok_or(CryptoError::BufferTooSmall)?;
+        .ok_or(VbootError::BufferTooSmall)?;
 
     let preamble = KernelPreamble::parse_and_verify(rest, &keyblock)?;
 
     // Verify the body (kernel code, config, bootloader).
     let body = rest
         .get(preamble.preamble_size..)
-        .ok_or(CryptoError::BufferTooSmall)?;
+        .ok_or(VbootError::BufferTooSmall)?;
     keyblock
         .data_key
         .verify_partial(body, &preamble.body_signature)?;
@@ -436,7 +435,7 @@ pub fn verify_kernel<'a>(
             preamble.command_line_start
                 ..preamble.command_line_start + u32_to_usize(CROS_CONFIG_SIZE),
         )
-        .ok_or(CryptoError::BufferTooSmall)?;
+        .ok_or(VbootError::BufferTooSmall)?;
 
     // Find the null terminator.
     //
