@@ -26,7 +26,7 @@
 // TODO: for now only VB2_ALG_RSA8192_SHA256 is supported.
 
 use {
-    crate::vboot_sys::*,
+    crate::vboot_sys,
     alloc::vec::Vec,
     core::{convert::TryInto, mem},
     memoffset::offset_of,
@@ -36,7 +36,7 @@ use {
 
 #[derive(Debug)]
 pub enum VbootError {
-    UnsupportedAlgorithm(vb2_crypto_algorithm),
+    UnsupportedAlgorithm(vboot_sys::vb2_crypto_algorithm),
     BufferTooSmall,
     InvalidKeyData,
     InvalidKey(rsa::errors::Error),
@@ -53,8 +53,10 @@ enum Algorithm {
 }
 
 impl Algorithm {
-    fn from_vb2(alg: vb2_crypto_algorithm) -> Result<Algorithm, VbootError> {
-        if alg == vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256 {
+    fn from_vb2(
+        alg: vboot_sys::vb2_crypto_algorithm,
+    ) -> Result<Algorithm, VbootError> {
+        if alg == vboot_sys::vb2_crypto_algorithm::VB2_ALG_RSA8192_SHA256 {
             Ok(Algorithm::Rsa8192Sha256)
         } else {
             Err(VbootError::UnsupportedAlgorithm(alg))
@@ -151,7 +153,8 @@ impl Signature {
         buf: &[u8],
         kind: SignatureKind,
     ) -> Result<Signature, VbootError> {
-        let header = unsafe { struct_from_bytes::<vb2_signature>(buf) }?;
+        let header =
+            unsafe { struct_from_bytes::<vboot_sys::vb2_signature>(buf) }?;
 
         let sig_offset = u32_to_usize(header.sig_offset);
         let sig_size = u32_to_usize(header.sig_size);
@@ -191,12 +194,14 @@ impl PublicKey {
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_packed_key`.
     pub fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, VbootError> {
-        let header = unsafe { struct_from_bytes::<vb2_packed_key>(buf) }?;
+        let header =
+            unsafe { struct_from_bytes::<vboot_sys::vb2_packed_key>(buf) }?;
 
         let key_offset = u32_to_usize(header.key_offset);
         let key_size = u32_to_usize(header.key_size);
-        let algorithm =
-            Algorithm::from_vb2(vb2_crypto_algorithm(header.algorithm))?;
+        let algorithm = Algorithm::from_vb2(vboot_sys::vb2_crypto_algorithm(
+            header.algorithm,
+        ))?;
         let key_version = header.key_version;
 
         let key_range = key_offset..key_offset + key_size;
@@ -295,7 +300,8 @@ impl KeyBlockHeader {
         buf: &[u8],
         key: &PublicKey,
     ) -> Result<KeyBlockHeader, VbootError> {
-        let header = unsafe { struct_from_bytes::<vb2_keyblock>(buf) }?;
+        let header =
+            unsafe { struct_from_bytes::<vboot_sys::vb2_keyblock>(buf) }?;
 
         if &header.magic != b"CHROMEOS" {
             return Err(VbootError::BadMagic);
@@ -310,16 +316,16 @@ impl KeyBlockHeader {
         let header = KeyBlockHeader {
             keyblock_size: u32_to_usize(header.keyblock_size),
             keyblock_signature: Signature::from_le_bytes(
-                &buf[offset_of!(vb2_keyblock, keyblock_signature)..],
+                &buf[offset_of!(vboot_sys::vb2_keyblock, keyblock_signature)..],
                 SignatureKind::Rsa8192,
             )?,
             keyblock_hash: Signature::from_le_bytes(
-                &buf[offset_of!(vb2_keyblock, keyblock_hash)..],
+                &buf[offset_of!(vboot_sys::vb2_keyblock, keyblock_hash)..],
                 SignatureKind::Sha512,
             )?,
             keyblock_flags: header.keyblock_flags,
             data_key: PublicKey::from_le_bytes(
-                &buf[offset_of!(vb2_keyblock, data_key)..],
+                &buf[offset_of!(vboot_sys::vb2_keyblock, data_key)..],
             )?,
         };
 
@@ -361,8 +367,9 @@ impl KernelPreamble {
         buf: &[u8],
         keyblock: &KeyBlockHeader,
     ) -> Result<KernelPreamble, VbootError> {
-        let header =
-            unsafe { struct_from_bytes::<vb2_kernel_preamble>(buf) }?;
+        let header = unsafe {
+            struct_from_bytes::<vboot_sys::vb2_kernel_preamble>(buf)
+        }?;
 
         if header.header_version_major != 2 {
             return Err(VbootError::BadVersion);
@@ -374,17 +381,23 @@ impl KernelPreamble {
         // Based on `UnpackKernelBlob` in futility/vb1_helper.c.
         let command_line_start = u64_to_usize(header.bootloader_address)
             - u64_to_usize(header.body_load_address)
-            - u32_to_usize(CROS_PARAMS_SIZE)
-            - u32_to_usize(CROS_CONFIG_SIZE);
+            - u32_to_usize(vboot_sys::CROS_PARAMS_SIZE)
+            - u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
 
         let preamble = KernelPreamble {
             preamble_size: u32_to_usize(header.preamble_size),
             preamble_signature: Signature::from_le_bytes(
-                &buf[offset_of!(vb2_kernel_preamble, preamble_signature)..],
+                &buf[offset_of!(
+                    vboot_sys::vb2_kernel_preamble,
+                    preamble_signature
+                )..],
                 SignatureKind::Rsa8192,
             )?,
             body_signature: Signature::from_le_bytes(
-                &buf[offset_of!(vb2_kernel_preamble, body_signature)..],
+                &buf[offset_of!(
+                    vboot_sys::vb2_kernel_preamble,
+                    body_signature
+                )..],
                 SignatureKind::Rsa8192,
             )?,
             command_line_start,
@@ -433,7 +446,8 @@ pub fn verify_kernel<'a>(
     let command_line = body
         .get(
             preamble.command_line_start
-                ..preamble.command_line_start + u32_to_usize(CROS_CONFIG_SIZE),
+                ..preamble.command_line_start
+                    + u32_to_usize(vboot_sys::CROS_CONFIG_SIZE),
         )
         .ok_or(VbootError::BufferTooSmall)?;
 
