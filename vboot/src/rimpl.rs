@@ -10,8 +10,7 @@
 
 // Note: unlike the C code this is based on, I haven't bothered to use
 // pointers everywhere so that data is rarely copied. I don't think
-// these small copies are likely to slow anything down, and I don't
-// think there should be any security issue either.
+// these small copies are likely to slow anything down.
 
 // TODO: can we make very restrictive checks on the ranges pointed to
 // from headers? That seems like a place where security holes might
