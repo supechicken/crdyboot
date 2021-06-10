@@ -49,6 +49,7 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .allowlist_var("VB2_KERNEL_PREAMBLE_HEADER_VERSION_MAJOR")
         .allowlist_var("VB2_KERNEL_PREAMBLE_HEADER_VERSION_MINOR")
         .allowlist_var("VB2_KEYBLOCK_VERSION_MAJOR")
+        .allowlist_var("VB2_KEYBLOCK_VERSION_MINOR")
         .derive_partialeq(true)
         .impl_partialeq(true)
         .default_enum_style(bindgen::EnumVariation::NewType {
