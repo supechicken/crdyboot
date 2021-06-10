@@ -120,7 +120,7 @@ fn u32_to_usize(v: u32) -> usize {
 /// data with different types.
 ///
 /// TODO: get this reviewed by a Rust unsafe expert.
-unsafe fn transmute_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
+unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
     if buf.len() < mem::size_of::<T>() {
         return Err(VbootError::BufferTooSmall);
     }
@@ -151,7 +151,7 @@ impl Signature {
         buf: &[u8],
         kind: SignatureKind,
     ) -> Result<Signature, VbootError> {
-        let header = unsafe { transmute_from_bytes::<vb2_signature>(buf) }?;
+        let header = unsafe { struct_from_bytes::<vb2_signature>(buf) }?;
 
         let sig_offset = u32_to_usize(header.sig_offset);
         let sig_size = u32_to_usize(header.sig_size);
@@ -191,7 +191,7 @@ impl PublicKey {
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_packed_key`.
     pub fn from_le_bytes(buf: &[u8]) -> Result<PublicKey, VbootError> {
-        let header = unsafe { transmute_from_bytes::<vb2_packed_key>(buf) }?;
+        let header = unsafe { struct_from_bytes::<vb2_packed_key>(buf) }?;
 
         let key_offset = u32_to_usize(header.key_offset);
         let key_size = u32_to_usize(header.key_size);
@@ -295,7 +295,7 @@ impl KeyBlockHeader {
         buf: &[u8],
         key: &PublicKey,
     ) -> Result<KeyBlockHeader, VbootError> {
-        let header = unsafe { transmute_from_bytes::<vb2_keyblock>(buf) }?;
+        let header = unsafe { struct_from_bytes::<vb2_keyblock>(buf) }?;
 
         if &header.magic != b"CHROMEOS" {
             return Err(VbootError::BadMagic);
@@ -362,7 +362,7 @@ impl KernelPreamble {
         keyblock: &KeyBlockHeader,
     ) -> Result<KernelPreamble, VbootError> {
         let header =
-            unsafe { transmute_from_bytes::<vb2_kernel_preamble>(buf) }?;
+            unsafe { struct_from_bytes::<vb2_kernel_preamble>(buf) }?;
 
         if header.header_version_major != 2 {
             return Err(VbootError::BadVersion);
