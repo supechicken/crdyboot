@@ -39,9 +39,9 @@ pub enum VbootError {
     InvalidKey(rsa::errors::Error),
     BadMagic,
     BadVersion,
-    BadKeySize(usize, usize),
+    BadKeySize,
     BadKeyArraySize,
-    BadSignatureSize(usize, usize),
+    BadSignatureSize,
     SignatureVerificationFailed(rsa::errors::Error),
     KeyBlockNotCompletelySigned,
 }
@@ -171,10 +171,7 @@ impl Signature {
         let sig_data = buf.get(sig_range).ok_or(VbootError::BufferTooSmall)?;
 
         if sig_data.len() != kind.size_in_bytes() {
-            return Err(VbootError::BadSignatureSize(
-                sig_data.len(),
-                kind.size_in_bytes(),
-            ));
+            return Err(VbootError::BadSignatureSize);
         }
 
         Ok(Signature {
@@ -215,7 +212,7 @@ impl PublicKey {
         let expected_key_size = 2 * algorithm.signature_kind().size_in_bytes()
             + 2 * mem::size_of::<u32>();
         if key_size != expected_key_size {
-            return Err(VbootError::BadKeySize(key_size, expected_key_size));
+            return Err(VbootError::BadKeySize);
         }
 
         let key_range = key_offset..key_offset + key_size;
