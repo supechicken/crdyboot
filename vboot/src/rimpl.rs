@@ -23,8 +23,6 @@
 // TODO: use constants from vboot_reference for verification, maybe
 // also offset_of for member fields?
 
-// TODO: for now only VB2_ALG_RSA8192_SHA256 is supported.
-
 use {
     crate::vboot_sys,
     alloc::vec::Vec,
