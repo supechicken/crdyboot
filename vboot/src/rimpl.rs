@@ -40,6 +40,7 @@ pub enum VbootError {
     BadMagic,
     BadVersion,
     BadKeySize(usize, usize),
+    BadKeyArraySize,
     BadSignatureSize(usize, usize),
     SignatureVerificationFailed(rsa::errors::Error),
     KeyBlockNotCompletelySigned,
@@ -230,6 +231,13 @@ impl PublicKey {
                 // Unwrap: just successfully got 4 bytes, so this cannot fail.
                 .unwrap(),
         );
+
+        // Validity check key array size.
+        if u32_to_usize(arrsize) * mem::size_of::<u32>()
+            != algorithm.signature_kind().size_in_bytes()
+        {
+            return Err(VbootError::BadKeyArraySize);
+        }
 
         // Multiply by 4 because we want to treat the u8 array as if it
         // were a u32 array.
