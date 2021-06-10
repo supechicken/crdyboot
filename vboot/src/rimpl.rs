@@ -410,14 +410,14 @@ impl KernelPreamble {
                     vboot_sys::vb2_kernel_preamble,
                     preamble_signature
                 )..],
-                SignatureKind::Rsa8192,
+                keyblock.data_key.algorithm.signature_kind(),
             )?,
             body_signature: Signature::from_le_bytes(
                 &buf[offset_of!(
                     vboot_sys::vb2_kernel_preamble,
                     body_signature
                 )..],
-                SignatureKind::Rsa8192,
+                keyblock.data_key.algorithm.signature_kind(),
             )?,
             command_line_start,
         };
