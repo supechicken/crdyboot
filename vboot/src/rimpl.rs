@@ -327,7 +327,8 @@ impl KeyBlockHeader {
 
         // Copying the logic from `vb2_check_keyblock`, only check the
         // major version.
-        if header.header_version_major != 2 {
+        if header.header_version_major != vboot_sys::VB2_KEYBLOCK_VERSION_MAJOR
+        {
             return Err(VbootError::BadVersion);
         }
 

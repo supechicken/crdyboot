@@ -46,6 +46,7 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .allowlist_type("vb2_signature_algorithm")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
+        .allowlist_var("VB2_KEYBLOCK_VERSION_MAJOR")
         .derive_partialeq(true)
         .impl_partialeq(true)
         .default_enum_style(bindgen::EnumVariation::NewType {
