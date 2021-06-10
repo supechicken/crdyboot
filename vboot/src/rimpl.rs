@@ -336,7 +336,7 @@ impl KeyBlockHeader {
             keyblock_size: u32_to_usize(header.keyblock_size),
             keyblock_signature: Signature::from_le_bytes(
                 &buf[offset_of!(vboot_sys::vb2_keyblock, keyblock_signature)..],
-                SignatureKind::Rsa8192,
+                key.algorithm.signature_kind(),
             )?,
             keyblock_hash: Signature::from_le_bytes(
                 &buf[offset_of!(vboot_sys::vb2_keyblock, keyblock_hash)..],
