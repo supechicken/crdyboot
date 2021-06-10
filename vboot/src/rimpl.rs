@@ -39,6 +39,7 @@ pub enum VbootError {
     InvalidKey(rsa::errors::Error),
     BadMagic,
     BadVersion,
+    BadKeySize(usize, usize),
     BadSignatureSize(usize, usize),
     SignatureVerificationFailed(rsa::errors::Error),
     KeyBlockNotCompletelySigned,
@@ -71,6 +72,12 @@ impl Algorithm {
     fn digest(&self, data: &[u8]) -> Vec<u8> {
         match self {
             Algorithm::Rsa8192Sha256 => Sha256::digest(data).to_vec(),
+        }
+    }
+
+    fn signature_kind(&self) -> SignatureKind {
+        match self {
+            Algorithm::Rsa8192Sha256 => SignatureKind::Rsa8192,
         }
     }
 }
@@ -144,6 +151,8 @@ impl Signature {
     /// (it doesn't have to include the data signed by the signature
     /// though).
     ///
+    /// Based in part on `vb2_verify_digest` (2lib/2common.c).
+    ///
     /// See 2lib/include/2struct.h for the declaration of
     /// `struct vb2_signature`.
     fn from_le_bytes(
@@ -184,7 +193,7 @@ pub struct PublicKey {
 
 impl PublicKey {
     /// Load a PublicKey from a byte slice. The slice starts with the
-    /// header and must include the key data as well.
+    /// `vb2_packed_key` header and must include the key data as well.
     ///
     /// Based on vb2_unpack_key_buffer (2lib/2packed_key.c).
     ///
@@ -200,6 +209,13 @@ impl PublicKey {
             header.algorithm,
         ))?;
         let key_version = header.key_version;
+
+        // Based on `vb2_packed_key_size` (2lib/2rsa.c).
+        let expected_key_size = 2 * algorithm.signature_kind().size_in_bytes()
+            + 2 * mem::size_of::<u32>();
+        if key_size != expected_key_size {
+            return Err(VbootError::BadKeySize(key_size, expected_key_size));
+        }
 
         let key_range = key_offset..key_offset + key_size;
         let key_data = buf.get(key_range).ok_or(VbootError::BufferTooSmall)?;
