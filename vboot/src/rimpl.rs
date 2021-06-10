@@ -382,6 +382,8 @@ impl KernelPreamble {
     /// After the preamble is parsed, its signature is checked against
     /// the data key from `keyblock`, and an error is returned if
     /// validation fails.
+    ///
+    /// Based on `vb2_verify_kernel_preamble` (lib20/kernel.c).
     fn parse_and_verify(
         buf: &[u8],
         keyblock: &KeyBlockHeader,
@@ -390,10 +392,14 @@ impl KernelPreamble {
             struct_from_bytes::<vboot_sys::vb2_kernel_preamble>(buf)
         }?;
 
-        if header.header_version_major != 2 {
+        if header.header_version_major
+            != vboot_sys::VB2_KERNEL_PREAMBLE_HEADER_VERSION_MAJOR
+        {
             return Err(VbootError::BadVersion);
         }
-        if header.header_version_minor != 2 {
+        if header.header_version_minor
+            != vboot_sys::VB2_KERNEL_PREAMBLE_HEADER_VERSION_MINOR
+        {
             return Err(VbootError::BadVersion);
         }
 
