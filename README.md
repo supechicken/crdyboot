@@ -42,6 +42,10 @@ targets.
 First make sure submodules are initialized:
 
     git submodule update --init
+    
+To format, lint, test, and build both vboot and crdyboot:
+
+    ./check.sh
 
 The main bootloader code is in the `crdyboot` subdirectory:
 
