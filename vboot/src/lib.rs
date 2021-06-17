@@ -5,7 +5,6 @@ extern crate alloc;
 pub mod rimpl;
 
 #[allow(clippy::missing_safety_doc)]
-#[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
 pub mod vboot_sys {
