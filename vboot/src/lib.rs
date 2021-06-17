@@ -14,5 +14,4 @@ pub mod vboot_sys {
     // ctypes
     type c_char = i8;
     type c_int = i32;
-    type c_ulong = u64;
 }
