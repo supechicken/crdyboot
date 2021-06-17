@@ -117,8 +117,7 @@ fn read_kernel_partition(
 }
 
 // TODO: check if uefi-rs already has a way to do this.
-fn str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
-    // The kernel command line should always be ASCII.
+fn ascii_str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
     if !input.is_ascii() {
         return None;
     }
@@ -168,7 +167,7 @@ fn run_kernel(
 
     // Convert the string to UCS-2, then set it in the image
     // options.
-    let load_options = str_to_uefi_str(&load_options_str).unwrap();
+    let load_options = ascii_str_to_uefi_str(&load_options_str).unwrap();
     let loaded_image = bt
         .handle_protocol::<LoadedImage>(kernel_image)
         .log_warning()?;
