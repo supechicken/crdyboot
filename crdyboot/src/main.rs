@@ -6,8 +6,15 @@ extern crate alloc;
 
 mod truncate;
 
-use alloc::{string::ToString, vec, vec::Vec};
-use core::convert::{TryFrom, TryInto};
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::{
+    convert::{TryFrom, TryInto},
+    fmt,
+};
 use log::{error, info};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
@@ -43,6 +50,20 @@ impl KernelPartition {
 
     fn priority(&self) -> u8 {
         CgptAttributes::from_u64(self.entry.attributes).priority
+    }
+}
+
+impl fmt::Display for KernelPartition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let entry = &self.entry;
+        write!(
+            f,
+            "KernelPartition {{ guid: {}, name: {}, lba: {:x?}, priority={} }}",
+            { entry.unique_partition_guid },
+            uefi_str_to_string(&{ entry.partition_name }),
+            entry.starting_lba..=entry.ending_lba,
+            self.priority()
+        )
     }
 }
 
@@ -137,6 +158,21 @@ fn ascii_str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
     Some(output)
 }
 
+// TODO: check if uefi-rs already has a way to do this.
+fn uefi_str_to_string(input: &[Char16]) -> String {
+    // Get the end of the string, either the first nul character or
+    // the end of the slice.
+    let end = input
+        .iter()
+        .position(|c| *c == NUL_16)
+        .unwrap_or(input.len());
+
+    let input = &input[..end];
+    let input: Vec<u16> = input.iter().map(|c| (*c).into()).collect();
+
+    String::from_utf16(&input).unwrap()
+}
+
 fn run_kernel(
     crdyboot_image: Handle,
     bt: &BootServices,
@@ -202,7 +238,7 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
     partitions.reverse();
 
     for partition in partitions {
-        info!("kernel partition: {:x?}", partition.entry);
+        info!("kernel partition: {}", partition);
 
         if let Err(err) =
             run_kernel(crdyboot_image, bt, &partition, &kernel_key)
