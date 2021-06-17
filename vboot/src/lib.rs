@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+mod gpt;
 mod kernel;
 
 #[allow(clippy::missing_safety_doc)]
@@ -15,4 +16,5 @@ pub mod vboot_sys {
     type c_int = i32;
 }
 
+pub use gpt::CgptAttributes;
 pub use kernel::{verify_kernel, PublicKey};
