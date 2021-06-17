@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-mod rimpl;
+mod kernel;
 
 #[allow(clippy::missing_safety_doc)]
 #[allow(non_camel_case_types)]
@@ -15,4 +15,4 @@ pub mod vboot_sys {
     type c_int = i32;
 }
 
-pub use rimpl::{verify_kernel, PublicKey};
+pub use kernel::{verify_kernel, PublicKey};
