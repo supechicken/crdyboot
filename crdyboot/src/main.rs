@@ -218,8 +218,9 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 }
 
 #[entry]
-fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&st).expect_success("failed to initialize utilities");
+fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
+    uefi_services::init(&mut st)
+        .expect_success("failed to initialize utilities");
 
     let bt = st.boot_services();
 
