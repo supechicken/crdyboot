@@ -1,16 +1,4 @@
-// Background: the plan to use vboot_reference directly isn't going so
-// hot, it seems we don't have a good way to link C code in with the
-// Rust uefi target.
-//
-// So, now we see how hard it would be to write the verification in Rust.
-//
-// For now only the crypto operations are focused on.
-
 // TODO: for now only VB2_ALG_RSA8192_SHA256 is supported
-
-// Note: unlike the C code this is based on, I haven't bothered to use
-// pointers everywhere so that data is rarely copied. I don't think
-// these small copies are likely to slow anything down.
 
 // TODO: can we make very restrictive checks on the ranges pointed to
 // from headers? That seems like a place where security holes might
@@ -18,9 +6,6 @@
 
 // TODO: check that data outside what is covered by the signature is
 // not trusted.
-
-// TODO: use constants from vboot_reference for verification, maybe
-// also offset_of for member fields?
 
 use {
     crate::vboot_sys,
@@ -120,8 +105,8 @@ fn u32_to_usize(v: u32) -> usize {
 /// called safely on repr(C) structs whose fields are either numeric
 /// or structures that also meet these restrictions (recursively).
 ///
-/// Rust is frustratingly unclear about what is UB, so I'm not sure
-/// that this function is actually safe to call under the
+/// The Rust documentation is unclear about what is UB, so I'm not
+/// sure that this function is actually safe to call under the
 /// circumstances outlined above. In particular I'm not clear on
 /// whether it's OK to have two immutable refs to the same underlying
 /// data with different types.
