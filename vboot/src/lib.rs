@@ -16,5 +16,3 @@ pub mod vboot_sys {
     type c_int = i32;
     type c_ulong = u64;
 }
-
-pub use vboot_sys::vb2_return_code as return_code;
