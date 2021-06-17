@@ -15,7 +15,7 @@ use core::{
     convert::{TryFrom, TryInto},
     fmt,
 };
-use log::{error, info};
+use log::{debug, error, info};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
@@ -93,9 +93,9 @@ fn get_kernel_partitions(
             let partition_type = gpt.partition_type_guid;
 
             if gpt.starting_lba == gpt.ending_lba {
-                info!("skipping stub partition");
+                debug!("skipping stub partition");
             } else if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
-                info!("skipping non-kernel partition");
+                debug!("skipping non-kernel partition");
             } else {
                 v.push(KernelPartition {
                     handle,
@@ -117,11 +117,11 @@ fn read_kernel_partition(
         .log_warning()?;
     let bio = unsafe { &*bio.get() };
 
-    info!("got bio: {:?}", bio.media());
+    debug!("got bio: {:?}", bio.media());
 
     // TODO: maybe uninit
     let mut kernel_buffer = vec![0; partition.num_bytes(bio).unwrap()];
-    info!("allocated kernel buffer");
+    debug!("allocated kernel buffer");
 
     info!("reading kernel from disk");
     bio.read_blocks(
