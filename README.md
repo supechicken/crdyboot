@@ -71,7 +71,4 @@ Then run it in QEMU:
 
 * Verify that vboot is properly checking the signatures of all data
   that gets used.
-* Use the GPT attributes to determine which kernel partition to
-  boot. As a first pass this can be the simplified version used in
-  grub, but would be good to get the full thing implemented.
 * Verify that the unsafe code is correct.
