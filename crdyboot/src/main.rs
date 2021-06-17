@@ -8,7 +8,7 @@ mod truncate;
 
 use alloc::{string::ToString, vec, vec::Vec};
 use core::convert::{TryFrom, TryInto};
-use log::info;
+use log::{error, info};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
@@ -69,19 +69,18 @@ fn get_kernel_partitions(
         let pi = unsafe { &*pi.get() };
 
         if let Some(gpt) = pi.gpt_partition_entry() {
+            let partition_type = gpt.partition_type_guid;
+
             if gpt.starting_lba == gpt.ending_lba {
                 info!("skipping stub partition");
-            }
-
-            let partition_type = gpt.partition_type_guid;
-            if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
+            } else if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
                 info!("skipping non-kernel partition");
+            } else {
+                v.push(KernelPartition {
+                    handle,
+                    entry: *gpt,
+                });
             }
-
-            v.push(KernelPartition {
-                handle,
-                entry: *gpt,
-            });
         }
     }
 
@@ -195,30 +194,27 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
     let kernel_key = PublicKey::from_le_bytes(test_key_vbpubk).unwrap();
 
-    let partitions = get_kernel_partitions(crdyboot_image, bt).log_warning()?;
+    let mut partitions =
+        get_kernel_partitions(crdyboot_image, bt).log_warning()?;
+    info!("found {} kernel partitions", partitions.len());
 
-    // TODO: for now just use the priority field to pick the
-    // partition. This is the same as what the old grub implementation
-    // does.
-    let mut best_partition: Option<&KernelPartition> = None;
-    for p1 in &partitions {
-        if let Some(p2) = best_partition {
-            if p1.priority() > p2.priority() {
-                best_partition = Some(p1);
-            }
-        } else {
-            best_partition = Some(p1);
+    // Sort partitions by priority from high to low.
+    partitions.sort_unstable_by_key(|p| p.priority());
+    partitions.reverse();
+
+    for partition in partitions {
+        info!("kernel partition: {:x?}", partition.entry);
+
+        if let Err(err) =
+            run_kernel(crdyboot_image, bt, &partition, &kernel_key)
+                .log_warning()
+        {
+            error!("failed to run kernel: {:?}", err);
         }
     }
 
-    if let Some(partition) = best_partition {
-        info!("kernel partition: {:x?}", partition.entry);
-
-        run_kernel(crdyboot_image, bt, &partition, &kernel_key)
-            .log_warning()?;
-    }
-
-    Status::SUCCESS.into()
+    // Failed to run any kernel.
+    Status::LOAD_ERROR.into()
 }
 
 #[entry]
