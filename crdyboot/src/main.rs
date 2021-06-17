@@ -17,7 +17,7 @@ use uefi::proto::media::partition::{
     GptPartitionEntry, GptPartitionType, PartitionInfo,
 };
 use uefi::{Char16, Guid, Result};
-use vboot::rimpl::{verify_kernel, PublicKey};
+use vboot::{verify_kernel, PublicKey};
 
 const KERNEL_TYPE_GUID: Guid = Guid::from_values(
     0xfe3a2a5d,
