@@ -8,22 +8,21 @@ will handle loading, verifying, and running the Linux kernel.
 
 Goals:
 
-1. Ensure that when secure boot is enabled, dm-verity is enabled for
-   the rootfs. (Note that this can only be fully verified if using
-   custom Secure Boot keys, otherwise a different OS signed with the
-   Microsoft keys could be used to avoid verifying the rootfs.)
-2. Use UEFI features as little as possible. We need to run on a lot of
-   hardware, and not all UEFI implementations work well.
-3. Use the ChromeOS GPT-attribute mechanism for determining which
-   kernel to boot.
-4. Use the ChromeOS kernel partitions rather than loading the kernel
-   from the EFI partition. The kernel partitions include both the
-   kernel data and command-line, as well as data structures to verify
-   the signature of everything being loaded.
-5. Verify the signature of everything loaded from the kernel
-   partition.
-6. Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
-   environments.
+* Ensure that when secure boot is enabled, dm-verity is enabled for
+  the rootfs. (Note that this can only be fully verified if using
+  custom Secure Boot keys, otherwise a different OS signed with the
+  Microsoft keys could be used to avoid verifying the rootfs.)
+* Use UEFI features as little as possible. We need to run on a lot of
+  hardware, and not all UEFI implementations work well.
+* Use the ChromeOS GPT-attribute mechanism for determining which
+  kernel to boot.
+* Use the ChromeOS kernel partitions rather than loading the kernel
+  from the EFI partition. The kernel partitions include both the
+  kernel data and command-line, as well as data structures to verify
+  the signature of everything being loaded.
+* Verify the signature of everything loaded from the kernel partition.
+* Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
+  environments.
    
 ## Code layout
 
