@@ -69,13 +69,19 @@ fn get_kernel_partitions(
         let pi = unsafe { &*pi.get() };
 
         if let Some(gpt) = pi.gpt_partition_entry() {
-            if { gpt.partition_type_guid } == GptPartitionType(KERNEL_TYPE_GUID)
-            {
-                v.push(KernelPartition {
-                    handle,
-                    entry: *gpt,
-                });
+            if gpt.starting_lba == gpt.ending_lba {
+                info!("skipping stub partition");
             }
+
+            let partition_type = gpt.partition_type_guid;
+            if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
+                info!("skipping non-kernel partition");
+            }
+
+            v.push(KernelPartition {
+                handle,
+                entry: *gpt,
+            });
         }
     }
 
