@@ -17,7 +17,7 @@ use uefi::proto::media::partition::{
     GptPartitionEntry, GptPartitionType, PartitionInfo,
 };
 use uefi::{Char16, Guid, Result};
-use vboot::{verify_kernel, PublicKey};
+use vboot::{verify_kernel, CgptAttributes, PublicKey};
 
 const KERNEL_TYPE_GUID: Guid = Guid::from_values(
     0xfe3a2a5d,
@@ -39,6 +39,10 @@ impl KernelPartition {
         let num_blocks: usize = self.entry.num_blocks()?.try_into().ok()?;
         let block_size: usize = bio.media().block_size().try_into().ok()?;
         num_blocks.checked_mul(block_size)
+    }
+
+    fn priority(&self) -> u8 {
+        CgptAttributes::from_u64(self.entry.attributes).priority
     }
 }
 
@@ -187,8 +191,21 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
 
     let partitions = get_kernel_partitions(crdyboot_image, bt).log_warning()?;
 
-    for partition in partitions {
-        // TODO: for now arbitrarily pick the first one found.
+    // TODO: for now just use the priority field to pick the
+    // partition. This is the same as what the old grub implementation
+    // does.
+    let mut best_partition: Option<&KernelPartition> = None;
+    for p1 in &partitions {
+        if let Some(p2) = best_partition {
+            if p1.priority() > p2.priority() {
+                best_partition = Some(p1);
+            }
+        } else {
+            best_partition = Some(p1);
+        }
+    }
+
+    if let Some(partition) = best_partition {
         info!("kernel partition: {:x?}", partition.entry);
 
         run_kernel(crdyboot_image, bt, &partition, &kernel_key)
