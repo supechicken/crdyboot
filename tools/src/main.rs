@@ -18,6 +18,29 @@ struct Opt {
     action: Action,
 }
 
+impl Opt {
+    fn crdyboot_path(&self) -> Utf8PathBuf {
+        self.repo.join("crdyboot")
+    }
+
+    // TODO: consider moving this to repo root.
+    fn volatile_path(&self) -> Utf8PathBuf {
+        self.crdyboot_path().join("volatile")
+    }
+
+    fn tools_path(&self) -> Utf8PathBuf {
+        self.repo.join("tools")
+    }
+
+    fn vboot_path(&self) -> Utf8PathBuf {
+        self.repo.join("vboot")
+    }
+
+    fn project_paths(&self) -> Vec<Utf8PathBuf> {
+        vec![self.crdyboot_path(), self.tools_path(), self.vboot_path()]
+    }
+}
+
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 enum Action {
@@ -69,14 +92,6 @@ struct QemuAction {
     ia32: bool,
 }
 
-fn get_projects(opt: &Opt) -> Vec<Utf8PathBuf> {
-    vec![
-        opt.repo.join("crdyboot"),
-        opt.repo.join("tools"),
-        opt.repo.join("vboot"),
-    ]
-}
-
 const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
 
 fn update_rustflags_path_prefix(project_dir: &Utf8Path) -> String {
@@ -103,7 +118,7 @@ fn run_check(opt: &Opt) {
 #[throws]
 fn run_build(opt: &Opt) {
     let targets = ["x86_64-unknown-uefi", "i686-unknown-uefi"];
-    let crdyboot_dir = opt.repo.join("crdyboot");
+    let crdyboot_dir = opt.crdyboot_path();
 
     for target in targets {
         let mut cmd = Command::with_args(
@@ -129,7 +144,7 @@ fn run_build(opt: &Opt) {
 
 #[throws]
 fn run_rustfmt(opt: &Opt) {
-    for project in get_projects(opt) {
+    for project in opt.project_paths() {
         let cargo_path = project.join("Cargo.toml");
         Command::with_args(
             "cargo",
@@ -146,7 +161,7 @@ fn run_gen_disk(_opt: &Opt) {
 
 #[throws]
 fn run_clippy(opt: &Opt) {
-    for project in get_projects(opt) {
+    for project in opt.project_paths() {
         println!("{}:", project);
         let mut cmd = Command::with_args("cargo", &["+nightly", "clippy"]);
         modify_cmd_for_path_prefix(&mut cmd, &project);
@@ -157,7 +172,7 @@ fn run_clippy(opt: &Opt) {
 
 #[throws]
 fn run_tests(opt: &Opt) {
-    let vboot_dir = opt.repo.join("vboot");
+    let vboot_dir = opt.vboot_path();
     let mut cmd = Command::with_args("cargo", &["test"]);
     modify_cmd_for_path_prefix(&mut cmd, &vboot_dir);
     cmd.set_dir(&vboot_dir);
@@ -166,7 +181,7 @@ fn run_tests(opt: &Opt) {
 
 #[throws]
 fn run_qemu(opt: &Opt, action: &QemuAction) {
-    let volatile = opt.repo.join("crdyboot/volatile");
+    let volatile = opt.volatile_path();
     let disk = volatile.join("disk.bin");
 
     let ovmf_dir = if action.ia32 {
