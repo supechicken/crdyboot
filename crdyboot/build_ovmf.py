@@ -30,11 +30,23 @@ def main():
     # Init/update submodules.
     run('git', '-C', edk2_dir, 'submodule', 'update', '--init')
 
-    # Build 64-bit UEFI for a 64-bit CPU.
-    run('OvmfPkg/build.sh', '-a', 'X64', cwd=edk2_dir)
+    arch_flags = (
+        # 64-bit UEFI for a 64-bit CPU.
+        ['-a', 'X64'],
+        # 32-bit UEFI for a 64-bit CPU.
+        ['-a', 'IA32', '-a', 'X64'])
 
-    # Build 32-bit UEFI for a 64-bit CPU.
-    run('OvmfPkg/build.sh', '-a', 'IA32', '-a', 'X64', cwd=edk2_dir)
+    # See edk2/OvmfPkg/README for details of these build flags.
+    for arf in arch_flags:
+        cmd = ['OvmfPkg/build.sh']
+        cmd += arf
+        # Write debug messages to the serial port.
+        cmd += ['-D', 'DEBUG_ON_SERIAL_PORT']
+        # Enable secure boot and require SMM. The latter requires a
+        # pflash-backed variable store.
+        cmd += ['-D', 'SECURE_BOOT_ENABLE']
+        cmd += ['-D', 'SMM_REQUIRE']
+        run(*cmd, cwd=edk2_dir)
 
     # Copy the outputs to a more convenient location.
     compiler = 'DEBUG_GCC5'
