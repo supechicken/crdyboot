@@ -63,6 +63,9 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .blocklist_type("__uint64_t")
         .use_core()
         .ctypes_prefix("crate::vboot_sys")
+        // Turn off a bunch of layout tests because they generate
+        // "reference to packed field is unaligned" warnings.
+        .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
