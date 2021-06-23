@@ -21,6 +21,7 @@ struct Opt {
 #[argh(subcommand)]
 enum Action {
     Format(FormatAction),
+    Lint(LintAction),
     Qemu(QemuAction),
 }
 
@@ -28,6 +29,11 @@ enum Action {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "fmt")]
 struct FormatAction {}
+
+/// Run "cargo clippy" on all the code.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "lint")]
+struct LintAction {}
 
 /// Run crdyboot under qemu.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -55,6 +61,16 @@ fn run_rustfmt(opt: &Opt) {
             &["fmt", "--manifest-path", cargo_path.as_str()],
         )
         .run()?;
+    }
+}
+
+#[throws]
+fn run_clippy(opt: &Opt) {
+    for project in get_projects(opt) {
+        println!("{}:", project);
+        Command::with_args("cargo", &["+nightly", "clippy"])
+            .set_dir(project)
+            .run()?;
     }
 }
 
@@ -111,6 +127,7 @@ fn main() {
 
     match &opt.action {
         Action::Format(_) => run_rustfmt(&opt),
+        Action::Lint(_) => run_clippy(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
     }?;
 }
