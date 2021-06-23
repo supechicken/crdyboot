@@ -20,11 +20,17 @@ struct Opt {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 enum Action {
+    Check(CheckAction),
     Format(FormatAction),
     Lint(LintAction),
     Test(TestAction),
     Qemu(QemuAction),
 }
+
+/// Format, lint, test, and build.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "check")]
+struct CheckAction {}
 
 /// Run "cargo fmt" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -56,6 +62,14 @@ fn get_projects(opt: &Opt) -> Vec<Utf8PathBuf> {
         opt.repo.join("tools"),
         opt.repo.join("vboot"),
     ]
+}
+
+#[throws]
+fn run_check(opt: &Opt) {
+    run_rustfmt(opt)?;
+    run_clippy(opt)?;
+    run_tests(opt)?;
+    // TODO: build
 }
 
 #[throws]
@@ -142,6 +156,7 @@ fn main() {
     let opt: Opt = argh::from_env();
 
     match &opt.action {
+        Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::Lint(_) => run_clippy(&opt),
         Action::Test(_) => run_tests(&opt),
