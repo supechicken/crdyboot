@@ -49,8 +49,12 @@ To format, lint, test, and build both vboot and crdyboot:
 The main bootloader code is in the `crdyboot` subdirectory:
 
     cd crdyboot
+    
+One-time step to build OVMF:
 
-To build both 64-bit and 32-bit UEFI targets:
+    ./build_ovmf.py
+
+To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
     ./build.py
     
@@ -59,12 +63,9 @@ To generate a bootable test image:
     cp /path/to/cloudready.bin volatile/disk.bin
     ./gen_disk.py
     
-Then run it in QEMU:
+Then run it in QEMU (64-bit by default, optionally 32-bit):
 
-    runvm.py --snapshot --efi volatile/disk.bin
-
-    # With custom firmware, e.g. for 32-bit UEFI:
-    runvm.py --snapshot --efi myovmf.bin volatile/disk.bin
+    ./run_qemu.py [--ia32]
 
 ## TODO
 
