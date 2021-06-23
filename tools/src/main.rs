@@ -20,8 +20,14 @@ struct Opt {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 enum Action {
+    Format(FormatAction),
     Qemu(QemuAction),
 }
+
+/// Run "cargo fmt" on all the code.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "fmt")]
+struct FormatAction {}
 
 /// Run crdyboot under qemu.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -30,6 +36,26 @@ struct QemuAction {
     /// use 32-bit UEFI instead of 64-bit
     #[argh(switch)]
     ia32: bool,
+}
+
+fn get_projects(opt: &Opt) -> Vec<Utf8PathBuf> {
+    vec![
+        opt.repo.join("crdyboot"),
+        opt.repo.join("tools"),
+        opt.repo.join("vboot"),
+    ]
+}
+
+#[throws]
+fn run_rustfmt(opt: &Opt) {
+    for project in get_projects(opt) {
+        let cargo_path = project.join("Cargo.toml");
+        Command::with_args(
+            "cargo",
+            &["fmt", "--manifest-path", cargo_path.as_str()],
+        )
+        .run()?;
+    }
 }
 
 #[throws]
@@ -84,6 +110,7 @@ fn main() {
     let opt: Opt = argh::from_env();
 
     match &opt.action {
+        Action::Format(_) => run_rustfmt(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
     }?;
 }
