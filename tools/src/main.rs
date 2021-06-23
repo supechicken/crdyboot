@@ -63,6 +63,7 @@ enum Action {
     Test(TestAction),
     Build(BuildAction),
     GenDisk(GenDiskAction),
+    BuildOvmf(BuildOvmfAction),
     Qemu(QemuAction),
 }
 
@@ -70,6 +71,11 @@ enum Action {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build")]
 struct BuildAction {}
+
+/// Build OVMF.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "build-ovmf")]
+struct BuildOvmfAction {}
 
 /// Format, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -152,6 +158,83 @@ fn run_build(opt: &Opt) {
         modify_cmd_for_path_prefix(&mut cmd, &crdyboot_dir);
         cmd.set_dir(&crdyboot_dir);
         cmd.run()?;
+    }
+}
+
+#[throws]
+fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
+    // See edk2/OvmfPkg/README for details of these build flags.
+    let mut cmd = Command::new("OvmfPkg/build.sh");
+    cmd.add_args(arch_flags);
+    // Write debug messages to the serial port.
+    cmd.add_args(&["-D", "DEBUG_ON_SERIAL_PORT"]);
+    // Enable secure boot and require SMM. The latter requires a
+    // pflash-backed variable store.
+    cmd.add_args(&["-D", "SECURE_BOOT_ENABLE"]);
+    cmd.add_args(&["-D", "SMM_REQUIRE"]);
+    cmd.set_dir(edk2_dir);
+    cmd.run()?;
+}
+
+#[throws]
+fn run_build_ovmf(opt: &Opt) {
+    let edk2_dir = opt.volatile_path().join("edk2");
+    let edk2_url = "https://github.com/tianocore/edk2.git";
+
+    // Clone edk2 if not already cloned, otherwise just fetch.
+    if edk2_dir.exists() {
+        Command::with_args("git", &["-C", edk2_dir.as_str(), "fetch"]).run()?;
+    } else {
+        Command::with_args("git", &["clone", edk2_url, edk2_dir.as_str()])
+            .run()?;
+    }
+
+    // Check out a known-working commit.
+    Command::with_args(
+        "git",
+        &[
+            "-C",
+            edk2_dir.as_str(),
+            "checkout",
+            "75e9154f818a58ffc3a28db9f8c97279e723f02d",
+        ],
+    )
+    .run()?;
+
+    // Init/update submodules.
+    Command::with_args(
+        "git",
+        &["-C", edk2_dir.as_str(), "submodule", "update", "--init"],
+    )
+    .run()?;
+
+    let arch_flags = [
+        // 64-bit UEFI for a 64-bit CPU.
+        vec!["-a", "X64"],
+        // 32-bit UEFI for a 64-bit CPU.
+        vec!["-a", "IA32", "-a", "X64"],
+    ];
+
+    for arf in arch_flags {
+        build_ovmf(&arf, &edk2_dir)?;
+    }
+
+    // Copy the outputs to a more convenient location.
+    let compiler = "DEBUG_GCC5";
+    let outputs = [("Ovmf3264", "uefi32"), ("OvmfX64", "uefi64")];
+    for (src_name, dst_dir_name) in outputs {
+        let src_dir = edk2_dir
+            .join("Build")
+            .join(src_name)
+            .join(compiler)
+            .join("FV");
+        let dst_dir = opt.volatile_path().join(dst_dir_name);
+        let file_names = ["OVMF_CODE.fd", "OVMF_VARS.fd"];
+        for name in file_names {
+            let src = src_dir.join(name);
+            let dst = dst_dir.join(name);
+            fs::copy(src, dst)?;
+        }
     }
 }
 
@@ -393,6 +476,7 @@ fn main() {
 
     match &opt.action {
         Action::Build(_) => run_build(&opt),
+        Action::BuildOvmf(_) => run_build_ovmf(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::GenDisk(_) => run_gen_disk(&opt),
