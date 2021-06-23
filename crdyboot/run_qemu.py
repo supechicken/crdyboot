@@ -43,6 +43,7 @@ def main():
         '-vga', 'virtio',
         '-serial', 'stdio',
         '-nodefaults',
+        '-global', 'driver=cfi.pflash01,property=secure,value=on',
         '-drive', 'if=pflash,format=raw,unit=0,readonly=on,file=' + ovmf_code,
         '-drive', 'if=pflash,format=raw,unit=1,readonly=on,file=' + new_ovmf_vars,
         '-drive', 'format=raw,file=' + disk)
