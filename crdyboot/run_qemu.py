@@ -2,6 +2,7 @@
 # pylint: disable=missing-docstring
 
 import argparse
+import os
 import subprocess
 
 
@@ -22,9 +23,13 @@ def main():
     disk = 'volatile/disk.bin'
 
     if args.ia32:
-        ovmf = 'volatile/ovmf32.fd'
+        ovmf_dir = 'volatile/uefi32'
     else:
-        ovmf = 'volatile/ovmf64.fd'
+        ovmf_dir = 'volatile/uefi64'
+    ovmf_code = os.path.join(ovmf_dir, 'OVMF_CODE.fd')
+    orig_ovmf_vars = os.path.join(ovmf_dir, 'OVMF_VARS.fd')
+    new_ovmf_vars = os.path.join(ovmf_dir, 'OVMF_VARS.copy.fd')
+    run('cp', orig_ovmf_vars, new_ovmf_vars)
 
     # yapf: disable
     run(qemu,
@@ -38,7 +43,8 @@ def main():
         '-vga', 'virtio',
         '-serial', 'stdio',
         '-nodefaults',
-        '-drive', 'if=pflash,format=raw,readonly,file=' + ovmf,
+        '-drive', 'if=pflash,format=raw,unit=0,readonly=on,file=' + ovmf_code,
+        '-drive', 'if=pflash,format=raw,unit=1,readonly=on,file=' + new_ovmf_vars,
         '-drive', 'format=raw,file=' + disk)
     # yapf: enable
 

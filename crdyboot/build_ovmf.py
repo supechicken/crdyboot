@@ -10,6 +10,19 @@ def run(*cmd, cwd=None):
     subprocess.run(cmd, check=True, cwd=cwd)
 
 
+def build_ovmf(arch_flags, edk2_dir):
+    # See edk2/OvmfPkg/README for details of these build flags.
+    cmd = ['OvmfPkg/build.sh']
+    cmd += arch_flags
+    # Write debug messages to the serial port.
+    cmd += ['-D', 'DEBUG_ON_SERIAL_PORT']
+    # Enable secure boot and require SMM. The latter requires a
+    # pflash-backed variable store.
+    cmd += ['-D', 'SECURE_BOOT_ENABLE']
+    cmd += ['-D', 'SMM_REQUIRE']
+    run(*cmd, cwd=edk2_dir)
+
+
 def main():
     """Build UEFI firmware."""
     script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -36,28 +49,22 @@ def main():
         # 32-bit UEFI for a 64-bit CPU.
         ['-a', 'IA32', '-a', 'X64'])
 
-    # See edk2/OvmfPkg/README for details of these build flags.
     for arf in arch_flags:
-        cmd = ['OvmfPkg/build.sh']
-        cmd += arf
-        # Write debug messages to the serial port.
-        cmd += ['-D', 'DEBUG_ON_SERIAL_PORT']
-        # Enable secure boot and require SMM. The latter requires a
-        # pflash-backed variable store.
-        cmd += ['-D', 'SECURE_BOOT_ENABLE']
-        cmd += ['-D', 'SMM_REQUIRE']
-        run(*cmd, cwd=edk2_dir)
+        build_ovmf(arf, edk2_dir)
 
     # Copy the outputs to a more convenient location.
     compiler = 'DEBUG_GCC5'
     outputs = {
-        'Ovmf3264': 'ovmf32.fd',
-        'OvmfX64': 'ovmf64.fd',
+        'Ovmf3264': 'uefi32',
+        'OvmfX64': 'uefi64',
     }
-    for src_name, dst_name in outputs.items():
-        src = os.path.join(edk2_dir, 'Build', src_name, compiler, 'FV/OVMF.fd')
-        dst = os.path.join(volatile_dir, dst_name)
-        run('cp', src, dst)
+    for src_name, dst_dir_name in outputs.items():
+        src_dir = os.path.join(edk2_dir, 'Build', src_name, compiler, 'FV')
+        dst_dir = os.path.join(volatile_dir, dst_dir_name)
+        file_names = ('OVMF_CODE.fd', 'OVMF_VARS.fd')
+        for name in file_names:
+            src = os.path.join(src_dir, name)
+            run('cp', src, dst_dir)
 
 
 if __name__ == '__main__':
