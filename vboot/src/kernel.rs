@@ -274,7 +274,7 @@ impl PublicKey {
             .get(..signature.data_size)
             .ok_or(VbootError::BufferTooSmall)?;
 
-        self.verify_all(data_to_verify, &signature)
+        self.verify_all(data_to_verify, signature)
     }
 }
 
