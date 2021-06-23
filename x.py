@@ -22,7 +22,11 @@ def main():
     flags += ' --remap-path-prefix=src={}/src'.format(tools_dir)
     env[var_name] = flags
 
-    subprocess.run(cmd, check=True, env=env)
+    res = subprocess.run(cmd, check=False, env=env)
+    # Exit with the child's return code. Do it this way instead of
+    # using check=True because we don't want a stack trace.
+    if res.returncode != 0:
+        sys.exit(res.returncode)
 
 
 if __name__ == '__main__':
