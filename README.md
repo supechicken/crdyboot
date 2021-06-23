@@ -59,8 +59,8 @@ One-time step to copy in a cloudready test image:
     cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
     
 To generate a bootable test image:
-    
-    cd crdyboot && ./gen_disk.py
+
+    ./x.py gen-disk
     
 Then run it in QEMU (64-bit by default, optionally 32-bit):
 
