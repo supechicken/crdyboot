@@ -1,9 +1,14 @@
+mod loopback;
+mod mount;
+
 use anyhow::Error;
 use argh::FromArgs;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use loopback::LoopbackDevice;
+use mount::Mount;
 use std::env;
 
 /// Tools for crdyboot.
@@ -155,8 +160,35 @@ fn run_rustfmt(opt: &Opt) {
 }
 
 #[throws]
-fn run_gen_disk(_opt: &Opt) {
-    println!("todo");
+fn run_gen_disk(opt: &Opt) {
+    // TODO: dedup
+    let volatile = opt.volatile_path();
+    let disk = volatile.join("disk.bin");
+
+    let lo_dev = LoopbackDevice::new(&disk)?;
+    let partitions = lo_dev.partition_paths();
+
+    {
+        // Replace both grub executables with crdyboot.
+        let efi_mount = Mount::new(&partitions.efi)?;
+        let targets = [
+            ("x86_64-unknown-uefi", "grubx64.efi"),
+            ("i686-unknown-uefi", "grubia32.efi"),
+        ];
+
+        for (target, dstname) in targets {
+            let src = opt
+                .crdyboot_path()
+                .join("target")
+                .join(target)
+                .join("release/crdyboot.efi");
+            let dst = efi_mount.mount_point().join("efi/boot").join(dstname);
+            Command::with_args("sudo", &["cp"])
+                .add_arg(src.as_str())
+                .add_arg(dst.as_str())
+                .run()?;
+        }
+    }
 }
 
 #[throws]

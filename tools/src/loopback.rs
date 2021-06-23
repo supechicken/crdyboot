@@ -34,10 +34,6 @@ impl LoopbackDevice {
         }
     }
 
-    pub fn device_path(&self) -> &Utf8Path {
-        &self.device_path
-    }
-
     fn partition_device(&self, partition_num: u32) -> Utf8PathBuf {
         format!("{}p{}", self.device_path.as_str(), partition_num).into()
     }
@@ -46,7 +42,7 @@ impl LoopbackDevice {
         self.partition_device(27).exists()
     }
 
-    fn partition_paths(&self) -> PartitionPaths {
+    pub fn partition_paths(&self) -> PartitionPaths {
         let offset = if self.is_disk_using_partition_layout_27() {
             15
         } else {
