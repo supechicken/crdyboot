@@ -44,28 +44,27 @@ First make sure submodules are initialized:
     
 To format, lint, test, and build both vboot and crdyboot:
 
-    ./check.sh
-
-The main bootloader code is in the `crdyboot` subdirectory:
-
-    cd crdyboot
+    ./x.py check
     
 One-time step to build OVMF:
 
-    ./build_ovmf.py
+    cd crdyboot && ./build_ovmf.py
 
 To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
-    ./build.py
+    ./x.py build
+    
+One-time step to copy in a cloudready test image:
+
+    cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
     
 To generate a bootable test image:
-
-    cp /path/to/cloudready.bin volatile/disk.bin
-    ./gen_disk.py
+    
+    cd crdyboot && ./gen_disk.py
     
 Then run it in QEMU (64-bit by default, optionally 32-bit):
 
-    ./run_qemu.py [--ia32]
+    ./x.py qemu [--ia32]
 
 ## TODO
 
