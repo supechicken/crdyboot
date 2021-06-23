@@ -24,8 +24,14 @@ enum Action {
     Format(FormatAction),
     Lint(LintAction),
     Test(TestAction),
+    Build(BuildAction),
     Qemu(QemuAction),
 }
+
+/// Build crdyboot.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "build")]
+struct BuildAction {}
 
 /// Format, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -69,7 +75,32 @@ fn run_check(opt: &Opt) {
     run_rustfmt(opt)?;
     run_clippy(opt)?;
     run_tests(opt)?;
-    // TODO: build
+    run_build(opt)?;
+}
+
+#[throws]
+fn run_build(opt: &Opt) {
+    let targets = ["x86_64-unknown-uefi", "i686-unknown-uefi"];
+
+    for target in targets {
+        Command::with_args(
+            "cargo",
+            &[
+                "+nightly",
+                "build",
+                // TODO: for now always use release mode to avoid this
+                // error: "LLVM ERROR: Do not know how to split the result
+                // of this operator!"
+                "--release",
+                "-Zbuild-std=core,compiler_builtins,alloc",
+                "-Zbuild-std-features=compiler-builtins-mem",
+                "--target",
+                target,
+            ],
+        )
+        .set_dir(opt.repo.join("crdyboot"))
+        .run()?;
+    }
 }
 
 #[throws]
@@ -156,6 +187,7 @@ fn main() {
     let opt: Opt = argh::from_env();
 
     match &opt.action {
+        Action::Build(_) => run_build(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::Lint(_) => run_clippy(&opt),
