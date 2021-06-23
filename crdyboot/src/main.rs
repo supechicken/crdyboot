@@ -180,10 +180,10 @@ fn run_kernel(
     kernel_key: &PublicKey,
 ) -> Result<()> {
     // Read the whole kernel partition into memory.
-    let kernel_buffer = read_kernel_partition(bt, &partition).log_warning()?;
+    let kernel_buffer = read_kernel_partition(bt, partition).log_warning()?;
 
     // Parse and verify the whole partition.
-    let kernel = verify_kernel(&kernel_buffer, &kernel_key).unwrap();
+    let kernel = verify_kernel(&kernel_buffer, kernel_key).unwrap();
     info!("kernel verified");
 
     // Load the kernel as a UEFI image.
