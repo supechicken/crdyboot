@@ -8,13 +8,13 @@ import sys
 
 def main():
     repo_dir = os.path.dirname(os.path.realpath(__file__))
-    tools_dir = os.path.join(repo_dir, 'tools')
+    tools_manifest = os.path.join(repo_dir, 'tools/Cargo.toml')
 
-    cmd = ['cargo', 'run', '--quiet', '--']
+    cmd = ['cargo', 'run', '--quiet', '--manifest-path', tools_manifest, '--']
     cmd += ['--repo', repo_dir]
     cmd += sys.argv[1:]
 
-    subprocess.run(cmd, cwd=tools_dir, check=True)
+    subprocess.run(cmd, check=True)
 
 
 if __name__ == '__main__':
