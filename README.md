@@ -42,14 +42,14 @@ To format, lint, test, and build both vboot and crdyboot:
 
     ./x.py check
     
-One-time step to build OVMF:
-
-    cd crdyboot && ./build_ovmf.py
-
 To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
     ./x.py build
     
+One-time step to build OVMF:
+
+    ./x.py build-ovmf
+
 One-time step to copy in a cloudready test image:
 
     cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
