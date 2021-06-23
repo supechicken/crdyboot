@@ -385,6 +385,12 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
 fn main() {
     let opt: Opt = argh::from_env();
 
+    Command::with_args(
+        "git",
+        &["-C", opt.repo.as_str(), "submodule", "update", "--init"],
+    )
+    .run()?;
+
     match &opt.action {
         Action::Build(_) => run_build(&opt),
         Action::Check(_) => run_check(&opt),

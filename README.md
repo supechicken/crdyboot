@@ -38,10 +38,6 @@ targets.
 
 ## Building and testing
 
-First make sure submodules are initialized:
-
-    git submodule update --init
-    
 To format, lint, test, and build both vboot and crdyboot:
 
     ./x.py check
