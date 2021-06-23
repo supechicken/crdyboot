@@ -1,9 +1,10 @@
 use anyhow::Error;
 use argh::FromArgs;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use std::env;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -76,6 +77,21 @@ fn get_projects(opt: &Opt) -> Vec<Utf8PathBuf> {
     ]
 }
 
+const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
+
+fn update_rustflags_path_prefix(project_dir: &Utf8Path) -> String {
+    let mut val = env::var(RUSTFLAGS_ENV_VAR).unwrap_or_else(|_| String::new());
+    val += &format!(" --remap-path-prefix=src={}/src", project_dir);
+    val
+}
+
+fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
+    cmd.env.insert(
+        RUSTFLAGS_ENV_VAR.into(),
+        update_rustflags_path_prefix(project_dir).into(),
+    );
+}
+
 #[throws]
 fn run_check(opt: &Opt) {
     run_rustfmt(opt)?;
@@ -87,9 +103,10 @@ fn run_check(opt: &Opt) {
 #[throws]
 fn run_build(opt: &Opt) {
     let targets = ["x86_64-unknown-uefi", "i686-unknown-uefi"];
+    let crdyboot_dir = opt.repo.join("crdyboot");
 
     for target in targets {
-        Command::with_args(
+        let mut cmd = Command::with_args(
             "cargo",
             &[
                 "+nightly",
@@ -103,9 +120,10 @@ fn run_build(opt: &Opt) {
                 "--target",
                 target,
             ],
-        )
-        .set_dir(opt.repo.join("crdyboot"))
-        .run()?;
+        );
+        modify_cmd_for_path_prefix(&mut cmd, &crdyboot_dir);
+        cmd.set_dir(&crdyboot_dir);
+        cmd.run()?;
     }
 }
 
@@ -130,20 +148,20 @@ fn run_gen_disk(_opt: &Opt) {
 fn run_clippy(opt: &Opt) {
     for project in get_projects(opt) {
         println!("{}:", project);
-        Command::with_args("cargo", &["+nightly", "clippy"])
-            .set_dir(project)
-            .run()?;
+        let mut cmd = Command::with_args("cargo", &["+nightly", "clippy"]);
+        modify_cmd_for_path_prefix(&mut cmd, &project);
+        cmd.set_dir(&project);
+        cmd.run()?;
     }
 }
 
 #[throws]
 fn run_tests(opt: &Opt) {
-    let vboot_cargo = opt.repo.join("vboot/Cargo.toml");
-    Command::with_args(
-        "cargo",
-        &["test", "--manifest-path", vboot_cargo.as_str()],
-    )
-    .run()?;
+    let vboot_dir = opt.repo.join("vboot");
+    let mut cmd = Command::with_args("cargo", &["test"]);
+    modify_cmd_for_path_prefix(&mut cmd, &vboot_dir);
+    cmd.set_dir(&vboot_dir);
+    cmd.run()?;
 }
 
 #[throws]
