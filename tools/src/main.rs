@@ -22,6 +22,7 @@ struct Opt {
 enum Action {
     Format(FormatAction),
     Lint(LintAction),
+    Test(TestAction),
     Qemu(QemuAction),
 }
 
@@ -34,6 +35,11 @@ struct FormatAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "lint")]
 struct LintAction {}
+
+/// Run "cargo test" in the vboot project.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "test")]
+struct TestAction {}
 
 /// Run crdyboot under qemu.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -72,6 +78,16 @@ fn run_clippy(opt: &Opt) {
             .set_dir(project)
             .run()?;
     }
+}
+
+#[throws]
+fn run_tests(opt: &Opt) {
+    let vboot_cargo = opt.repo.join("vboot/Cargo.toml");
+    Command::with_args(
+        "cargo",
+        &["test", "--manifest-path", vboot_cargo.as_str()],
+    )
+    .run()?;
 }
 
 #[throws]
@@ -128,6 +144,7 @@ fn main() {
     match &opt.action {
         Action::Format(_) => run_rustfmt(&opt),
         Action::Lint(_) => run_clippy(&opt),
+        Action::Test(_) => run_tests(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
     }?;
 }
