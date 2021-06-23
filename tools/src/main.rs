@@ -25,6 +25,7 @@ enum Action {
     Lint(LintAction),
     Test(TestAction),
     Build(BuildAction),
+    GenDisk(GenDiskAction),
     Qemu(QemuAction),
 }
 
@@ -42,6 +43,11 @@ struct CheckAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "fmt")]
 struct FormatAction {}
+
+/// Modify an existing CloudReady build to insert crdyboot.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "gen-disk")]
+struct GenDiskAction {}
 
 /// Run "cargo clippy" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -113,6 +119,11 @@ fn run_rustfmt(opt: &Opt) {
         )
         .run()?;
     }
+}
+
+#[throws]
+fn run_gen_disk(_opt: &Opt) {
+    println!("todo");
 }
 
 #[throws]
@@ -190,6 +201,7 @@ fn main() {
         Action::Build(_) => run_build(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),
+        Action::GenDisk(_) => run_gen_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
         Action::Test(_) => run_tests(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
