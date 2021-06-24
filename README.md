@@ -36,6 +36,11 @@ The `crdyboot` subdirectory contains the actual bootloader. It can
 only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
 targets.
 
+## Dependencies
+
+    rustup install nightly
+    sudo apt install pesign
+
 ## Building and testing
 
 To format, lint, test, and build both vboot and crdyboot:
