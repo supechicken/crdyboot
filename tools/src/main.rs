@@ -66,6 +66,7 @@ enum Action {
     Build(BuildAction),
     GenDisk(GenDiskAction),
     BuildOvmf(BuildOvmfAction),
+    SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
 }
 
@@ -98,6 +99,11 @@ struct GenDiskAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "lint")]
 struct LintAction {}
+
+/// Set up secure boot keys.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "secure-boot-setup")]
+struct SecureBootSetupAction {}
 
 /// Run "cargo test" in the vboot project.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -420,6 +426,25 @@ fn run_tests(opt: &Opt) {
 }
 
 #[throws]
+fn run_secure_boot_setup(opt: &Opt) {
+    let volatile = opt.volatile_path();
+
+    // TODO
+    // let arches = ["uefi32", "uefi64"];
+    let arches = ["uefi64"];
+
+    for arch in arches {
+        let ovmf_dir = volatile.join(arch);
+        let efi_exe_path = ovmf_dir.join("EnrollDefaultKeys.efi");
+
+        let source = qemu::Source::EfiExecutable(efi_exe_path);
+
+        let qemu = Qemu::new(source, ovmf_dir);
+        qemu.run()?;
+    }
+}
+
+#[throws]
 fn run_qemu(opt: &Opt, action: &QemuAction) {
     let volatile = opt.volatile_path();
     let disk = volatile.join("disk.bin");
@@ -430,7 +455,9 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
         volatile.join("uefi64")
     };
 
-    let qemu = Qemu::new(&disk, &ovmf_dir);
+    let source = qemu::Source::DiskImage(disk);
+
+    let qemu = Qemu::new(source, ovmf_dir);
     qemu.run()?;
 }
 
@@ -451,6 +478,7 @@ fn main() {
         Action::Format(_) => run_rustfmt(&opt),
         Action::GenDisk(_) => run_gen_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
+        Action::SecureBootSetup(_) => run_secure_boot_setup(&opt),
         Action::Test(_) => run_tests(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
     }?;
