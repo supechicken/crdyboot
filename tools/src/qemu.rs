@@ -96,27 +96,35 @@ impl Qemu {
         let stdout = child.stdout.take().unwrap();
         let mut stdin = child.stdin.take().unwrap();
 
-        let reader = BufReader::new(stdout);
+        let mut reader = BufReader::new(stdout);
 
         // Wait for the shell to start.
-        for line in reader.lines() {
-            let line = line?;
-            println!("{}", line);
-            // Can't use "starts_with" because of the color
-            // escape codes.
-            if line.contains("UEFI Interactive Shell") {
-                dbg!("break", line);
-                break;
-            }
-        }
+        wait_for_line_containing(&mut reader, "UEFI Interactive Shell")?;
 
         // Send an escape to skip the five second delay before
         // the shell starts.
         write!(stdin, "\x1b")?;
+        // Send a return so that we get an actual shell prompt.
+        write!(stdin, "\r\n")?;
 
-        dbg!("here");
+        wait_for_line_containing(&mut reader, "Shell> ")?;
+
+        // Send the enroll command.
         write!(stdin, "enroll\r\n")?;
 
         child.wait()?;
+    }
+}
+
+#[throws]
+fn wait_for_line_containing(reader: &mut dyn BufRead, substr: &str) {
+    for line in reader.lines() {
+        let line = line?;
+        println!("{}", line);
+        // Can't use "starts_with" because of the color
+        // escape codes.
+        if line.contains(substr) {
+            break;
+        }
     }
 }
