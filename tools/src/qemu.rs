@@ -16,6 +16,12 @@ pub enum PrintOutput {
     Yes,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VarAccess {
+    ReadOnly,
+    ReadWrite,
+}
+
 pub struct OvmfPaths {
     pub dir: Utf8PathBuf,
 }
@@ -47,7 +53,7 @@ impl Qemu {
         Qemu { ovmf }
     }
 
-    fn create_command(&self) -> Command {
+    fn create_command(&self, var_access: VarAccess) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
@@ -77,7 +83,12 @@ impl Qemu {
         cmd.add_args(&[
             "-drive",
             &format!(
-                "if=pflash,format=raw,unit=1,readonly=on,file={}",
+                "if=pflash,format=raw,unit=1,readonly={},file={}",
+                if var_access == VarAccess::ReadWrite {
+                    "off"
+                } else {
+                    "on"
+                },
                 self.ovmf.secure_boot_vars()
             ),
         ]);
@@ -87,7 +98,7 @@ impl Qemu {
 
     #[throws]
     pub fn run_disk_image(&self, image_path: &Utf8Path) {
-        let mut cmd = self.create_command();
+        let mut cmd = self.create_command(VarAccess::ReadOnly);
 
         cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
         cmd.run()?;
@@ -95,7 +106,7 @@ impl Qemu {
 
     #[throws]
     pub fn enroll(&self, oemstr_path: &Utf8Path, po: PrintOutput) {
-        let mut cmd = self.create_command();
+        let mut cmd = self.create_command(VarAccess::ReadWrite);
 
         let tmp_dir = tempfile::tempdir()?;
         let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
