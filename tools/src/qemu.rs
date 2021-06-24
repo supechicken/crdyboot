@@ -10,6 +10,12 @@ pub struct Qemu {
     ovmf_dir: Utf8PathBuf,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrintOutput {
+    No,
+    Yes,
+}
+
 impl Qemu {
     pub fn new(ovmf_dir: Utf8PathBuf) -> Qemu {
         Qemu { ovmf_dir }
@@ -68,7 +74,12 @@ impl Qemu {
     }
 
     #[throws]
-    pub fn enroll(&self, executable_path: &Utf8Path, oemstr_path: &Utf8Path) {
+    pub fn enroll(
+        &self,
+        executable_path: &Utf8Path,
+        oemstr_path: &Utf8Path,
+        po: PrintOutput,
+    ) {
         let mut cmd = self.create_command()?;
 
         let tmp_dir = tempfile::tempdir()?;
@@ -101,7 +112,7 @@ impl Qemu {
         let mut reader = BufReader::new(stdout);
 
         // Wait for the shell to start.
-        wait_for_line_containing(&mut reader, "UEFI Interactive Shell")?;
+        wait_for_line_containing(&mut reader, "UEFI Interactive Shell", po)?;
 
         // Send an escape to skip the five second delay before
         // the shell starts.
@@ -110,13 +121,13 @@ impl Qemu {
         write!(stdin, "\r\n")?;
 
         // Wait for the shell prompt.
-        wait_for_line_containing(&mut reader, "Shell> ")?;
+        wait_for_line_containing(&mut reader, "Shell> ", po)?;
 
         // Send the enroll command.
         write!(stdin, "enroll\r\n")?;
 
         // Wait again for the shell prompt.
-        wait_for_line_containing(&mut reader, "Shell> ")?;
+        wait_for_line_containing(&mut reader, "Shell> ", po)?;
 
         // Send the shutdown command.
         write!(stdin, "reset -s\r\n")?;
@@ -126,10 +137,16 @@ impl Qemu {
 }
 
 #[throws]
-fn wait_for_line_containing(reader: &mut dyn BufRead, substr: &str) {
+fn wait_for_line_containing(
+    reader: &mut dyn BufRead,
+    substr: &str,
+    po: PrintOutput,
+) {
     for line in reader.lines() {
         let line = line?;
-        println!("{}", line);
+        if po == PrintOutput::Yes {
+            println!("{}", line);
+        }
         // Can't use "starts_with" because of the color
         // escape codes.
         if line.contains(substr) {

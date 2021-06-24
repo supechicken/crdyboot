@@ -103,7 +103,11 @@ struct LintAction {}
 /// Set up secure boot keys.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "secure-boot-setup")]
-struct SecureBootSetupAction {}
+struct SecureBootSetupAction {
+    /// print output from QEMU
+    #[argh(switch)]
+    verbose: bool,
+}
 
 /// Run "cargo test" in the vboot project.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -475,7 +479,13 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
 }
 
 #[throws]
-fn run_secure_boot_setup(opt: &Opt) {
+fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
+    let po = if action.verbose {
+        qemu::PrintOutput::Yes
+    } else {
+        qemu::PrintOutput::No
+    };
+
     let volatile = opt.volatile_path();
 
     let oemstr_path = generate_secure_boot_key(opt)?;
@@ -489,7 +499,7 @@ fn run_secure_boot_setup(opt: &Opt) {
         let efi_exe_path = ovmf_dir.join("EnrollDefaultKeys.efi");
 
         let qemu = Qemu::new(ovmf_dir);
-        qemu.enroll(&efi_exe_path, &oemstr_path)?;
+        qemu.enroll(&efi_exe_path, &oemstr_path, po)?;
     }
 }
 
@@ -525,7 +535,7 @@ fn main() {
         Action::Format(_) => run_rustfmt(&opt),
         Action::GenDisk(_) => run_gen_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
-        Action::SecureBootSetup(_) => run_secure_boot_setup(&opt),
+        Action::SecureBootSetup(action) => run_secure_boot_setup(&opt, action),
         Action::Test(_) => run_tests(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
     }?;
