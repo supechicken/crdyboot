@@ -7,7 +7,7 @@ use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 
-const CERT_NICKNAME: &str = "test sb cert";
+const CERT_NICKNAME: &str = "testsbcert";
 const PASSWORD: &str = "fakepassword";
 
 #[throws]
@@ -59,17 +59,41 @@ fn make_pk12_db(db_path: &Utf8Path, p12: &Utf8Path) {
     ]).run()?;
 }
 
-#[throws]
-fn run_pesign(db_path: &Utf8Path, input: &Utf8Path, output: &Utf8Path) {
+fn run_pesign(
+    db_path: &Utf8Path,
+    input: &Utf8Path,
+    output: &Utf8Path,
+) -> rexpect::errors::Result<()> {
     #[rustfmt::skip]
-    Command::with_args("pesign", &[
+    let cmd = Command::with_args("pesign", &[
         "--in", input.as_str(),
         "--out", output.as_str(),
         "--certficate", CERT_NICKNAME,
         "--certdir", db_path.as_str(),
         "--sign",
         "--verbose",
-    ]).run()?;
+    ]);
+
+    let cmd = cmd.command_line_lossy();
+    println!("{}", cmd);
+
+    let timeout_seconds = 5;
+    let mut p = rexpect::spawn(&cmd, Some(timeout_seconds * 1000))?;
+    p.exp_string("Enter Password or Pin for \"NSS Certificate DB\":")?;
+    p.send_line(PASSWORD)?;
+    let output = p.exp_eof()?;
+    println!("{}", output);
+
+    let status = p.process.wait()?;
+    if let rexpect::process::wait::WaitStatus::Exited(_, code) = status {
+        if code == 0 {
+            return Ok(());
+        }
+    }
+    eprintln!("pesign failed: {:?}", status);
+    Err(rexpect::errors::Error::from_kind(
+        rexpect::errors::ErrorKind::Msg("pesign failed".into()),
+    ))
 }
 
 /// Sign shim with the custom secure boot key.
@@ -101,7 +125,7 @@ fn sign_shim(opt: &Opt, efi: &Utf8Path) {
         let real_shim = efi.join("efi/boot").join(shim);
         fs::copy(&real_shim, &tmp_shim_unsigned)?;
 
-        run_pesign(&tmp_db, &tmp_shim_unsigned, &tmp_shim_signed)?;
+        run_pesign(&tmp_db, &tmp_shim_unsigned, &tmp_shim_signed).unwrap();
 
         Command::with_args(
             "sudo",
