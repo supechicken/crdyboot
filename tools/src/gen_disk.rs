@@ -11,14 +11,6 @@ const CERT_NICKNAME: &str = "testsbcert";
 const PASSWORD: &str = "fakepassword";
 
 #[throws]
-pub fn update_bootloaders(opt: &Opt, partitions: &PartitionPaths) {
-    let efi_mount = Mount::new(&partitions.efi)?;
-
-    sign_shim(opt, efi_mount.mount_point())?;
-    copy_in_crdyboot(opt, efi_mount.mount_point())?;
-}
-
-#[throws]
 fn convert_der_to_pem(input: &Utf8Path, output: &Utf8Path) {
     #[rustfmt::skip]
     Command::with_args("openssl", &[
@@ -98,7 +90,10 @@ fn run_pesign(
 
 /// Sign shim with the custom secure boot key.
 #[throws]
-fn sign_shim(opt: &Opt, efi: &Utf8Path) {
+pub fn sign_shim(opt: &Opt, partitions: &PartitionPaths) {
+    let efi_mount = Mount::new(&partitions.efi)?;
+    let efi = efi_mount.mount_point();
+
     let shims = ["bootx64.efi", "bootia32.efi"];
 
     let tmp_dir = tempfile::tempdir()?;
@@ -139,7 +134,10 @@ fn sign_shim(opt: &Opt, efi: &Utf8Path) {
 
 /// Replace both grub executables with crdyboot.
 #[throws]
-fn copy_in_crdyboot(opt: &Opt, efi: &Utf8Path) {
+pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
+    let efi_mount = Mount::new(&partitions.efi)?;
+    let efi = efi_mount.mount_point();
+
     let targets = [
         ("x86_64-unknown-uefi", "grubx64.efi"),
         ("i686-unknown-uefi", "grubia32.efi"),

@@ -63,6 +63,10 @@ One-time step to copy in a cloudready test image:
 
     cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
     
+One-time step to prepare the image:
+
+    ./x.py prep-disk
+    
 To generate a bootable test image:
 
     ./x.py gen-disk
