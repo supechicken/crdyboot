@@ -66,6 +66,14 @@ impl Opt {
         };
         OvmfPaths::new(self.volatile_path().join(subdir))
     }
+
+    fn secure_boot_pub_der(&self) -> Utf8PathBuf {
+        self.volatile_path().join("sb.key.pub")
+    }
+
+    fn secure_boot_priv_pem(&self) -> Utf8PathBuf {
+        self.volatile_path().join("sb.key.priv")
+    }
 }
 
 enum Arch {
@@ -291,7 +299,7 @@ fn run_gen_disk(opt: &Opt) {
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    gen_disk::copy_in_crdyboot(opt, &partitions)?;
+    gen_disk::update_bootloaders(opt, &partitions)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
@@ -323,8 +331,8 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
     let volatile = opt.volatile_path();
 
     let conf_path = volatile.join("openssl.conf");
-    let pubkey_path = volatile.join("sb.key.pub");
-    let privkey_path = volatile.join("sb.key.priv");
+    let pubkey_path = opt.secure_boot_pub_der();
+    let privkey_path = opt.secure_boot_priv_pem();
     let oemstr_path = volatile.join("sb.key.oemstr");
 
     if pubkey_path.exists() && privkey_path.exists() {

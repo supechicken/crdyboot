@@ -7,10 +7,115 @@ use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 
+const CERT_NICKNAME: &str = "test sb cert";
+const PASSWORD: &str = "fakepassword";
+
+#[throws]
+pub fn update_bootloaders(opt: &Opt, partitions: &PartitionPaths) {
+    let efi_mount = Mount::new(&partitions.efi)?;
+
+    sign_shim(opt, efi_mount.mount_point())?;
+    copy_in_crdyboot(opt, efi_mount.mount_point())?;
+}
+
+#[throws]
+fn convert_der_to_pem(input: &Utf8Path, output: &Utf8Path) {
+    #[rustfmt::skip]
+    Command::with_args("openssl", &[
+        "x509",
+        "-inform", "der",
+        "-in", input.as_str(),
+        "-out", output.as_str()
+    ]).run()?;
+}
+
+#[throws]
+fn convert_pem_to_pkcs12(
+    pub_pem: &Utf8Path,
+    priv_pem: &Utf8Path,
+    output: &Utf8Path,
+) {
+    #[rustfmt::skip]
+    Command::with_args("openssl", &[
+        "pkcs12", "-export",
+        "-passin", &format!("pass:{}", PASSWORD),
+        "-passout", &format!("pass:{}", PASSWORD),
+        "-name", CERT_NICKNAME,
+        "-out", output.as_str(),
+        "-inkey", priv_pem.as_str(),
+        "-in", pub_pem.as_str(),
+    ]).run()?;
+}
+
+#[throws]
+fn make_pk12_db(db_path: &Utf8Path, p12: &Utf8Path) {
+    #[rustfmt::skip]
+    Command::with_args("pk12util", &[
+        "-i", p12.as_str(),
+        "-d", db_path.as_str(),
+        "-K", PASSWORD,
+        "-W", PASSWORD,
+        "-v",
+    ]).run()?;
+}
+
+#[throws]
+fn run_pesign(db_path: &Utf8Path, input: &Utf8Path, output: &Utf8Path) {
+    #[rustfmt::skip]
+    Command::with_args("pesign", &[
+        "--in", input.as_str(),
+        "--out", output.as_str(),
+        "--certficate", CERT_NICKNAME,
+        "--certdir", db_path.as_str(),
+        "--sign",
+        "--verbose",
+    ]).run()?;
+}
+
+/// Sign shim with the custom secure boot key.
+#[throws]
+fn sign_shim(opt: &Opt, efi: &Utf8Path) {
+    let shims = ["bootx64.efi", "bootia32.efi"];
+
+    let tmp_dir = tempfile::tempdir()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+    let pubkey_pem_path = tmp_path.join("sb.pub.pem");
+    let p12_path = tmp_path.join("sb.p12");
+    let tmp_shim_unsigned = tmp_path.join("shim-unsigned.efi");
+    let tmp_shim_signed = tmp_path.join("shim-signed.efi");
+    let tmp_db = tmp_path.join("db");
+
+    fs::create_dir(&tmp_db)?;
+
+    convert_der_to_pem(&opt.secure_boot_pub_der(), &pubkey_pem_path)?;
+    convert_pem_to_pkcs12(
+        &pubkey_pem_path,
+        &opt.secure_boot_priv_pem(),
+        &p12_path,
+    )?;
+
+    make_pk12_db(&tmp_db, &p12_path)?;
+
+    for shim in shims {
+        let real_shim = efi.join("efi/boot").join(shim);
+        fs::copy(&real_shim, &tmp_shim_unsigned)?;
+
+        run_pesign(&tmp_db, &tmp_shim_unsigned, &tmp_shim_signed)?;
+
+        Command::with_args(
+            "sudo",
+            &["cp", tmp_shim_signed.as_str(), real_shim.as_str()],
+        )
+        .run()?;
+
+        fs::remove_file(&tmp_shim_signed)?;
+    }
+}
+
 /// Replace both grub executables with crdyboot.
 #[throws]
-pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
-    let efi_mount = Mount::new(&partitions.efi)?;
+fn copy_in_crdyboot(opt: &Opt, efi: &Utf8Path) {
     let targets = [
         ("x86_64-unknown-uefi", "grubx64.efi"),
         ("i686-unknown-uefi", "grubia32.efi"),
@@ -22,7 +127,7 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
             .join("target")
             .join(target)
             .join("release/crdyboot.efi");
-        let dst = efi_mount.mount_point().join("efi/boot").join(dstname);
+        let dst = efi.join("efi/boot").join(dstname);
         Command::with_args("sudo", &["cp"])
             .add_arg(src.as_str())
             .add_arg(dst.as_str())
