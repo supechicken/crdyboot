@@ -3,18 +3,22 @@ use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{self, Stdio};
+
+pub enum Source {
+    DiskImage(Utf8PathBuf),
+    EfiExecutable(Utf8PathBuf),
+}
 
 pub struct Qemu {
-    image_path: Utf8PathBuf,
+    source: Source,
     ovmf_dir: Utf8PathBuf,
 }
 
 impl Qemu {
-    pub fn new(image_path: &Utf8Path, ovmf_dir: &Utf8Path) -> Qemu {
-        Qemu {
-            image_path: image_path.into(),
-            ovmf_dir: ovmf_dir.into(),
-        }
+    pub fn new(source: Source, ovmf_dir: Utf8PathBuf) -> Qemu {
+        Qemu { source, ovmf_dir }
     }
 
     #[throws]
@@ -57,11 +61,64 @@ impl Qemu {
                 new_ovmf_vars
             ),
         ]);
-        cmd.add_args(&[
-            "-drive",
-            &format!("format=raw,file={}", self.image_path),
-        ]);
 
-        cmd.run()?;
+        match &self.source {
+            Source::DiskImage(image_path) => {
+                cmd.add_args(&[
+                    "-drive",
+                    &format!("format=raw,file={}", image_path),
+                ]);
+                cmd.run()?;
+            }
+            Source::EfiExecutable(executable_path) => {
+                let tmp_dir = tempfile::tempdir()?;
+                let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+                let boot_dir = tmp_path.join("efi/boot");
+                fs::create_dir_all(&boot_dir)?;
+
+                let dst_name = "enroll.efi";
+
+                cmd.add_args(&[
+                    "-drive",
+                    &format!("format=raw,file=fat:rw:{}", tmp_path),
+                ]);
+
+                fs::copy(executable_path, boot_dir.join(dst_name))?;
+
+                // Convert to an std Command, command_run doesn't
+                // support the interactive session needed here.
+                let mut cmd = process::Command::from(&cmd);
+
+                cmd.stdin(Stdio::piped()).stdout(Stdio::piped());
+
+                let mut child = cmd.spawn()?;
+                let stdout = child.stdout.take().unwrap();
+                let mut stdin = child.stdin.take().unwrap();
+
+                let reader = BufReader::new(stdout);
+
+                // Wait for the shell to start.
+                for line in reader.lines() {
+                    let line = line?;
+                    println!("{}", line);
+                    // Can't use "starts_with" because of the color
+                    // escape codes.
+                    if line.contains("UEFI Interactive Shell") {
+                        dbg!("break", line);
+                        break;
+                    }
+                }
+
+                // Send an escape to skip the five second delay before
+                // the shell starts.
+                write!(stdin, "\x1b")?;
+
+                dbg!("here");
+                write!(stdin, "enroll\r\n")?;
+
+                child.wait()?;
+            }
+        }
     }
 }
