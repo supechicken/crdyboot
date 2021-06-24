@@ -10,7 +10,6 @@ use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
-use mount::Mount;
 use qemu::{OvmfPaths, Qemu};
 use std::env;
 
@@ -292,27 +291,7 @@ fn run_gen_disk(opt: &Opt) {
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    {
-        // Replace both grub executables with crdyboot.
-        let efi_mount = Mount::new(&partitions.efi)?;
-        let targets = [
-            ("x86_64-unknown-uefi", "grubx64.efi"),
-            ("i686-unknown-uefi", "grubia32.efi"),
-        ];
-
-        for (target, dstname) in targets {
-            let src = opt
-                .crdyboot_path()
-                .join("target")
-                .join(target)
-                .join("release/crdyboot.efi");
-            let dst = efi_mount.mount_point().join("efi/boot").join(dstname);
-            Command::with_args("sudo", &["cp"])
-                .add_arg(src.as_str())
-                .add_arg(dst.as_str())
-                .run()?;
-        }
-    }
+    gen_disk::copy_in_crdyboot(opt, &partitions)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
