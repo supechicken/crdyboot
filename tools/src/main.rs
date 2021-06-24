@@ -56,6 +56,10 @@ impl Opt {
         self.vboot_reference_path().join("build/futility/futility")
     }
 
+    fn disk_path(&self) -> Utf8PathBuf {
+        self.volatile_path().join("disk.bin")
+    }
+
     fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
         let subdir = match arch {
             Arch::Ia32 => "uefi32",
@@ -283,9 +287,7 @@ fn run_rustfmt(opt: &Opt) {
 
 #[throws]
 fn run_gen_disk(opt: &Opt) {
-    // TODO: dedup
-    let volatile = opt.volatile_path();
-    let disk = volatile.join("disk.bin");
+    let disk = opt.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
@@ -408,7 +410,7 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
 
 #[throws]
 fn run_qemu(opt: &Opt, action: &QemuAction) {
-    let disk = opt.volatile_path().join("disk.bin");
+    let disk = opt.disk_path();
 
     let ovmf = if action.ia32 {
         opt.ovmf_paths(Arch::Ia32)
