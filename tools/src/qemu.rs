@@ -68,7 +68,7 @@ impl Qemu {
     }
 
     #[throws]
-    pub fn enroll(&self, executable_path: &Utf8Path) {
+    pub fn enroll(&self, executable_path: &Utf8Path, oemstr_path: &Utf8Path) {
         let mut cmd = self.create_command()?;
 
         let tmp_dir = tempfile::tempdir()?;
@@ -83,6 +83,8 @@ impl Qemu {
             "-drive",
             &format!("format=raw,file=fat:rw:{}", tmp_path),
         ]);
+
+        cmd.add_args(&["-smbios", &format!("type=11,path={}", oemstr_path)]);
 
         fs::copy(executable_path, boot_dir.join(dst_name))?;
 
@@ -107,10 +109,17 @@ impl Qemu {
         // Send a return so that we get an actual shell prompt.
         write!(stdin, "\r\n")?;
 
+        // Wait for the shell prompt.
         wait_for_line_containing(&mut reader, "Shell> ")?;
 
         // Send the enroll command.
         write!(stdin, "enroll\r\n")?;
+
+        // Wait again for the shell prompt.
+        wait_for_line_containing(&mut reader, "Shell> ")?;
+
+        // Send the shutdown command.
+        write!(stdin, "reset -s\r\n")?;
 
         child.wait()?;
     }

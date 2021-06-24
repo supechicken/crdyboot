@@ -426,8 +426,59 @@ fn run_tests(opt: &Opt) {
 }
 
 #[throws]
+fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
+    let volatile = opt.volatile_path();
+
+    let conf_path = volatile.join("openssl.conf");
+    let pubkey_path = volatile.join("sb.key.pub");
+    let privkey_path = volatile.join("sb.key.priv");
+    let oemstr_path = volatile.join("sb.key.oemstr");
+
+    if pubkey_path.exists() && privkey_path.exists() {
+        println!("using existing secure boot key");
+        return oemstr_path;
+    }
+
+    let conf = "
+        [req]
+        distinguished_name = req_distinguished_name
+        prompt = no
+        output_password = fakepassword
+
+        [req_distinguished_name]
+        O = secure boot test cert";
+
+    fs::write(&conf_path, conf)?;
+
+    #[rustfmt::skip]
+    Command::with_args("openssl", &[
+        "req", "-x509",
+        "-newkey", "rsa:2048",
+        "-outform", "DER",
+        "-keyout", privkey_path.as_str(),
+        "-out", pubkey_path.as_str(),
+        "-config", conf_path.as_str()]).run()?;
+
+    // Remove no-longer-needed config.
+    fs::remove_file(&conf_path)?;
+
+    let der = fs::read(&pubkey_path)?;
+
+    // Defined in edk2/OvmfPkg/Include/Guid/OvmfPkKek1AppPrefix.h
+    let uuid = "4e32566d-8e9e-4f52-81d3-5bb9715f9727";
+
+    let oemstr = format!("{}:{}", uuid, base64::encode(der));
+
+    fs::write(&oemstr_path, oemstr)?;
+
+    oemstr_path
+}
+
+#[throws]
 fn run_secure_boot_setup(opt: &Opt) {
     let volatile = opt.volatile_path();
+
+    let oemstr_path = generate_secure_boot_key(opt)?;
 
     // TODO
     // let arches = ["uefi32", "uefi64"];
@@ -438,7 +489,7 @@ fn run_secure_boot_setup(opt: &Opt) {
         let efi_exe_path = ovmf_dir.join("EnrollDefaultKeys.efi");
 
         let qemu = Qemu::new(ovmf_dir);
-        qemu.enroll(&efi_exe_path)?;
+        qemu.enroll(&efi_exe_path, &oemstr_path)?;
     }
 }
 
