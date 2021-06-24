@@ -49,6 +49,10 @@ To build crdyboot for both 64-bit and 32-bit UEFI targets:
 One-time step to build OVMF:
 
     ./x.py build-ovmf
+    
+One-time step to enroll custom secure-boot keys:
+
+    ./x.py secure-boot-setup
 
 One-time step to copy in a cloudready test image:
 
