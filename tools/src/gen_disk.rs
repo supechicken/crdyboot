@@ -1,9 +1,34 @@
+use crate::loopback::PartitionPaths;
+use crate::mount::Mount;
 use crate::Opt;
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+
+/// Replace both grub executables with crdyboot.
+#[throws]
+pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
+    let efi_mount = Mount::new(&partitions.efi)?;
+    let targets = [
+        ("x86_64-unknown-uefi", "grubx64.efi"),
+        ("i686-unknown-uefi", "grubia32.efi"),
+    ];
+
+    for (target, dstname) in targets {
+        let src = opt
+            .crdyboot_path()
+            .join("target")
+            .join(target)
+            .join("release/crdyboot.efi");
+        let dst = efi_mount.mount_point().join("efi/boot").join(dstname);
+        Command::with_args("sudo", &["cp"])
+            .add_arg(src.as_str())
+            .add_arg(dst.as_str())
+            .run()?;
+    }
+}
 
 #[throws]
 pub fn sign_kernel_partition(opt: &Opt, partition_device_path: &Utf8Path) {
