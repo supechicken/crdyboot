@@ -36,6 +36,10 @@ impl OvmfPaths {
     pub fn secure_boot_vars(&self) -> Utf8PathBuf {
         self.dir.join("OVMF_VARS.fd.secure_boot")
     }
+
+    pub fn enroll_executable(&self) -> Utf8PathBuf {
+        self.dir.join("enroll.efi")
+    }
 }
 
 impl Qemu {
@@ -90,12 +94,7 @@ impl Qemu {
     }
 
     #[throws]
-    pub fn enroll(
-        &self,
-        executable_path: &Utf8Path,
-        oemstr_path: &Utf8Path,
-        po: PrintOutput,
-    ) {
+    pub fn enroll(&self, oemstr_path: &Utf8Path, po: PrintOutput) {
         let mut cmd = self.create_command();
 
         let tmp_dir = tempfile::tempdir()?;
@@ -113,7 +112,7 @@ impl Qemu {
 
         cmd.add_args(&["-smbios", &format!("type=11,path={}", oemstr_path)]);
 
-        fs::copy(executable_path, boot_dir.join(dst_name))?;
+        fs::copy(self.ovmf.enroll_executable(), boot_dir.join(dst_name))?;
 
         // Convert to an std Command, command_run doesn't
         // support the interactive session needed here.

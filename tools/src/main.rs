@@ -254,14 +254,17 @@ fn run_build_ovmf(opt: &Opt) {
     let compiler = "DEBUG_GCC5";
     let outputs = [("Ovmf3264", Arch::Ia32), ("OvmfX64", Arch::X64)];
     for (src_name, arch) in outputs {
-        let src_dir = edk2_dir
-            .join("Build")
-            .join(src_name)
-            .join(compiler)
-            .join("FV");
+        let src_dir = edk2_dir.join("Build").join(src_name).join(compiler);
+        let fv_dir = src_dir.join("FV");
+        let efi_dir = src_dir.join("X64");
+
         let dst = opt.ovmf_paths(arch);
-        fs::copy(src_dir.join("OVMF_CODE.fd"), dst.code())?;
-        fs::copy(src_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
+        fs::copy(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
+        fs::copy(fv_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
+        fs::copy(
+            efi_dir.join("EnrollDefaultKeys.efi"),
+            dst.enroll_executable(),
+        )?;
     }
 }
 
@@ -508,10 +511,8 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
 
         fs::copy(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
-        let efi_exe_path = ovmf.dir.join("EnrollDefaultKeys.efi");
-
         let qemu = Qemu::new(ovmf);
-        qemu.enroll(&efi_exe_path, &oemstr_path, po)?;
+        qemu.enroll(&oemstr_path, po)?;
     }
 }
 
