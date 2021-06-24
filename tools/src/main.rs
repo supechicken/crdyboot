@@ -95,6 +95,7 @@ enum Action {
     Lint(LintAction),
     Test(TestAction),
     Build(BuildAction),
+    PrepDisk(PrepDiskAction),
     GenDisk(GenDiskAction),
     BuildOvmf(BuildOvmfAction),
     SecureBootSetup(SecureBootSetupAction),
@@ -130,6 +131,11 @@ struct GenDiskAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "lint")]
 struct LintAction {}
+
+/// Sign shim and the kernel partitions.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "prep-disk")]
+struct PrepDiskAction {}
 
 /// Set up secure boot keys.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -293,17 +299,27 @@ fn run_rustfmt(opt: &Opt) {
 }
 
 #[throws]
+fn run_prep_disk(opt: &Opt) {
+    let disk = opt.disk_path();
+
+    let lo_dev = LoopbackDevice::new(&disk)?;
+    let partitions = lo_dev.partition_paths();
+
+    gen_disk::sign_shim(opt, &partitions)?;
+
+    // Sign both kernel partitions.
+    gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
+    gen_disk::sign_kernel_partition(opt, &partitions.kern_b)?;
+}
+
+#[throws]
 fn run_gen_disk(opt: &Opt) {
     let disk = opt.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    gen_disk::update_bootloaders(opt, &partitions)?;
-
-    // Sign both kernel partitions.
-    gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
-    gen_disk::sign_kernel_partition(opt, &partitions.kern_b)?;
+    gen_disk::copy_in_crdyboot(opt, &partitions)?;
 }
 
 #[throws]
@@ -426,6 +442,7 @@ fn main() {
         Action::Format(_) => run_rustfmt(&opt),
         Action::GenDisk(_) => run_gen_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
+        Action::PrepDisk(_) => run_prep_disk(&opt),
         Action::SecureBootSetup(action) => run_secure_boot_setup(&opt, action),
         Action::Test(_) => run_tests(&opt),
         Action::Qemu(action) => run_qemu(&opt, action),
