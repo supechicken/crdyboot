@@ -215,6 +215,26 @@ fn run_build(opt: &Opt) {
 }
 
 #[throws]
+fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
+    // Clone repo if not already cloned, otherwise just fetch.
+    if path.exists() {
+        Command::with_args("git", &["-C", path.as_str(), "fetch"]).run()?;
+    } else {
+        Command::with_args("git", &["clone", url, path.as_str()]).run()?;
+    }
+
+    // Check out a known-working commit.
+    Command::with_args("git", &["-C", path.as_str(), "checkout", rev]).run()?;
+
+    // Init/update submodules.
+    Command::with_args(
+        "git",
+        &["-C", path.as_str(), "submodule", "update", "--init"],
+    )
+    .run()?;
+}
+
+#[throws]
 fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
     // See edk2/OvmfPkg/README for details of these build flags.
     let mut cmd = Command::new("OvmfPkg/build.sh");
@@ -233,33 +253,10 @@ fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
 fn run_build_ovmf(opt: &Opt) {
     let edk2_dir = opt.volatile_path().join("edk2");
     let edk2_url = "https://github.com/tianocore/edk2.git";
+    // Known-working commit.
+    let edk2_rev = "75e9154f818a58ffc3a28db9f8c97279e723f02d";
 
-    // Clone edk2 if not already cloned, otherwise just fetch.
-    if edk2_dir.exists() {
-        Command::with_args("git", &["-C", edk2_dir.as_str(), "fetch"]).run()?;
-    } else {
-        Command::with_args("git", &["clone", edk2_url, edk2_dir.as_str()])
-            .run()?;
-    }
-
-    // Check out a known-working commit.
-    Command::with_args(
-        "git",
-        &[
-            "-C",
-            edk2_dir.as_str(),
-            "checkout",
-            "75e9154f818a58ffc3a28db9f8c97279e723f02d",
-        ],
-    )
-    .run()?;
-
-    // Init/update submodules.
-    Command::with_args(
-        "git",
-        &["-C", edk2_dir.as_str(), "submodule", "update", "--init"],
-    )
-    .run()?;
+    update_local_repo(&edk2_dir, edk2_url, edk2_rev)?;
 
     let arch_flags = [
         // 64-bit UEFI for a 64-bit CPU.
