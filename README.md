@@ -71,9 +71,9 @@ To copy the latest crdyboot build to the image:
 
     ./x.py update-disk
     
-Then run it in QEMU (64-bit by default, optionally 32-bit):
+Then run it in QEMU:
 
-    ./x.py qemu [--ia32]
+    ./x.py qemu [--ia32] [--secure-boot]
 
 ## TODO
 

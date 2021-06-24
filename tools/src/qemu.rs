@@ -6,10 +6,6 @@ use fs_err as fs;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{self, Stdio};
 
-pub struct Qemu {
-    ovmf: OvmfPaths,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrintOutput {
     No,
@@ -48,9 +44,17 @@ impl OvmfPaths {
     }
 }
 
+pub struct Qemu {
+    ovmf: OvmfPaths,
+    pub secure_boot: bool,
+}
+
 impl Qemu {
     pub fn new(ovmf: OvmfPaths) -> Qemu {
-        Qemu { ovmf }
+        Qemu {
+            ovmf,
+            secure_boot: true,
+        }
     }
 
     fn create_command(&self, var_access: VarAccess) -> Command {
@@ -89,7 +93,11 @@ impl Qemu {
                 } else {
                     "on"
                 },
-                self.ovmf.secure_boot_vars()
+                if self.secure_boot {
+                    self.ovmf.secure_boot_vars()
+                } else {
+                    self.ovmf.original_vars()
+                }
             ),
         ]);
 

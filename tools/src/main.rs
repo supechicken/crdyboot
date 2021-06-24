@@ -158,6 +158,10 @@ struct QemuAction {
     /// use 32-bit UEFI instead of 64-bit
     #[argh(switch)]
     ia32: bool,
+
+    /// enable secure boot
+    #[argh(switch)]
+    secure_boot: bool,
 }
 
 const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
@@ -421,7 +425,8 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
         opt.ovmf_paths(Arch::X64)
     };
 
-    let qemu = Qemu::new(ovmf);
+    let mut qemu = Qemu::new(ovmf);
+    qemu.secure_boot = action.secure_boot;
     qemu.run_disk_image(&disk)?;
 }
 
