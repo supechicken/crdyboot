@@ -2,6 +2,7 @@ mod gen_disk;
 mod loopback;
 mod mount;
 mod qemu;
+mod shim;
 
 use anyhow::Error;
 use argh::FromArgs;
@@ -222,7 +223,7 @@ fn run_build(opt: &Opt) {
 }
 
 #[throws]
-fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
+pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
     // Clone repo if not already cloned, otherwise just fetch.
     if path.exists() {
         Command::with_args("git", &["-C", path.as_str(), "fetch"]).run()?;
@@ -307,54 +308,15 @@ fn run_rustfmt(opt: &Opt) {
 }
 
 #[throws]
-fn build_shim(opt: &Opt) {
-    let shim_dir = opt.volatile_path().join("shim_build");
-    let shim_url = "https://github.com/rhboot/shim.git";
-    let shim_rev = "9f973e4e95b1136b8c98051dbbdb1773072cc998";
-
-    update_local_repo(&shim_dir, shim_url, shim_rev)?;
-
-    let shim_cert = "shim.cer";
-    fs::copy(opt.secure_boot_pub_der(), shim_dir.join(shim_cert))?;
-
-    let arches = [(Arch::X64, "x86_64"), (Arch::Ia32, "ia32")];
-
-    for (arch, shim_arch) in arches {
-        let file_name = format!("shim{}.efi", arch.as_str());
-        let dst_path = opt.volatile_path().join(&file_name);
-        if dst_path.exists() {
-            println!("skipping build: {} already exists", dst_path);
-            continue;
-        }
-
-        let build_dir = shim_dir.join(shim_arch);
-        if !build_dir.exists() {
-            fs::create_dir(&build_dir)?;
-        }
-
-        #[rustfmt::skip]
-        Command::with_args("make", &[
-            "-C", build_dir.as_str(),
-            &format!("ARCH={}", shim_arch),
-            &format!("VENDOR_CERT_FILE=../{}", shim_cert),
-            "TOPDIR=..",
-            "-f", "../Makefile"
-        ]).run()?;
-
-        fs::copy(build_dir.join(&file_name), dst_path)?;
-    }
-}
-
-#[throws]
 fn run_prep_disk(opt: &Opt) {
-    build_shim(opt)?;
+    shim::build_shim(opt)?;
 
     let disk = opt.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    gen_disk::sign_shim(opt, &partitions)?;
+    shim::sign_shim(opt, &partitions)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
