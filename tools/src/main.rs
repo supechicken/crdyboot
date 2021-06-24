@@ -10,7 +10,7 @@ use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
 use mount::Mount;
-use qemu::Qemu;
+use qemu::{OvmfPaths, Qemu};
 use std::env;
 
 /// Tools for crdyboot.
@@ -53,6 +53,25 @@ impl Opt {
 
     fn futility_executable_path(&self) -> Utf8PathBuf {
         self.vboot_reference_path().join("build/futility/futility")
+    }
+
+    fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
+        let subdir = match arch {
+            Arch::Ia32 => "uefi32",
+            Arch::X64 => "uefi64",
+        };
+        OvmfPaths::new(self.volatile_path().join(subdir))
+    }
+}
+
+enum Arch {
+    Ia32,
+    X64,
+}
+
+impl Arch {
+    fn all() -> [Arch; 2] {
+        [Arch::Ia32, Arch::X64]
     }
 }
 
@@ -233,20 +252,16 @@ fn run_build_ovmf(opt: &Opt) {
 
     // Copy the outputs to a more convenient location.
     let compiler = "DEBUG_GCC5";
-    let outputs = [("Ovmf3264", "uefi32"), ("OvmfX64", "uefi64")];
-    for (src_name, dst_dir_name) in outputs {
+    let outputs = [("Ovmf3264", Arch::Ia32), ("OvmfX64", Arch::X64)];
+    for (src_name, arch) in outputs {
         let src_dir = edk2_dir
             .join("Build")
             .join(src_name)
             .join(compiler)
             .join("FV");
-        let dst_dir = opt.volatile_path().join(dst_dir_name);
-        let file_names = ["OVMF_CODE.fd", "OVMF_VARS.fd"];
-        for name in file_names {
-            let src = src_dir.join(name);
-            let dst = dst_dir.join(name);
-            fs::copy(src, dst)?;
-        }
+        let dst = opt.ovmf_paths(arch);
+        fs::copy(src_dir.join("OVMF_CODE.fd"), dst.code())?;
+        fs::copy(src_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
     }
 }
 
@@ -486,35 +501,31 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
         qemu::PrintOutput::No
     };
 
-    let volatile = opt.volatile_path();
-
     let oemstr_path = generate_secure_boot_key(opt)?;
 
-    // TODO
-    // let arches = ["uefi32", "uefi64"];
-    let arches = ["uefi64"];
+    for arch in Arch::all() {
+        let ovmf = opt.ovmf_paths(arch);
 
-    for arch in arches {
-        let ovmf_dir = volatile.join(arch);
-        let efi_exe_path = ovmf_dir.join("EnrollDefaultKeys.efi");
+        fs::copy(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
-        let qemu = Qemu::new(ovmf_dir);
+        let efi_exe_path = ovmf.dir.join("EnrollDefaultKeys.efi");
+
+        let qemu = Qemu::new(ovmf);
         qemu.enroll(&efi_exe_path, &oemstr_path, po)?;
     }
 }
 
 #[throws]
 fn run_qemu(opt: &Opt, action: &QemuAction) {
-    let volatile = opt.volatile_path();
-    let disk = volatile.join("disk.bin");
+    let disk = opt.volatile_path().join("disk.bin");
 
-    let ovmf_dir = if action.ia32 {
-        volatile.join("uefi32")
+    let ovmf = if action.ia32 {
+        opt.ovmf_paths(Arch::Ia32)
     } else {
-        volatile.join("uefi64")
+        opt.ovmf_paths(Arch::X64)
     };
 
-    let qemu = Qemu::new(ovmf_dir);
+    let qemu = Qemu::new(ovmf);
     qemu.run_disk_image(&disk)?;
 }
 
