@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{self, Stdio};
 
 pub struct Qemu {
-    ovmf_dir: Utf8PathBuf,
+    ovmf: OvmfPaths,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -16,18 +16,34 @@ pub enum PrintOutput {
     Yes,
 }
 
-impl Qemu {
-    pub fn new(ovmf_dir: Utf8PathBuf) -> Qemu {
-        Qemu { ovmf_dir }
+pub struct OvmfPaths {
+    pub dir: Utf8PathBuf,
+}
+
+impl OvmfPaths {
+    pub fn new(dir: Utf8PathBuf) -> OvmfPaths {
+        OvmfPaths { dir }
     }
 
-    #[throws]
-    fn create_command(&self) -> Command {
-        let ovmf_code = self.ovmf_dir.join("OVMF_CODE.fd");
-        let orig_ovmf_vars = self.ovmf_dir.join("OVMF_VARS.fd");
-        let new_ovmf_vars = self.ovmf_dir.join("OVMF_VARS.copy.fd");
-        fs::copy(orig_ovmf_vars, &new_ovmf_vars)?;
+    pub fn code(&self) -> Utf8PathBuf {
+        self.dir.join("OVMF_CODE.fd")
+    }
 
+    pub fn original_vars(&self) -> Utf8PathBuf {
+        self.dir.join("OVMF_VARS.fd.orig")
+    }
+
+    pub fn secure_boot_vars(&self) -> Utf8PathBuf {
+        self.dir.join("OVMF_VARS.fd.secure_boot")
+    }
+}
+
+impl Qemu {
+    pub fn new(ovmf: OvmfPaths) -> Qemu {
+        Qemu { ovmf }
+    }
+
+    fn create_command(&self) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
@@ -51,14 +67,14 @@ impl Qemu {
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=0,readonly=on,file={}",
-                ovmf_code
+                self.ovmf.code()
             ),
         ]);
         cmd.add_args(&[
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=1,readonly=on,file={}",
-                new_ovmf_vars
+                self.ovmf.secure_boot_vars()
             ),
         ]);
 
@@ -67,7 +83,7 @@ impl Qemu {
 
     #[throws]
     pub fn run_disk_image(&self, image_path: &Utf8Path) {
-        let mut cmd = self.create_command()?;
+        let mut cmd = self.create_command();
 
         cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
         cmd.run()?;
@@ -80,7 +96,7 @@ impl Qemu {
         oemstr_path: &Utf8Path,
         po: PrintOutput,
     ) {
-        let mut cmd = self.create_command()?;
+        let mut cmd = self.create_command();
 
         let tmp_dir = tempfile::tempdir()?;
         let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
