@@ -437,10 +437,8 @@ fn run_secure_boot_setup(opt: &Opt) {
         let ovmf_dir = volatile.join(arch);
         let efi_exe_path = ovmf_dir.join("EnrollDefaultKeys.efi");
 
-        let source = qemu::Source::EfiExecutable(efi_exe_path);
-
-        let qemu = Qemu::new(source, ovmf_dir);
-        qemu.run()?;
+        let qemu = Qemu::new(ovmf_dir);
+        qemu.enroll(&efi_exe_path)?;
     }
 }
 
@@ -455,10 +453,8 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
         volatile.join("uefi64")
     };
 
-    let source = qemu::Source::DiskImage(disk);
-
-    let qemu = Qemu::new(source, ovmf_dir);
-    qemu.run()?;
+    let qemu = Qemu::new(ovmf_dir);
+    qemu.run_disk_image(&disk)?;
 }
 
 #[throws]
