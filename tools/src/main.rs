@@ -1,6 +1,7 @@
 mod gen_disk;
 mod loopback;
 mod mount;
+mod pesign;
 mod qemu;
 mod shim;
 
