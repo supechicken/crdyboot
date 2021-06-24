@@ -67,9 +67,9 @@ One-time step to prepare the image:
 
     ./x.py prep-disk
     
-To generate a bootable test image:
+To copy the latest crdyboot build to the image:
 
-    ./x.py gen-disk
+    ./x.py update-disk
     
 Then run it in QEMU (64-bit by default, optionally 32-bit):
 

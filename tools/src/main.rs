@@ -96,7 +96,7 @@ enum Action {
     Test(TestAction),
     Build(BuildAction),
     PrepDisk(PrepDiskAction),
-    GenDisk(GenDiskAction),
+    UpdateDisk(UpdateDiskAction),
     BuildOvmf(BuildOvmfAction),
     SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
@@ -124,8 +124,8 @@ struct FormatAction {}
 
 /// Modify an existing CloudReady build to insert crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "gen-disk")]
-struct GenDiskAction {}
+#[argh(subcommand, name = "update-disk")]
+struct UpdateDiskAction {}
 
 /// Run "cargo clippy" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -313,7 +313,7 @@ fn run_prep_disk(opt: &Opt) {
 }
 
 #[throws]
-fn run_gen_disk(opt: &Opt) {
+fn run_update_disk(opt: &Opt) {
     let disk = opt.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
@@ -440,7 +440,7 @@ fn main() {
         Action::BuildOvmf(_) => run_build_ovmf(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),
-        Action::GenDisk(_) => run_gen_disk(&opt),
+        Action::UpdateDisk(_) => run_update_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
         Action::PrepDisk(_) => run_prep_disk(&opt),
         Action::SecureBootSetup(action) => run_secure_boot_setup(&opt, action),
