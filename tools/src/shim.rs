@@ -6,6 +6,7 @@ use anyhow::Error;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use std::env;
 
 #[throws]
 fn build_shim(opt: &Opt) {
@@ -24,19 +25,16 @@ fn build_shim(opt: &Opt) {
         .set_dir(&shim_dir)
         .run()?;
 
-    // For some reason the files get dumped to the root of the repo?
-    // Or wherever the cwd is I guess? Super confused as to why.
+    // For some reason the files get dumped to the CWD instead of the
+    // CWD passed into set_dir above. Super confused as to why.
     Command::with_args(
         "sudo",
-        &["mv", "install/shimia32.efi", shim_dir.as_str()],
+        &["chown", "-R", &env::var("USER").unwrap(), "install"],
     )
     .run()?;
-    Command::with_args(
-        "sudo",
-        &["mv", "install/shimx64.efi", shim_dir.as_str()],
-    )
-    .run()?;
-    Command::with_args("sudo", &["rmdir", "install"]).run()?;
+    fs::rename("install/shimia32.efi", shim_dir.join("shimia32.efi"))?;
+    fs::rename("install/shimx64.efi", shim_dir.join("shimx64.efi"))?;
+    fs::remove_dir("install")?;
 }
 
 #[throws]
