@@ -40,6 +40,9 @@ pub fn sign_all(opt: &Opt, efi: &Utf8Path, file_names: &[String]) {
         ])
         .run()?;
 
+        Command::with_args("sbverify", &["--list", tmp_signed.as_str()])
+            .run()?;
+
         Command::with_args(
             "sudo",
             &["cp", tmp_signed.as_str(), file_path.as_str()],
