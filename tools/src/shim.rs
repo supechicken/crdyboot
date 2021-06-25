@@ -1,6 +1,6 @@
 use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
-use crate::pesign;
+use crate::sign;
 use crate::{Arch, Opt};
 use anyhow::Error;
 use command_run::Command;
@@ -60,5 +60,5 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
         to_sign.push(dst_file_name);
     }
 
-    pesign::sign_all(opt, efi, &to_sign)?;
+    sign::sign_all(opt, efi, &to_sign)?;
 }

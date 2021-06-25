@@ -1,9 +1,9 @@
 mod gen_disk;
 mod loopback;
 mod mount;
-mod pesign;
 mod qemu;
 mod shim;
+mod sign;
 
 use anyhow::Error;
 use argh::FromArgs;
