@@ -76,6 +76,10 @@ impl Opt {
     fn secure_boot_priv_pem(&self) -> Utf8PathBuf {
         self.volatile_path().join("sb.key.priv")
     }
+
+    fn shim_build_path(&self) -> Utf8PathBuf {
+        self.volatile_path().join("shim_build")
+    }
 }
 
 enum Arch {
