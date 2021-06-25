@@ -1,5 +1,3 @@
-use crate::loopback::PartitionPaths;
-use crate::mount::Mount;
 use crate::Opt;
 use anyhow::{anyhow, Error};
 use camino::Utf8Path;
@@ -89,10 +87,7 @@ fn run_pesign(
 }
 
 #[throws]
-pub fn sign_all(opt: &Opt, partitions: &PartitionPaths, file_names: &[&str]) {
-    let efi_mount = Mount::new(&partitions.efi)?;
-    let efi = efi_mount.mount_point();
-
+pub fn sign_all(opt: &Opt, efi: &Utf8Path, file_names: &[String]) {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 

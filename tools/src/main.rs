@@ -310,14 +310,12 @@ fn run_rustfmt(opt: &Opt) {
 
 #[throws]
 fn run_prep_disk(opt: &Opt) {
-    shim::build_shim(opt)?;
-
     let disk = opt.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    shim::sign_shim(opt, &partitions)?;
+    shim::update_shim(opt, &partitions)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
