@@ -9,41 +9,34 @@ use fs_err as fs;
 
 #[throws]
 fn build_shim(opt: &Opt) {
-    let shim_dir = opt.volatile_path().join("shim_build");
-    let shim_url = "https://github.com/rhboot/shim.git";
-    let shim_rev = "9f973e4e95b1136b8c98051dbbdb1773072cc998";
+    let shim_dir = opt.shim_build_path();
+    let shim_url = "https://github.com/neverware/shim-build.git";
+    let shim_rev = "f91f23e3ce3f93fe8532d8bbcfe90ace755a5fed";
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
 
-    let shim_cert = "shim.cer";
-    fs::copy(opt.secure_boot_pub_der(), shim_dir.join(shim_cert))?;
+    fs::copy(opt.secure_boot_pub_der(), shim_dir.join("neverware.cer"))?;
 
-    let arches = [(Arch::X64, "x86_64"), (Arch::Ia32, "ia32")];
+    Command::with_args("make", &["build"])
+        .set_dir(&shim_dir)
+        .run()?;
+    Command::with_args("make", &["copy"])
+        .set_dir(&shim_dir)
+        .run()?;
 
-    for (arch, shim_arch) in arches {
-        let file_name = format!("shim{}.efi", arch.as_str());
-        let dst_path = opt.volatile_path().join(&file_name);
-        if dst_path.exists() {
-            println!("skipping build: {} already exists", dst_path);
-            continue;
-        }
-
-        let build_dir = shim_dir.join(shim_arch);
-        if !build_dir.exists() {
-            fs::create_dir(&build_dir)?;
-        }
-
-        #[rustfmt::skip]
-        Command::with_args("make", &[
-            "-C", build_dir.as_str(),
-            &format!("ARCH={}", shim_arch),
-            &format!("VENDOR_CERT_FILE=../{}", shim_cert),
-            "TOPDIR=..",
-            "-f", "../Makefile"
-        ]).run()?;
-
-        fs::copy(build_dir.join(&file_name), dst_path)?;
-    }
+    // For some reason the files get dumped to the root of the repo?
+    // Or wherever the cwd is I guess? Super confused as to why.
+    Command::with_args(
+        "sudo",
+        &["mv", "install/shimia32.efi", shim_dir.as_str()],
+    )
+    .run()?;
+    Command::with_args(
+        "sudo",
+        &["mv", "install/shimx64.efi", shim_dir.as_str()],
+    )
+    .run()?;
+    Command::with_args("sudo", &["rmdir", "install"]).run()?;
 }
 
 #[throws]
@@ -57,7 +50,7 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
 
     for arch in Arch::all() {
         let src = opt
-            .volatile_path()
+            .shim_build_path()
             .join(format!("shim{}.efi", arch.as_str()));
 
         let dst_file_name = format!("boot{}.efi", arch.as_str());
