@@ -39,7 +39,7 @@ targets.
 ## Dependencies
 
     rustup install nightly
-    sudo apt install pesign
+    sudo apt install sbsigntool
 
 ## Building and testing
 
