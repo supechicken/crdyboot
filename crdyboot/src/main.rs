@@ -266,4 +266,4 @@ fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
 
 #[no_mangle]
 #[link_section = ".sbat"]
-static SBAT: &str = include_str!("sbat.csv");
+static SBAT: [u8; 163] = *include_bytes!("sbat.csv");
