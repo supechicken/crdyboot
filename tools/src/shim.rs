@@ -1,4 +1,5 @@
 use crate::loopback::PartitionPaths;
+use crate::mount::Mount;
 use crate::pesign;
 use crate::{Arch, Opt};
 use anyhow::Error;
@@ -7,7 +8,7 @@ use fehler::throws;
 use fs_err as fs;
 
 #[throws]
-pub fn build_shim(opt: &Opt) {
+fn build_shim(opt: &Opt) {
     let shim_dir = opt.volatile_path().join("shim_build");
     let shim_url = "https://github.com/rhboot/shim.git";
     let shim_rev = "9f973e4e95b1136b8c98051dbbdb1773072cc998";
@@ -45,9 +46,28 @@ pub fn build_shim(opt: &Opt) {
     }
 }
 
-/// Sign shim with the custom secure boot key.
 #[throws]
-pub fn sign_shim(opt: &Opt, partitions: &PartitionPaths) {
-    let shims = ["bootx64.efi", "bootia32.efi"];
-    pesign::sign_all(opt, partitions, &shims)?;
+pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
+    build_shim(opt)?;
+
+    let efi_mount = Mount::new(&partitions.efi)?;
+    let efi = efi_mount.mount_point();
+
+    let mut to_sign = Vec::new();
+
+    for arch in Arch::all() {
+        let src = opt
+            .volatile_path()
+            .join(format!("shim{}.efi", arch.as_str()));
+
+        let dst_file_name = format!("boot{}.efi", arch.as_str());
+        let dst = efi.join("efi/boot").join(&dst_file_name);
+
+        Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
+            .run()?;
+
+        to_sign.push(dst_file_name);
+    }
+
+    pesign::sign_all(opt, efi, &to_sign)?;
 }
