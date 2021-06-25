@@ -70,11 +70,15 @@ impl Opt {
     }
 
     fn secure_boot_pub_der(&self) -> Utf8PathBuf {
-        self.volatile_path().join("sb.key.pub")
+        self.volatile_path().join("sb.key.pub.der")
+    }
+
+    fn secure_boot_pub_pem(&self) -> Utf8PathBuf {
+        self.volatile_path().join("sb.key.pub.pem")
     }
 
     fn secure_boot_priv_pem(&self) -> Utf8PathBuf {
-        self.volatile_path().join("sb.key.priv")
+        self.volatile_path().join("sb.key.priv.pem")
     }
 
     fn shim_build_path(&self) -> Utf8PathBuf {
@@ -360,7 +364,7 @@ fn run_tests(opt: &Opt) {
 fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
     let volatile = opt.volatile_path();
 
-    let pubkey_path = opt.secure_boot_pub_der();
+    let pubkey_path = opt.secure_boot_pub_pem();
     let privkey_path = opt.secure_boot_priv_pem();
     let oemstr_path = volatile.join("sb.key.oemstr");
 
@@ -373,7 +377,6 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
     Command::with_args("openssl", &[
         "req", "-x509",
         "-newkey", "rsa:2048",
-        "-outform", "DER",
         "-keyout", privkey_path.as_str(),
         "-out", pubkey_path.as_str(),
         "-subj", "/CN=SecureBootTestKey/",
@@ -381,7 +384,9 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
         "-nodes",
     ]).run()?;
 
-    let der = fs::read(&pubkey_path)?;
+    sign::convert_pem_to_der(&pubkey_path, &opt.secure_boot_pub_der())?;
+
+    let der = fs::read(opt.secure_boot_pub_der())?;
 
     // Defined in edk2/OvmfPkg/Include/Guid/OvmfPkKek1AppPrefix.h
     let uuid = "4e32566d-8e9e-4f52-81d3-5bb9715f9727";
