@@ -28,7 +28,6 @@ fn convert_pem_to_pkcs12(
     #[rustfmt::skip]
     Command::with_args("openssl", &[
         "pkcs12", "-export",
-        "-passin", &format!("pass:{}", PASSWORD),
         "-passout", &format!("pass:{}", PASSWORD),
         "-name", CERT_NICKNAME,
         "-out", output.as_str(),
