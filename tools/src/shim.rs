@@ -16,7 +16,10 @@ fn build_shim(opt: &Opt) {
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
 
-    fs::copy(opt.secure_boot_pub_der(), shim_dir.join("neverware.cer"))?;
+    fs::copy(
+        opt.secure_boot_shim_key_paths().pub_der(),
+        shim_dir.join("neverware.cer"),
+    )?;
 
     Command::with_args("make", &["build"])
         .set_dir(&shim_dir)
@@ -60,5 +63,5 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
         to_sign.push(dst_file_name);
     }
 
-    sign::sign_all(opt, efi, &to_sign)?;
+    sign::sign_all(efi, &opt.secure_boot_root_key_paths(), &to_sign)?;
 }

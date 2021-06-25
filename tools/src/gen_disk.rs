@@ -32,7 +32,11 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
             .run()?;
     }
 
-    sign::sign_all(opt, efi, &["grubx64.efi".into(), "grubia32.efi".into()])?;
+    sign::sign_all(
+        efi,
+        &opt.secure_boot_shim_key_paths(),
+        &["grubx64.efi".into(), "grubia32.efi".into()],
+    )?;
 }
 
 #[throws]

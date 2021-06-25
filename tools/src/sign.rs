@@ -1,12 +1,65 @@
-use crate::Opt;
 use anyhow::Error;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 
+pub struct KeyPaths {
+    dir: Utf8PathBuf,
+}
+
+impl KeyPaths {
+    pub fn new(dir: Utf8PathBuf) -> KeyPaths {
+        KeyPaths { dir }
+    }
+
+    pub fn enroll_data(&self) -> Utf8PathBuf {
+        self.dir.join("key.oemstr")
+    }
+
+    pub fn priv_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.priv.pem")
+    }
+
+    pub fn pub_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.pub.pem")
+    }
+
+    pub fn pub_der(&self) -> Utf8PathBuf {
+        self.dir.join("key.pub.der")
+    }
+}
+
 #[throws]
-pub fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
+pub fn generate_key(paths: &KeyPaths, name: &str) {
+    if !paths.dir.exists() {
+        fs::create_dir(&paths.dir)?;
+    }
+
+    if paths.priv_pem().exists()
+        && paths.pub_pem().exists()
+        && paths.pub_der().exists()
+    {
+        println!("using existing {} key", paths.dir);
+        return;
+    }
+
+    #[rustfmt::skip]
+    Command::with_args("openssl", &[
+        "req", "-x509",
+        "-newkey", "rsa:2048",
+        "-keyout", paths.priv_pem().as_str(),
+        "-out", paths.pub_pem().as_str(),
+        "-subj", &format!("/CN={}/", name),
+        // Don't encrypt the key. This avoids needing to set a password.
+        "-nodes",
+    ]).run()?;
+
+    convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())?;
+}
+
+#[throws]
+fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
     #[rustfmt::skip]
     Command::with_args("openssl", &[
         "x509",
@@ -17,7 +70,7 @@ pub fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
 }
 
 #[throws]
-pub fn sign_all(opt: &Opt, efi: &Utf8Path, file_names: &[String]) {
+pub fn sign_all(efi: &Utf8Path, key_paths: &KeyPaths, file_names: &[String]) {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
@@ -33,8 +86,8 @@ pub fn sign_all(opt: &Opt, efi: &Utf8Path, file_names: &[String]) {
 
         #[rustfmt::skip]
         Command::with_args("sbsign", &[
-            "--key", opt.secure_boot_priv_pem().as_str(),
-            "--cert", opt.secure_boot_pub_pem().as_str(),
+            "--key", key_paths.priv_pem().as_str(),
+            "--cert", key_paths.pub_pem().as_str(),
             tmp_unsigned.as_str(),
             "--output", tmp_signed.as_str(),
         ])

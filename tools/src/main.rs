@@ -13,6 +13,7 @@ use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
 use qemu::{OvmfPaths, Qemu};
+use sign::KeyPaths;
 use std::env;
 
 /// Tools for crdyboot.
@@ -69,16 +70,16 @@ impl Opt {
         OvmfPaths::new(self.volatile_path().join(subdir))
     }
 
-    fn secure_boot_pub_der(&self) -> Utf8PathBuf {
-        self.volatile_path().join("sb.key.pub.der")
+    /// This cert will be enrolled as the PK, first KEK, and first DB
+    /// entry. The private key is used to sign shim.
+    fn secure_boot_root_key_paths(&self) -> KeyPaths {
+        KeyPaths::new(self.volatile_path().join("secure_boot_root_key"))
     }
 
-    fn secure_boot_pub_pem(&self) -> Utf8PathBuf {
-        self.volatile_path().join("sb.key.pub.pem")
-    }
-
-    fn secure_boot_priv_pem(&self) -> Utf8PathBuf {
-        self.volatile_path().join("sb.key.priv.pem")
+    /// This cert is embedded in shim and the private key is used to
+    /// sign crdyboot.
+    fn secure_boot_shim_key_paths(&self) -> KeyPaths {
+        KeyPaths::new(self.volatile_path().join("secure_boot_shim_key"))
     }
 
     fn shim_build_path(&self) -> Utf8PathBuf {
@@ -361,41 +362,29 @@ fn run_tests(opt: &Opt) {
 }
 
 #[throws]
-fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
-    let volatile = opt.volatile_path();
+fn generate_secure_boot_keys(opt: &Opt) -> Utf8PathBuf {
+    sign::generate_key(
+        &opt.secure_boot_root_key_paths(),
+        "SecureBootRootTestKey",
+    )?;
+    sign::generate_key(
+        &opt.secure_boot_shim_key_paths(),
+        "SecureBootShimTestKey",
+    )?;
 
-    let pubkey_path = opt.secure_boot_pub_pem();
-    let privkey_path = opt.secure_boot_priv_pem();
-    let oemstr_path = volatile.join("sb.key.oemstr");
+    // Generate the oemstr
 
-    if pubkey_path.exists() && privkey_path.exists() {
-        println!("using existing secure boot key");
-        return oemstr_path;
-    }
-
-    #[rustfmt::skip]
-    Command::with_args("openssl", &[
-        "req", "-x509",
-        "-newkey", "rsa:2048",
-        "-keyout", privkey_path.as_str(),
-        "-out", pubkey_path.as_str(),
-        "-subj", "/CN=SecureBootTestKey/",
-        // Don't encrypt the key. This avoids needing to set a password.
-        "-nodes",
-    ]).run()?;
-
-    sign::convert_pem_to_der(&pubkey_path, &opt.secure_boot_pub_der())?;
-
-    let der = fs::read(opt.secure_boot_pub_der())?;
+    let root_key_paths = opt.secure_boot_root_key_paths();
+    let der = fs::read(root_key_paths.pub_der())?;
 
     // Defined in edk2/OvmfPkg/Include/Guid/OvmfPkKek1AppPrefix.h
     let uuid = "4e32566d-8e9e-4f52-81d3-5bb9715f9727";
 
     let oemstr = format!("{}:{}", uuid, base64::encode(der));
 
-    fs::write(&oemstr_path, oemstr)?;
+    fs::write(root_key_paths.enroll_data(), oemstr)?;
 
-    oemstr_path
+    root_key_paths.enroll_data()
 }
 
 #[throws]
@@ -406,7 +395,7 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
         qemu::PrintOutput::No
     };
 
-    let oemstr_path = generate_secure_boot_key(opt)?;
+    let oemstr_path = generate_secure_boot_keys(opt)?;
 
     for arch in Arch::all() {
         let ovmf = opt.ovmf_paths(arch);
