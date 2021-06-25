@@ -1,5 +1,6 @@
 use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
+use crate::sign;
 use crate::Opt;
 use anyhow::Error;
 use camino::Utf8Path;
@@ -30,6 +31,8 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
             .add_arg(dst.as_str())
             .run()?;
     }
+
+    sign::sign_all(opt, efi, &["grubx64.efi".into(), "grubia32.efi".into()])?;
 }
 
 #[throws]
