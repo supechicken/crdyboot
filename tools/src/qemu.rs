@@ -157,8 +157,14 @@ impl Qemu {
         // Wait for the shell prompt.
         wait_for_line_containing(&mut reader, "Shell> ", po)?;
 
-        // Send the enroll command.
-        write!(stdin, "enroll\r\n")?;
+        // Send the enroll command. Passing in "--no-default" changes
+        // what certificates get enrolled in the db. The default, for
+        // some reason, is to enroll the Microsoft certs rather than
+        // the cert we have passed in. Now, the cert we passed in does
+        // get enrolled as the PK and first KEK, and in theory it
+        // being in the KEK should allow our custom-signed shim to
+        // boot, but that doesn't seem to work in practice with OVMF.
+        write!(stdin, "enroll --no-default\r\n")?;
 
         // Wait again for the shell prompt.
         wait_for_line_containing(&mut reader, "Shell> ", po)?;
