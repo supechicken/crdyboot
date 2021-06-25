@@ -360,7 +360,6 @@ fn run_tests(opt: &Opt) {
 fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
     let volatile = opt.volatile_path();
 
-    let conf_path = volatile.join("openssl.conf");
     let pubkey_path = opt.secure_boot_pub_der();
     let privkey_path = opt.secure_boot_priv_pem();
     let oemstr_path = volatile.join("sb.key.oemstr");
@@ -370,17 +369,6 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
         return oemstr_path;
     }
 
-    let conf = "
-        [req]
-        distinguished_name = req_distinguished_name
-        prompt = no
-        output_password = fakepassword
-
-        [req_distinguished_name]
-        O = secure boot test cert";
-
-    fs::write(&conf_path, conf)?;
-
     #[rustfmt::skip]
     Command::with_args("openssl", &[
         "req", "-x509",
@@ -388,10 +376,10 @@ fn generate_secure_boot_key(opt: &Opt) -> Utf8PathBuf {
         "-outform", "DER",
         "-keyout", privkey_path.as_str(),
         "-out", pubkey_path.as_str(),
-        "-config", conf_path.as_str()]).run()?;
-
-    // Remove no-longer-needed config.
-    fs::remove_file(&conf_path)?;
+        "-subj", "/CN=SecureBootTestKey/",
+        // Don't encrypt the key. This avoids needing to set a password.
+        "-nodes",
+    ]).run()?;
 
     let der = fs::read(&pubkey_path)?;
 
