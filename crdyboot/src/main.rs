@@ -263,3 +263,7 @@ fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     panic!("failed to run any kernel");
 }
+
+#[no_mangle]
+#[link_section = ".sbat"]
+static SBAT: &str = include_str!("sbat.csv");
