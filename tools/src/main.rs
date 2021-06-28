@@ -33,9 +33,8 @@ impl Opt {
         self.repo.join("crdyboot")
     }
 
-    // TODO: consider moving this to repo root.
     fn volatile_path(&self) -> Utf8PathBuf {
-        self.crdyboot_path().join("volatile")
+        self.repo.join("workspace")
     }
 
     fn tools_path(&self) -> Utf8PathBuf {
