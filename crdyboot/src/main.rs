@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+mod linux;
 mod truncate;
 
 use alloc::{
@@ -18,7 +19,6 @@ use core::{
 use log::{debug, error, info};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
-use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::partition::{
     GptPartitionEntry, GptPartitionType, PartitionInfo,
@@ -175,22 +175,20 @@ fn uefi_str_to_string(input: &[Char16]) -> String {
 
 fn run_kernel(
     crdyboot_image: Handle,
-    bt: &BootServices,
+    st: SystemTable<Boot>,
     partition: &KernelPartition,
     kernel_key: &PublicKey,
 ) -> Result<()> {
+    let st_clone: SystemTable<Boot> = unsafe { st.unsafe_clone() };
+
+    let bt = st.boot_services();
+
     // Read the whole kernel partition into memory.
     let kernel_buffer = read_kernel_partition(bt, partition).log_warning()?;
 
     // Parse and verify the whole partition.
     let kernel = verify_kernel(&kernel_buffer, kernel_key).unwrap();
     info!("kernel verified");
-
-    // Load the kernel as a UEFI image.
-    let kernel_image = bt
-        .load_image_from_buffer(crdyboot_image, kernel.data)
-        .log_warning()?;
-    info!("image loaded");
 
     // Get the kernel command line and replace %U with the kernel
     // partition GUID. (References to the rootfs partition are
@@ -201,29 +199,27 @@ fn run_kernel(
         .replace("%U", &{ partition.entry.unique_partition_guid }.to_string());
     info!("command line: {}", load_options_str);
 
-    // Convert the string to UCS-2, then set it in the image
-    // options.
-    let load_options = ascii_str_to_uefi_str(&load_options_str).unwrap();
-    let loaded_image = bt
-        .handle_protocol::<LoadedImage>(kernel_image)
-        .log_warning()?;
-    let loaded_image = unsafe { &mut *loaded_image.get() };
-    unsafe {
-        loaded_image.set_load_options(
-            load_options.as_ptr(),
-            (2 * load_options.len()) as u32,
-        );
-    }
+    // Convert the string to UCS-2.
+    let load_options_ucs2 = ascii_str_to_uefi_str(&load_options_str).unwrap();
 
-    info!("starting kernel...");
-    bt.start_image(kernel_image).log_warning()?;
+    // Use the EFI stub to run the kernel.
+    linux::execute_linux_efi_stub(
+        &kernel.data,
+        crdyboot_image,
+        st_clone,
+        &load_options_ucs2,
+    )
+    .log_warning()?;
 
     // TODO: unload the image on failure?
 
     Status::SUCCESS.into()
 }
 
-fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
+fn run(crdyboot_image: Handle, st: SystemTable<Boot>) -> Result<()> {
+    let st_clone = unsafe { st.unsafe_clone() };
+    let bt = st_clone.boot_services();
+
     // TODO
     let test_key_vbpubk =
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
@@ -240,8 +236,10 @@ fn run(crdyboot_image: Handle, bt: &BootServices) -> Result<()> {
     for partition in partitions {
         info!("kernel partition: {}", partition);
 
+        let st = unsafe { st.unsafe_clone() };
+
         if let Err(err) =
-            run_kernel(crdyboot_image, bt, &partition, &kernel_key)
+            run_kernel(crdyboot_image, st, &partition, &kernel_key)
                 .log_warning()
         {
             error!("failed to run kernel: {:?}", err);
@@ -257,9 +255,7 @@ fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut st)
         .expect_success("failed to initialize utilities");
 
-    let bt = st.boot_services();
-
-    run(image, bt).expect_success("run failed");
+    run(image, st).expect_success("run failed");
 
     panic!("failed to run any kernel");
 }
