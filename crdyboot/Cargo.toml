@@ -1,7 +1,6 @@
 [package]
 name = "crdyboot"
 version = "0.1.0"
-authors = ["Nicholas Bishop <nicholasbishop@google.com>"]
 edition = "2018"
 resolver = "2"
 
