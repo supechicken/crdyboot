@@ -204,7 +204,7 @@ fn run_kernel(
 
     // Use the EFI stub to run the kernel.
     linux::execute_linux_efi_stub(
-        &kernel.data,
+        kernel.data,
         crdyboot_image,
         st_clone,
         &load_options_ucs2,
