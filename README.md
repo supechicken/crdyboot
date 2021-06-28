@@ -62,7 +62,7 @@ One-time step to enroll custom secure-boot keys:
 
     ./x.py secure-boot-setup
 
-One-time step to copy in an existing cloudready test image:
+One-time step to copy in an existing cloudready image:
 
     cp /path/to/cloudready.bin workspace/disk.bin
     
