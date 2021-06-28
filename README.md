@@ -36,6 +36,9 @@ The `crdyboot` subdirectory contains the actual bootloader. It can
 only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
 targets.
 
+The `tools` subdirectory contains a single binary that is used by the
+various `x.py` commands shown below.
+
 ## Dependencies
 
     rustup install nightly
@@ -59,7 +62,7 @@ One-time step to enroll custom secure-boot keys:
 
     ./x.py secure-boot-setup
 
-One-time step to copy in a cloudready test image:
+One-time step to copy in an existing cloudready test image:
 
     cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
     
