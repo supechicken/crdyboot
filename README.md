@@ -64,7 +64,7 @@ One-time step to enroll custom secure-boot keys:
 
 One-time step to copy in an existing cloudready test image:
 
-    cp /path/to/cloudready.bin crdyboot/volatile/disk.bin
+    cp /path/to/cloudready.bin workspace/disk.bin
     
 One-time step to prepare the image:
 
