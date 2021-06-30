@@ -361,7 +361,7 @@ fn run_tests(opt: &Opt) {
 }
 
 #[throws]
-fn generate_secure_boot_keys(opt: &Opt) -> Utf8PathBuf {
+fn generate_secure_boot_keys(opt: &Opt) {
     sign::generate_key(
         &opt.secure_boot_root_key_paths(),
         "SecureBootRootTestKey",
@@ -382,8 +382,6 @@ fn generate_secure_boot_keys(opt: &Opt) -> Utf8PathBuf {
     let oemstr = format!("{}:{}", uuid, base64::encode(der));
 
     fs::write(root_key_paths.enroll_data(), oemstr)?;
-
-    root_key_paths.enroll_data()
 }
 
 #[throws]
@@ -394,14 +392,13 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
         qemu::PrintOutput::No
     };
 
-    let oemstr_path = generate_secure_boot_keys(opt)?;
-
     for arch in Arch::all() {
         let ovmf = opt.ovmf_paths(arch);
 
         fs::copy(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
         let qemu = Qemu::new(ovmf);
+        let oemstr_path = opt.secure_boot_root_key_paths().enroll_data();
         qemu.enroll(&oemstr_path, po)?;
     }
 }
@@ -422,14 +419,21 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
 }
 
 #[throws]
-fn main() {
-    let opt: Opt = argh::from_env();
-
+fn initial_setup(opt: &Opt) {
     Command::with_args(
         "git",
         &["-C", opt.repo.as_str(), "submodule", "update", "--init"],
     )
     .run()?;
+
+    generate_secure_boot_keys(opt)?;
+}
+
+#[throws]
+fn main() {
+    let opt: Opt = argh::from_env();
+
+    initial_setup(&opt)?;
 
     match &opt.action {
         Action::Build(_) => run_build(&opt),
