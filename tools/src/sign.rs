@@ -79,6 +79,11 @@ pub fn generate_signed_vars(paths: &KeyPaths, var_name: &str) {
         panic!("invalid var_name");
     };
 
+    // Skip generation if the signed file already exists.
+    if signed_var.exists() {
+        return;
+    }
+
     // These two tools are in the efitools package. Might be fun to port them
     // to Rust at some point...
     Command::with_args(
