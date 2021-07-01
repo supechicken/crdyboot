@@ -33,6 +33,10 @@ impl Opt {
         self.repo.join("crdyboot")
     }
 
+    fn enroller_path(&self) -> Utf8PathBuf {
+        self.repo.join("enroller")
+    }
+
     fn volatile_path(&self) -> Utf8PathBuf {
         self.repo.join("workspace")
     }
@@ -46,7 +50,12 @@ impl Opt {
     }
 
     fn project_paths(&self) -> Vec<Utf8PathBuf> {
-        vec![self.crdyboot_path(), self.tools_path(), self.vboot_path()]
+        vec![
+            self.crdyboot_path(),
+            self.enroller_path(),
+            self.tools_path(),
+            self.vboot_path(),
+        ]
     }
 
     fn vboot_reference_path(&self) -> Utf8PathBuf {
@@ -59,6 +68,10 @@ impl Opt {
 
     fn disk_path(&self) -> Utf8PathBuf {
         self.volatile_path().join("disk.bin")
+    }
+
+    fn enroller_disk_path(&self) -> Utf8PathBuf {
+        self.volatile_path().join("enroller.bin")
     }
 
     fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
@@ -96,6 +109,13 @@ impl Arch {
         [Arch::Ia32, Arch::X64]
     }
 
+    fn as_target(&self) -> &'static str {
+        match self {
+            Arch::Ia32 => "i686-unknown-uefi",
+            Arch::X64 => "x86_64-unknown-uefi",
+        }
+    }
+
     fn as_str(&self) -> &'static str {
         match self {
             Arch::Ia32 => "ia32",
@@ -117,12 +137,18 @@ enum Action {
     BuildOvmf(BuildOvmfAction),
     SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
+    BuildEnroller(BuildEnrollerAction),
 }
 
 /// Build crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build")]
 struct BuildAction {}
+
+/// Build enroller.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "build-enroller")]
+struct BuildEnrollerAction {}
 
 /// Build OVMF.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -201,13 +227,12 @@ fn run_check(opt: &Opt) {
     run_rustfmt(opt)?;
     run_clippy(opt)?;
     run_tests(opt)?;
-    run_build(opt)?;
+    run_crdyboot_build(opt)?;
 }
 
 #[throws]
-fn run_build(opt: &Opt) {
+fn run_uefi_build(project_dir: &Utf8Path) {
     let targets = ["x86_64-unknown-uefi", "i686-unknown-uefi"];
-    let crdyboot_dir = opt.crdyboot_path();
 
     for target in targets {
         let mut cmd = Command::with_args(
@@ -225,10 +250,15 @@ fn run_build(opt: &Opt) {
                 target,
             ],
         );
-        modify_cmd_for_path_prefix(&mut cmd, &crdyboot_dir);
-        cmd.set_dir(&crdyboot_dir);
+        modify_cmd_for_path_prefix(&mut cmd, project_dir);
+        cmd.set_dir(project_dir);
         cmd.run()?;
     }
+}
+
+#[throws]
+fn run_crdyboot_build(opt: &Opt) {
+    run_uefi_build(&opt.crdyboot_path())?;
 }
 
 #[throws]
@@ -249,6 +279,13 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
         &["-C", path.as_str(), "submodule", "update", "--init"],
     )
     .run()?;
+}
+
+#[throws]
+fn run_build_enroller(opt: &Opt) {
+    run_uefi_build(&opt.enroller_path())?;
+
+    gen_disk::gen_enroller_disk(opt)?;
 }
 
 #[throws]
@@ -371,9 +408,14 @@ fn generate_secure_boot_keys(opt: &Opt) {
         "SecureBootShimTestKey",
     )?;
 
-    // Generate the oemstr
-
     let root_key_paths = opt.secure_boot_root_key_paths();
+
+    // Generate the PK/KEK and db vars for use with the non-VM enroller.
+    sign::generate_signed_vars(&root_key_paths, "PK")?;
+    sign::generate_signed_vars(&root_key_paths, "db")?;
+
+    // Generate the oemstr for use wit the VM enroller.
+
     let der = fs::read(root_key_paths.pub_der())?;
 
     // Defined in edk2/OvmfPkg/Include/Guid/OvmfPkKek1AppPrefix.h
@@ -436,7 +478,8 @@ fn main() {
     initial_setup(&opt)?;
 
     match &opt.action {
-        Action::Build(_) => run_build(&opt),
+        Action::Build(_) => run_crdyboot_build(&opt),
+        Action::BuildEnroller(_) => run_build_enroller(&opt),
         Action::BuildOvmf(_) => run_build_ovmf(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Format(_) => run_rustfmt(&opt),

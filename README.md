@@ -42,7 +42,7 @@ various `x.py` commands shown below.
 ## Dependencies
 
     rustup install nightly
-    sudo apt install sbsigntool
+    sudo apt install efitools sbsigntool
 
 ## Building and testing
 
@@ -77,9 +77,24 @@ To copy the latest crdyboot build to the image:
 Then run it in QEMU:
 
     ./x.py qemu [--ia32] [--secure-boot]
+    
+## Testing on real hardware
 
-## TODO
+To test secure boot with real hardware you will need to enroll custom
+keys. First build the enroller image (`workspace/enroller.bin`):
 
-* Verify that vboot is properly checking the signatures of all data
-  that gets used.
-* Verify that the unsafe code is correct.
+    ./x.py build-enroller
+
+Write `workspace/enroller.bin` to a USB, and write `workspace/disk.bin` to a
+second USB, e.g. using [writedisk][writedisk].
+
+Boot the DUT and enter the boot setup. Find the secure boot settings and change
+it to setup mode. (The details will vary from one vendor to another.)
+
+Plug in the enroller USB and reboot. Use the boot menu to select the USB and
+wait for it to complete.
+
+Unplug the enroller USB and plug in the cloudready USB, then reboot. Use the
+boot menu to select the USB.
+
+[writedisk]: https://crates.io/crates/writedisk
