@@ -1,5 +1,7 @@
 # crdyboot
 
+Pronounced CUR-dee-boot.
+
 This is a work-in-progress UEFI bootloader for CloudReady. It is
 intended to be run either as a second-stage bootloader after
 [shim](https://github.com/rhboot/shim) when using the Microsoft keys,
