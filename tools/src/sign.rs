@@ -28,6 +28,14 @@ impl KeyPaths {
     pub fn pub_der(&self) -> Utf8PathBuf {
         self.dir.join("key.pub.der")
     }
+
+    pub fn pk_and_kek_var(&self) -> Utf8PathBuf {
+        self.dir.join("key.pk_and_kek.var")
+    }
+
+    pub fn db_var(&self) -> Utf8PathBuf {
+        self.dir.join("key.db.var")
+    }
 }
 
 #[throws]
@@ -56,6 +64,40 @@ pub fn generate_key(paths: &KeyPaths, name: &str) {
     ]).run()?;
 
     convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())?;
+}
+
+#[throws]
+pub fn generate_signed_vars(paths: &KeyPaths, var_name: &str) {
+    let tmp_dir = tempfile::tempdir()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+    let unsigned_var = tmp_path.join("unsigned_var");
+    let signed_var = if var_name == "PK" || var_name == "KEK" {
+        paths.pk_and_kek_var()
+    } else if var_name == "db" {
+        paths.db_var()
+    } else {
+        panic!("invalid var_name");
+    };
+
+    // These two tools are in the efitools package. Might be fun to port them
+    // to Rust at some point...
+    Command::with_args(
+        "cert-to-efi-sig-list",
+        &[paths.pub_pem().as_str(), unsigned_var.as_str()],
+    )
+    .run()?;
+
+    #[rustfmt::skip]
+    Command::with_args("sign-efi-sig-list", &[
+        "-k", paths.priv_pem().as_str(),
+        "-c", paths.pub_pem().as_str(),
+        // The var name is used to pick the appropriate vendor GUID
+        // (EFI_GLOBAL_VARIABLE for PK/KEK, or EFI_IMAGE_SECURITY_DATABASE_GUID
+        // for db).
+        var_name,
+        unsigned_var.as_str(),
+        signed_var.as_str(),
+    ]).run()?;
 }
 
 #[throws]

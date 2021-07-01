@@ -1,12 +1,76 @@
-use crate::loopback::PartitionPaths;
+use crate::loopback::{LoopbackDevice, PartitionPaths};
 use crate::mount::Mount;
-use crate::sign;
-use crate::Opt;
+use crate::{sign, Arch, Opt};
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+
+#[throws]
+pub fn gen_enroller_disk(opt: &Opt) {
+    let disk = opt.enroller_disk_path();
+
+    // Generate empty image.
+    Command::with_args("truncate", &["--size", "4MiB", disk.as_str()]).run()?;
+
+    // Make GPT table.
+    Command::with_args(
+        "parted",
+        &["--script", disk.as_str(), "mktable", "GPT"],
+    )
+    .run()?;
+
+    // Create a single partition.
+    Command::with_args(
+        "parted",
+        &[
+            "--script",
+            disk.as_str(),
+            "mkpart",
+            "primary",
+            "2048s",
+            "100%",
+        ],
+    )
+    .run()?;
+
+    // Mark the partition bootable.
+    Command::with_args(
+        "parted",
+        &["--script", disk.as_str(), "set", "1", "esp", "on"],
+    )
+    .run()?;
+
+    let lo_dev = LoopbackDevice::new(&disk)?;
+
+    // Format the partition.
+    Command::with_args(
+        "sudo",
+        &["mkfs.fat", lo_dev.partition_device(1).as_str()],
+    )
+    .run()?;
+
+    // Mount the partition.
+    let esp_mount = Mount::new(&lo_dev.partition_device(1))?;
+    let esp = esp_mount.mount_point();
+
+    // Create the standard boot directory.
+    let boot_dir = esp.join("efi/boot");
+    Command::with_args("sudo", &["mkdir", "-p", boot_dir.as_str()]).run()?;
+
+    // Copy in the two enroller executables.
+    for arch in Arch::all() {
+        let src = opt
+            .enroller_path()
+            .join("target")
+            .join(arch.as_target())
+            .join("release/enroller.efi");
+        let dst = boot_dir.join(format!("boot{}.efi", arch.as_str()));
+        Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
+            .run()?;
+    }
+}
 
 /// Replace both grub executables with crdyboot.
 #[throws]

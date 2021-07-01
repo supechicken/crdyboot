@@ -34,7 +34,7 @@ impl LoopbackDevice {
         }
     }
 
-    fn partition_device(&self, partition_num: u32) -> Utf8PathBuf {
+    pub fn partition_device(&self, partition_num: u32) -> Utf8PathBuf {
         format!("{}p{}", self.device_path.as_str(), partition_num).into()
     }
 
