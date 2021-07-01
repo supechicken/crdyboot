@@ -1,0 +1,17 @@
+[package]
+name = "enroller"
+version = "0.1.0"
+edition = "2018"
+resolver = "2"
+
+[dependencies]
+log = "0.4"
+
+# TODO: when this branch's PR to the upstream repo is merged we can switch to
+# the official repo.
+uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", features = ["exts", "ignore-logger-errors"], branch = "bishop-add-vars-2" }
+uefi-services = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-add-vars-2" }
+
+[patch.crates-io]
+# This is needed to fix uefi-services' dep on uefi
+uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-add-vars-2" }
