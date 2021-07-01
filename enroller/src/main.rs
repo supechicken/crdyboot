@@ -5,6 +5,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use core::mem;
 use log::info;
 use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, GLOBAL_VARIABLE};
@@ -31,6 +32,12 @@ impl CString16 {
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut st)
         .expect_success("failed to initialize utilities");
+
+    match mem::size_of::<usize>() {
+        4 => info!("32-bit UEFI"),
+        8 => info!("64-bit UEFI"),
+        size => info!("Weird UEFI: usize is {} bytes", size),
+    }
 
     let pk_and_kek_var = include_bytes!(
         "../../workspace/secure_boot_root_key/key.pk_and_kek.var"
