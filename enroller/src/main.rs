@@ -7,7 +7,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use log::info;
 use uefi::prelude::*;
-use uefi::table::runtime::{VariableAttributes, GLOBAL_VARIABLE};
+use uefi::table::runtime::{ResetType, VariableAttributes, GLOBAL_VARIABLE};
 use uefi::{CStr16, Guid};
 
 struct CString16(Vec<u16>);
@@ -49,34 +49,45 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         [0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f],
     );
 
+    let attrs = VariableAttributes::NON_VOLATILE
+        | VariableAttributes::BOOTSERVICE_ACCESS
+        | VariableAttributes::RUNTIME_ACCESS
+        | VariableAttributes::TIME_BASED_AUTHENTICATED_WRITE_ACCESS;
+
+    info!("writing db var");
     rt.set_variable(
         CString16::from_str("db").as_cstr16(),
         &image_security_database_guid,
-        VariableAttributes::TIME_BASED_AUTHENTICATED_WRITE_ACCESS,
+        attrs,
         db_var,
     )
     .expect_success("failed to write db");
 
+    info!("writing KEK var");
     rt.set_variable(
         CString16::from_str("KEK").as_cstr16(),
         &GLOBAL_VARIABLE,
-        VariableAttributes::TIME_BASED_AUTHENTICATED_WRITE_ACCESS,
+        attrs,
         pk_and_kek_var,
     )
     .expect_success("failed to write KEK");
 
+    info!("writing PK var");
     rt.set_variable(
         CString16::from_str("PK").as_cstr16(),
         &GLOBAL_VARIABLE,
-        VariableAttributes::TIME_BASED_AUTHENTICATED_WRITE_ACCESS,
+        attrs,
         pk_and_kek_var,
     )
     .expect_success("failed to write PK");
 
     info!("Successfully set custom db, KEK, and PK variables");
 
-    let bt = st.boot_services();
-    bt.stall(20_000_000);
+    let delay_in_s = 10;
+    info!("shutting down in {} seconds", delay_in_s);
 
-    Status::SUCCESS
+    let bt = st.boot_services();
+    bt.stall(delay_in_s * 1_000_000);
+
+    rt.reset(ResetType::Shutdown, Status::SUCCESS, None);
 }
