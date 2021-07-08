@@ -7,8 +7,8 @@ resolver = "2"
 [dependencies]
 log = "0.4"
 
-# TODO: once current master (fb95246a2) is released, can switch these
-# two deps to crates.io.
+# TODO: get remaining stuff in the integration branch PR'd and merged upstream
+# and into a new uefi-rs release, then switch these two deps back to crates.io.
 uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch", features = ["exts", "ignore-logger-errors"] }
 uefi-services = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
 
