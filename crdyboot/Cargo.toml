@@ -9,14 +9,14 @@ log = "0.4"
 
 # TODO: once current master (fb95246a2) is released, can switch these
 # two deps to crates.io.
-uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", features = ["exts", "ignore-logger-errors"] }
-uefi-services = { git = "https://github.com/rust-osdev/uefi-rs.git" }
+uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch", features = ["exts", "ignore-logger-errors"] }
+uefi-services = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
 
 vboot = { path = "../vboot" }
 
 [patch.crates-io]
 # This is needed to fix uefi-services' dep on uefi
-uefi = { git = "https://github.com/rust-osdev/uefi-rs.git" }
+uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
 # Branch: "bishop-no-128-panic"
 num-bigint = { package = "num-bigint-dig", git = "https://github.com/nicholasbishop/num-bigint.git", rev = "a2dc57562dd459dca0edaf539acca610bc4807d8" }
 # Branch: "bishop-disable-u64-digit"
