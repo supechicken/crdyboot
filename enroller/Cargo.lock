@@ -79,7 +79,7 @@ dependencies = [
 [[package]]
 name = "uefi"
 version = "0.11.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-add-vars-2#863362dcedae095788792c349db47b0c8ae242f9"
+source = "git+https://github.com/rust-osdev/uefi-rs.git#48e958d892ccb6537205d30bfe5bfb4686c51ed3"
 dependencies = [
  "bitflags",
  "log",
@@ -101,7 +101,7 @@ dependencies = [
 [[package]]
 name = "uefi-services"
 version = "0.8.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-add-vars-2#863362dcedae095788792c349db47b0c8ae242f9"
+source = "git+https://github.com/rust-osdev/uefi-rs.git#48e958d892ccb6537205d30bfe5bfb4686c51ed3"
 dependencies = [
  "cfg-if",
  "log",

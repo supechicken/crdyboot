@@ -7,11 +7,11 @@ resolver = "2"
 [dependencies]
 log = "0.4"
 
-# TODO: when this branch's PR to the upstream repo is merged we can switch to
-# the official repo.
-uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", features = ["exts", "ignore-logger-errors"], branch = "bishop-add-vars-2" }
-uefi-services = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-add-vars-2" }
+# TODO: once a new release comes out that includes 48e958d89 switch these two
+# deps to crates.io.
+uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", features = ["exts", "ignore-logger-errors"] }
+uefi-services = { git = "https://github.com/rust-osdev/uefi-rs.git" }
 
 [patch.crates-io]
 # This is needed to fix uefi-services' dep on uefi
-uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-add-vars-2" }
+uefi = { git = "https://github.com/rust-osdev/uefi-rs.git" }
