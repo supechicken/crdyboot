@@ -17,4 +17,4 @@ pub mod vboot_sys {
 }
 
 pub use gpt::CgptAttributes;
-pub use kernel::{verify_kernel, PublicKey};
+pub use kernel::{struct_from_bytes, verify_kernel, PublicKey};

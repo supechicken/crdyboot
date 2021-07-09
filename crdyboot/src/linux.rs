@@ -1,7 +1,8 @@
+use crate::handover;
 use core::convert::TryInto;
 use core::ffi::c_void;
 use core::mem;
-use log::error;
+use log::{error, info};
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
@@ -131,4 +132,35 @@ pub fn execute_linux_efi_stub(
     }
 
     unreachable!("kernel returned control");
+}
+
+pub fn execute_linux_kernel(
+    kernel_data: &[u8],
+    crdyboot_image: Handle,
+    system_table: SystemTable<Boot>,
+    cmdline: &str,
+    cmdline_ucs2: &[Char16],
+) -> Result<()> {
+    let is_64bit = match mem::size_of::<usize>() {
+        8 => true,
+        4 => false,
+        other => panic!("invalid size of usize: {}", other),
+    };
+
+    if is_64bit {
+        execute_linux_efi_stub(
+            kernel_data,
+            crdyboot_image,
+            system_table,
+            cmdline_ucs2,
+        )
+    } else {
+        info!("using handover!");
+        handover::execute_linux_kernel_32(
+            kernel_data,
+            crdyboot_image,
+            system_table,
+            cmdline,
+        )
+    }
 }

@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+mod handover;
 mod linux;
 mod truncate;
 
@@ -296,11 +297,12 @@ fn run_kernel(
     // Convert the string to UCS-2.
     let load_options_ucs2 = ascii_str_to_uefi_str(&load_options_str).unwrap();
 
-    // Use the EFI stub to run the kernel.
-    linux::execute_linux_efi_stub(
+    // Run the kernel.
+    linux::execute_linux_kernel(
         kernel.data,
         crdyboot_image,
         st_clone,
+        &load_options_str,
         &load_options_ucs2,
     )
     .log_warning()?;
