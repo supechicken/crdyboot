@@ -18,13 +18,12 @@ use core::{
 };
 use log::{debug, error, info};
 use uefi::data_types::chars::NUL_16;
+use uefi::gpt::GptHeader;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
-use uefi::proto::media::partition::{
-    GptPartitionEntry, GptPartitionType, PartitionInfo,
-};
+use uefi::proto::media::partition::{GptPartitionEntry, GptPartitionType};
 use uefi::{Char16, Guid, Result};
 use vboot::{verify_kernel, CgptAttributes, PublicKey};
 
@@ -39,7 +38,7 @@ const KERNEL_TYPE_GUID: Guid = Guid::from_values(
 // TODO: open protocol vs handle protocol
 
 struct KernelPartition {
-    handle: Handle,
+    disk_handle: Handle,
     entry: GptPartitionEntry,
 }
 
@@ -141,8 +140,12 @@ fn find_parent_disk(
     Status::SUCCESS.into_with_val(|| None)
 }
 
-// TODO: use blockio instead just to have less reliance on UEFI
-// implementations working correctly?
+/// Find all non-stub ChromeOS kernel partitions that are on the same disk as
+/// the crdyboot image.
+///
+/// This uses `BlockIO` to directly read the GPT rather than the
+/// `PartitionInfo` protocol because not all UEFI implementations support the
+/// latter protocol.
 fn get_kernel_partitions(
     crdyboot_image: Handle,
     bt: &BootServices,
@@ -171,30 +174,30 @@ fn get_kernel_partitions(
         return Status::NOT_FOUND.into_with_val(Vec::new);
     };
 
+    let disk_block_io =
+        bt.handle_protocol::<BlockIO>(disk_handle).log_warning()?;
+    let disk_block_io = unsafe { &*disk_block_io.get() };
+
+    let entries = match GptHeader::read_valid_header_and_entries(disk_block_io)
+    {
+        Ok((_header, entries)) => entries,
+        Err(err) => {
+            error!("no valid GPT found: {:?}", err);
+            return Status::NOT_FOUND.into_with_val(Vec::new);
+        }
+    };
+
     let mut v = Vec::with_capacity(2);
 
-    for handle in block_io_handles {
-        // Ignore device handles that aren't a child of the disk.
-        if !is_parent_disk(disk_handle, handle, bt).log_warning()? {
-            continue;
-        }
+    for entry in entries {
+        let partition_type = entry.partition_type_guid;
 
-        let pi = bt.handle_protocol::<PartitionInfo>(handle).log_warning()?;
-        let pi = unsafe { &*pi.get() };
-
-        if let Some(gpt) = pi.gpt_partition_entry() {
-            let partition_type = gpt.partition_type_guid;
-
-            if gpt.starting_lba == gpt.ending_lba {
-                debug!("skipping stub partition");
-            } else if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
-                debug!("skipping non-kernel partition");
-            } else {
-                v.push(KernelPartition {
-                    handle,
-                    entry: *gpt,
-                });
-            }
+        if entry.starting_lba == entry.ending_lba {
+            debug!("skipping stub partition");
+        } else if partition_type != GptPartitionType(KERNEL_TYPE_GUID) {
+            debug!("skipping non-kernel partition");
+        } else {
+            v.push(KernelPartition { disk_handle, entry });
         }
     }
 
@@ -206,7 +209,7 @@ fn read_kernel_partition(
     partition: &KernelPartition,
 ) -> Result<Vec<u8>> {
     let bio = bt
-        .handle_protocol::<BlockIO>(partition.handle)
+        .handle_protocol::<BlockIO>(partition.disk_handle)
         .log_warning()?;
     let bio = unsafe { &*bio.get() };
 
@@ -219,9 +222,7 @@ fn read_kernel_partition(
     info!("reading kernel from disk");
     bio.read_blocks(
         bio.media().media_id(),
-        // This bio is the partition, not the whole
-        // device, so this is 0 instead of starting_lba.
-        0,
+        partition.entry.starting_lba,
         &mut kernel_buffer,
     )
     .log_warning()?;
