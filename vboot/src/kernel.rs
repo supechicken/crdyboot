@@ -100,19 +100,15 @@ fn u32_to_usize(v: u32) -> usize {
     v.try_into().unwrap()
 }
 
-/// Get an &T backed by a byte slice. The slice is checked to make
-/// sure it's at leas as large as the size of T. This can only be
-/// called safely on repr(C) structs whose fields are either numeric
-/// or structures that also meet these restrictions (recursively).
+/// Get an &T backed by a byte slice. The slice is checked to make sure it's at
+/// least as large as the size of T.
 ///
-/// The Rust documentation is unclear about what is UB, so I'm not
-/// sure that this function is actually safe to call under the
-/// circumstances outlined above. In particular I'm not clear on
-/// whether it's OK to have two immutable refs to the same underlying
-/// data with different types.
+/// # Safety
 ///
-/// TODO: get this reviewed by a Rust unsafe expert.
-unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
+/// This can only be called safely on `repr(C, packed)` structs whose fields
+/// are either numeric or structures that also meet these restrictions
+/// (recursively).
+pub unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
     if buf.len() < mem::size_of::<T>() {
         return Err(VbootError::BufferTooSmall);
     }
