@@ -304,6 +304,18 @@ fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
 }
 
 #[throws]
+fn copy_file<S, D>(src: S, dst: D)
+where
+    S: AsRef<Utf8Path>,
+    D: AsRef<Utf8Path>,
+{
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+    println!("copy {} to {}", src, dst);
+    fs::copy(src, dst)?;
+}
+
+#[throws]
 fn run_build_ovmf(opt: &Opt) {
     let edk2_dir = opt.volatile_path().join("edk2");
     let edk2_url = "https://github.com/tianocore/edk2.git";
@@ -332,9 +344,9 @@ fn run_build_ovmf(opt: &Opt) {
         let efi_dir = src_dir.join("X64");
 
         let dst = opt.ovmf_paths(arch);
-        fs::copy(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
-        fs::copy(fv_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
-        fs::copy(
+        copy_file(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
+        copy_file(fv_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
+        copy_file(
             efi_dir.join("EnrollDefaultKeys.efi"),
             dst.enroll_executable(),
         )?;
@@ -437,7 +449,7 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
     for arch in Arch::all() {
         let ovmf = opt.ovmf_paths(arch);
 
-        fs::copy(ovmf.original_vars(), ovmf.secure_boot_vars())?;
+        copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
         let qemu = Qemu::new(ovmf);
         let oemstr_path = opt.secure_boot_root_key_paths().enroll_data();
