@@ -4,6 +4,7 @@ use crate::mount::Mount;
 use crate::sign;
 use crate::Opt;
 use anyhow::Error;
+use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
@@ -45,14 +46,24 @@ fn build_shim(opt: &Opt) {
 
     // For some reason the files get dumped to the CWD instead of the
     // CWD passed into set_dir above. Super confused as to why.
+    let install_dir = Utf8Path::new("install");
     Command::with_args(
         "sudo",
-        &["chown", "-R", &env::var("USER").unwrap(), "install"],
+        &[
+            "chown",
+            "-R",
+            &env::var("USER").unwrap(),
+            install_dir.as_str(),
+        ],
     )
     .run()?;
-    fs::rename("install/shimia32.efi", shim_dir.join("shimia32.efi"))?;
-    fs::rename("install/shimx64.efi", shim_dir.join("shimx64.efi"))?;
-    fs::remove_dir("install")?;
+
+    for arch in Arch::all() {
+        let file_name = arch.efi_file_name("shim");
+        fs::rename(install_dir.join(&file_name), shim_dir.join(&file_name))?;
+    }
+
+    fs::remove_dir(install_dir)?;
 }
 
 #[throws]
