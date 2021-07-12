@@ -1,4 +1,5 @@
-use crate::{copy_file, update_local_repo, Arch, Opt};
+use crate::arch::Arch;
+use crate::{copy_file, update_local_repo, Opt};
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;

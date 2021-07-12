@@ -1,6 +1,7 @@
+use crate::arch::Arch;
 use crate::loopback::{LoopbackDevice, PartitionPaths};
 use crate::mount::Mount;
-use crate::{sign, Arch, Opt};
+use crate::{sign, Opt};
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;

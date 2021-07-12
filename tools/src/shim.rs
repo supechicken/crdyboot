@@ -1,7 +1,8 @@
+use crate::arch::Arch;
 use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
 use crate::sign;
-use crate::{Arch, Opt};
+use crate::Opt;
 use anyhow::Error;
 use command_run::Command;
 use fehler::throws;
