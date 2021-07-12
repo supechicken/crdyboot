@@ -1,3 +1,4 @@
+use crate::copy_file;
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -129,7 +130,7 @@ pub fn sign_all(efi: &Utf8Path, key_paths: &KeyPaths, file_names: &[String]) {
 
     for file_name in file_names {
         let file_path = efi.join("efi/boot").join(file_name);
-        fs::copy(&file_path, &tmp_unsigned)?;
+        copy_file(&file_path, &tmp_unsigned)?;
 
         #[rustfmt::skip]
         Command::with_args("sbsign", &[

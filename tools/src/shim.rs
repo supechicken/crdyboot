@@ -1,4 +1,5 @@
 use crate::arch::Arch;
+use crate::copy_file;
 use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
 use crate::sign;
@@ -18,7 +19,7 @@ fn build_shim(opt: &Opt) {
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
 
-    fs::copy(
+    copy_file(
         opt.secure_boot_shim_key_paths().pub_der(),
         shim_dir.join("neverware.cer"),
     )?;

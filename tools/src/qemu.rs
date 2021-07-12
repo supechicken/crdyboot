@@ -1,3 +1,4 @@
+use crate::copy_file;
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -144,7 +145,7 @@ impl Qemu {
 
         cmd.add_args(&["-smbios", &format!("type=11,path={}", oemstr_path)]);
 
-        fs::copy(self.ovmf.enroll_executable(), boot_dir.join(dst_name))?;
+        copy_file(self.ovmf.enroll_executable(), boot_dir.join(dst_name))?;
 
         // Convert to an std Command, command_run doesn't
         // support the interactive session needed here.
