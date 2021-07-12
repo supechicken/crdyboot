@@ -38,7 +38,7 @@ impl Opt {
         self.repo.join("enroller")
     }
 
-    fn volatile_path(&self) -> Utf8PathBuf {
+    fn workspace_path(&self) -> Utf8PathBuf {
         self.repo.join("workspace")
     }
 
@@ -68,11 +68,11 @@ impl Opt {
     }
 
     fn disk_path(&self) -> Utf8PathBuf {
-        self.volatile_path().join("disk.bin")
+        self.workspace_path().join("disk.bin")
     }
 
     fn enroller_disk_path(&self) -> Utf8PathBuf {
-        self.volatile_path().join("enroller.bin")
+        self.workspace_path().join("enroller.bin")
     }
 
     fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
@@ -80,23 +80,23 @@ impl Opt {
             Arch::Ia32 => "uefi32",
             Arch::X64 => "uefi64",
         };
-        OvmfPaths::new(self.volatile_path().join(subdir))
+        OvmfPaths::new(self.workspace_path().join(subdir))
     }
 
     /// This cert will be enrolled as the PK, first KEK, and first DB
     /// entry. The private key is used to sign shim.
     fn secure_boot_root_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.volatile_path().join("secure_boot_root_key"))
+        KeyPaths::new(self.workspace_path().join("secure_boot_root_key"))
     }
 
     /// This cert is embedded in shim and the private key is used to
     /// sign crdyboot.
     fn secure_boot_shim_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.volatile_path().join("secure_boot_shim_key"))
+        KeyPaths::new(self.workspace_path().join("secure_boot_shim_key"))
     }
 
     fn shim_build_path(&self) -> Utf8PathBuf {
-        self.volatile_path().join("shim_build")
+        self.workspace_path().join("shim_build")
     }
 }
 

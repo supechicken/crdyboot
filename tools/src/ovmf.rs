@@ -19,7 +19,7 @@ fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
 
 #[throws]
 pub fn run_build_ovmf(opt: &Opt) {
-    let edk2_dir = opt.volatile_path().join("edk2");
+    let edk2_dir = opt.workspace_path().join("edk2");
     let edk2_url = "https://github.com/tianocore/edk2.git";
     // Known-working commit.
     let edk2_rev = "75e9154f818a58ffc3a28db9f8c97279e723f02d";
