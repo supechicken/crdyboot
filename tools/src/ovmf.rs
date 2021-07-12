@@ -30,8 +30,10 @@ pub fn run_build_ovmf(opt: &Opt) {
     let arch_flags = [
         // 64-bit UEFI for a 64-bit CPU.
         vec!["-a", "X64"],
-        // 32-bit UEFI for a 64-bit CPU.
-        vec!["-a", "IA32", "-a", "X64"],
+        // 32-bit UEFI for a 32-bit CPU. OVMF also allows building 32-bit UEFI
+        // for a 64-bit CPU, but this doesn't actually give the 32-bit UEFI
+        // interfaces we want to test against.
+        vec!["-a", "IA32"],
     ];
 
     for arf in arch_flags {
@@ -41,14 +43,14 @@ pub fn run_build_ovmf(opt: &Opt) {
     // Copy the outputs to a more convenient location.
     let compiler = "DEBUG_GCC5";
     for arch in Arch::all() {
-        let src_name = match arch {
-            Arch::Ia32 => "Ovmf3264",
-            Arch::X64 => "OvmfX64",
+        let (src_name, efi_dir_name) = match arch {
+            Arch::Ia32 => ("OvmfIa32", "IA32"),
+            Arch::X64 => ("OvmfX64", "X64"),
         };
 
         let src_dir = edk2_dir.join("Build").join(src_name).join(compiler);
         let fv_dir = src_dir.join("FV");
-        let efi_dir = src_dir.join("X64");
+        let efi_dir = src_dir.join(efi_dir_name);
 
         let dst = opt.ovmf_paths(arch);
         copy_file(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
