@@ -305,8 +305,6 @@ fn run_kernel(
     )
     .log_warning()?;
 
-    // TODO: unload the image on failure?
-
     Status::SUCCESS.into()
 }
 
