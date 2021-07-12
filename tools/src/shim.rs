@@ -19,6 +19,11 @@ fn build_shim(opt: &Opt) {
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
 
+    // Remove local modifications so that the Dockerfile modification below
+    // doesn't keep inserting the same change.
+    Command::with_args("git", &["-C", shim_dir.as_str(), "checkout", "-f"])
+        .run()?;
+
     copy_file(
         opt.secure_boot_shim_key_paths().pub_der(),
         shim_dir.join("neverware.cer"),
