@@ -22,10 +22,11 @@ impl Arch {
         }
     }
 
-    pub fn as_str(&self) -> &'static str {
-        match self {
+    pub fn efi_file_name(&self, base_name: &str) -> String {
+        let arch_name = match self {
             Arch::Ia32 => "ia32",
             Arch::X64 => "x64",
-        }
+        };
+        format!("{}{}.efi", base_name, arch_name)
     }
 }
