@@ -79,29 +79,27 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
     let efi_mount = Mount::new(&partitions.efi)?;
     let efi = efi_mount.mount_point();
 
-    let targets = [
-        ("x86_64-unknown-uefi", "grubx64.efi"),
-        ("i686-unknown-uefi", "grubia32.efi"),
-    ];
+    let mut dst_names = Vec::new();
 
-    for (target, dstname) in targets {
+    for arch in Arch::all() {
         let src = opt
             .crdyboot_path()
             .join("target")
-            .join(target)
+            .join(arch.as_target())
             .join("release/crdyboot.efi");
-        let dst = efi.join("efi/boot").join(dstname);
+
+        let dst_name = arch.efi_file_name("grub");
+        dst_names.push(dst_name.clone());
+
+        let dst = efi.join("efi/boot").join(dst_name);
+
         Command::with_args("sudo", &["cp"])
             .add_arg(src.as_str())
             .add_arg(dst.as_str())
             .run()?;
     }
 
-    sign::sign_all(
-        efi,
-        &opt.secure_boot_shim_key_paths(),
-        &["grubx64.efi".into(), "grubia32.efi".into()],
-    )?;
+    sign::sign_all(efi, &opt.secure_boot_shim_key_paths(), &dst_names)?;
 }
 
 #[throws]
