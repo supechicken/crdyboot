@@ -210,9 +210,7 @@ fn run_check(opt: &Opt) {
 
 #[throws]
 fn run_uefi_build(project_dir: &Utf8Path) {
-    let targets = ["x86_64-unknown-uefi", "i686-unknown-uefi"];
-
-    for target in targets {
+    for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
             &[
