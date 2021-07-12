@@ -42,6 +42,11 @@ impl OvmfPaths {
     pub fn enroll_executable(&self) -> Utf8PathBuf {
         self.dir.join("enroll.efi")
     }
+
+    /// Path to which OVMF debugging log messages are sent.
+    pub fn qemu_log(&self) -> Utf8PathBuf {
+        self.dir.join("qemu.log")
+    }
 }
 
 pub struct Qemu {
@@ -72,6 +77,14 @@ impl Qemu {
         // edk2/OvmfPkg/README.
         cmd.add_args(&["-machine", "q35,smm=on,accel=kvm"]);
         cmd.add_args(&["-global", "ICH9-LPC.disable_s3=1"]);
+
+        // Send OVMF debug logging to a file.
+        cmd.add_args(&[
+            "-debugcon",
+            &format!("file:{}", self.ovmf.qemu_log()),
+            "-global",
+            "isa-debugcon.iobase=0x402",
+        ]);
 
         cmd.add_args(&[
             "-global",

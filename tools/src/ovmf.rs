@@ -9,8 +9,6 @@ fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
     // See edk2/OvmfPkg/README for details of these build flags.
     let mut cmd = Command::new("OvmfPkg/build.sh");
     cmd.add_args(arch_flags);
-    // Write debug messages to the serial port.
-    cmd.add_args(&["-D", "DEBUG_ON_SERIAL_PORT"]);
     // Enable secure boot and require SMM. The latter requires a
     // pflash-backed variable store.
     cmd.add_args(&["-D", "SECURE_BOOT_ENABLE"]);
