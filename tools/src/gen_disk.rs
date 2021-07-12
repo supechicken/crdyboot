@@ -67,7 +67,7 @@ pub fn gen_enroller_disk(opt: &Opt) {
             .join("target")
             .join(arch.as_target())
             .join("release/enroller.efi");
-        let dst = boot_dir.join(format!("boot{}.efi", arch.as_str()));
+        let dst = boot_dir.join(arch.efi_file_name("boot"));
         Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
             .run()?;
     }

@@ -65,11 +65,9 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
     let mut to_sign = Vec::new();
 
     for arch in Arch::all() {
-        let src = opt
-            .shim_build_path()
-            .join(format!("shim{}.efi", arch.as_str()));
+        let src = opt.shim_build_path().join(arch.efi_file_name("shim"));
 
-        let dst_file_name = format!("boot{}.efi", arch.as_str());
+        let dst_file_name = arch.efi_file_name("boot");
         let dst = efi.join("efi/boot").join(&dst_file_name);
 
         Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
