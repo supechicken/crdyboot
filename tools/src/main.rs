@@ -1,3 +1,4 @@
+mod arch;
 mod gen_disk;
 mod loopback;
 mod mount;
@@ -7,6 +8,7 @@ mod shim;
 mod sign;
 
 use anyhow::Error;
+use arch::Arch;
 use argh::FromArgs;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -97,31 +99,6 @@ impl Opt {
 
     fn shim_build_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("shim_build")
-    }
-}
-
-enum Arch {
-    Ia32,
-    X64,
-}
-
-impl Arch {
-    fn all() -> [Arch; 2] {
-        [Arch::Ia32, Arch::X64]
-    }
-
-    fn as_target(&self) -> &'static str {
-        match self {
-            Arch::Ia32 => "i686-unknown-uefi",
-            Arch::X64 => "x86_64-unknown-uefi",
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            Arch::Ia32 => "ia32",
-            Arch::X64 => "x64",
-        }
     }
 }
 
