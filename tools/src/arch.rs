@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 pub enum Arch {
     Ia32,
     X64,
@@ -6,6 +8,11 @@ pub enum Arch {
 impl Arch {
     pub fn all() -> [Arch; 2] {
         [Arch::Ia32, Arch::X64]
+    }
+
+    pub fn all_targets() -> [&'static str; 2] {
+        let targets: Vec<_> = Arch::all().iter().map(Arch::as_target).collect();
+        targets.try_into().unwrap()
     }
 
     pub fn as_target(&self) -> &'static str {
