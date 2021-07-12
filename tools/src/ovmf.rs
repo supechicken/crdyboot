@@ -40,8 +40,12 @@ pub fn run_build_ovmf(opt: &Opt) {
 
     // Copy the outputs to a more convenient location.
     let compiler = "DEBUG_GCC5";
-    let outputs = [("Ovmf3264", Arch::Ia32), ("OvmfX64", Arch::X64)];
-    for (src_name, arch) in outputs {
+    for arch in Arch::all() {
+        let src_name = match arch {
+            Arch::Ia32 => "Ovmf3264",
+            Arch::X64 => "OvmfX64",
+        };
+
         let src_dir = edk2_dir.join("Build").join(src_name).join(compiler);
         let fv_dir = src_dir.join("FV");
         let efi_dir = src_dir.join("X64");
