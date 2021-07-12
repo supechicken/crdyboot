@@ -1,9 +1,7 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use camino::{Utf8Path, Utf8PathBuf};
+use std::env;
 
-fn gen_fwlib_bindings(firmware: &Path) {
+fn gen_fwlib_bindings(firmware: &Utf8Path) {
     let header_path = "src/bindgen.h";
 
     println!("cargo:rerun-if-changed={}", header_path);
@@ -28,9 +26,9 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .header(header_path)
         .clang_arg(format!("--target={}", target))
         // TODO: check for what is still needed
-        .clang_arg(format!("-I{}", firmware.join("2lib/include").display()))
+        .clang_arg(format!("-I{}", firmware.join("2lib/include")))
         // TODO: pass in repo dir instead of firmware
-        .clang_arg(format!("-I{}", firmware.join("..").display()))
+        .clang_arg(format!("-I{}", firmware.join("..")))
         .allowlist_type("LoadKernelParams")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("VbExStream_t")
@@ -70,14 +68,14 @@ fn gen_fwlib_bindings(firmware: &Path) {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("vboot_bindgen.rs"))
         .expect("Couldn't write bindings!");
 }
 
 fn main() {
-    let firmware = Path::new("../third_party/vboot_reference/firmware");
+    let firmware = Utf8Path::new("../third_party/vboot_reference/firmware");
 
     gen_fwlib_bindings(firmware);
 }
