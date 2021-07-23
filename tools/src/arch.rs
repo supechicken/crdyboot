@@ -11,11 +11,12 @@ impl Arch {
     }
 
     pub fn all_targets() -> [&'static str; 2] {
-        let targets: Vec<_> = Arch::all().iter().map(Arch::as_target).collect();
+        let targets: Vec<_> =
+            Arch::all().iter().map(Arch::uefi_target).collect();
         targets.try_into().unwrap()
     }
 
-    pub fn as_target(&self) -> &'static str {
+    pub fn uefi_target(&self) -> &'static str {
         match self {
             Arch::Ia32 => "i686-unknown-uefi",
             Arch::X64 => "x86_64-unknown-uefi",
