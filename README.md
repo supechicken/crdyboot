@@ -45,7 +45,10 @@ various `x.py` commands shown below.
 
     rustup install nightly
     rustup component add rust-src --toolchain nightly
-    sudo apt install efitools sbsigntool
+    
+    # These are not direct dependencies of crdyboot, but used
+    # for the OVMF build and signing steps.
+    sudo apt install acpica-tools efitools nasm sbsigntool uuid-dev
 
 ## Building and testing
 
