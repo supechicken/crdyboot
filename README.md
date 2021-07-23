@@ -44,6 +44,7 @@ various `x.py` commands shown below.
 ## Dependencies
 
     rustup install nightly
+    rustup component add rust-src --toolchain nightly
     sudo apt install efitools sbsigntool
 
 ## Building and testing
