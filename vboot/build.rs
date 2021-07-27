@@ -30,13 +30,12 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
         .clang_arg(format!("-I{}", vboot_ref.join("firmware/2lib/include")))
         .allowlist_type("LoadKernelParams")
         .allowlist_type("VbDiskInfo")
-        .allowlist_type("VbExStream_t")
         .allowlist_type("vb2_context")
         .allowlist_type("vb2_crypto_algorithm")
         .allowlist_type("vb2_error_t")
+        .allowlist_type("vb2_kernel_preamble")
         .allowlist_type("vb2_keyblock")
         .allowlist_type("vb2_packed_key")
-        .allowlist_type("vb2_kernel_preamble")
         .allowlist_type("vb2_public_key")
         .allowlist_type("vb2_return_code")
         .allowlist_type("vb2_signature")
@@ -47,8 +46,6 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
         .allowlist_var("VB2_KERNEL_PREAMBLE_HEADER_VERSION_MINOR")
         .allowlist_var("VB2_KEYBLOCK_VERSION_MAJOR")
         .allowlist_var("VB2_KEYBLOCK_VERSION_MINOR")
-        .derive_partialeq(true)
-        .impl_partialeq(true)
         .default_enum_style(bindgen::EnumVariation::NewType {
             is_bitfield: false,
         })
