@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::env;
 
-fn gen_fwlib_bindings(firmware: &Utf8Path) {
+fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
     let header_path = "src/bindgen.h";
 
     println!("cargo:rerun-if-changed={}", header_path);
@@ -26,9 +26,8 @@ fn gen_fwlib_bindings(firmware: &Utf8Path) {
         .header(header_path)
         .clang_arg(format!("--target={}", target))
         // TODO: check for what is still needed
-        .clang_arg(format!("-I{}", firmware.join("2lib/include")))
-        // TODO: pass in repo dir instead of firmware
-        .clang_arg(format!("-I{}", firmware.join("..")))
+        .clang_arg(format!("-I{}", vboot_ref))
+        .clang_arg(format!("-I{}", vboot_ref.join("firmware/2lib/include")))
         .allowlist_type("LoadKernelParams")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("VbExStream_t")
@@ -75,7 +74,7 @@ fn gen_fwlib_bindings(firmware: &Utf8Path) {
 }
 
 fn main() {
-    let firmware = Utf8Path::new("../third_party/vboot_reference/firmware");
+    let vboot_ref = Utf8Path::new("../third_party/vboot_reference");
 
-    gen_fwlib_bindings(firmware);
+    gen_fwlib_bindings(vboot_ref);
 }
