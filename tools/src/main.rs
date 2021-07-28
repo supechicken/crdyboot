@@ -106,6 +106,7 @@ impl Opt {
 #[argh(subcommand)]
 enum Action {
     Check(CheckAction),
+    Clean(CleanAction),
     Format(FormatAction),
     Lint(LintAction),
     Test(TestAction),
@@ -137,6 +138,11 @@ struct BuildOvmfAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
 struct CheckAction {}
+
+/// Clean out all the target directories.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "clean")]
+struct CleanAction {}
 
 /// Run "cargo fmt" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -206,6 +212,17 @@ fn run_check(opt: &Opt) {
     run_clippy(opt)?;
     run_tests(opt)?;
     run_crdyboot_build(opt)?;
+}
+
+#[throws]
+fn run_clean(opt: &Opt) {
+    for project in opt.project_paths() {
+        println!("{}:", project);
+        let mut cmd = Command::with_args("cargo", &["clean"]);
+        modify_cmd_for_path_prefix(&mut cmd, &project);
+        cmd.set_dir(&project);
+        cmd.run()?;
+    }
 }
 
 #[throws]
@@ -417,6 +434,7 @@ fn main() {
         Action::BuildEnroller(_) => run_build_enroller(&opt),
         Action::BuildOvmf(_) => ovmf::run_build_ovmf(&opt),
         Action::Check(_) => run_check(&opt),
+        Action::Clean(_) => run_clean(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::UpdateDisk(_) => run_update_disk(&opt),
         Action::Lint(_) => run_clippy(&opt),
