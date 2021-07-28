@@ -1,28 +1,13 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::env;
 
-fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
+fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
     let header_path = "src/bindgen.h";
 
     println!("cargo:rerun-if-changed={}", header_path);
 
-    // TODO: this is a hack to work around missing headers for some
-    // targets. We are only using bindgen to create Rust definitions
-    // of some packed structures of numeric types, so it should be
-    // safe to just use the host system's target here. The expected
-    // size of structures is checked before using them. It would be
-    // nice to fix this properly though.
-    let target = env::var("TARGET").unwrap();
-    let target = if matches!(
-        target.as_str(),
-        "x86_64-unknown-uefi" | "i686-unknown-uefi"
-    ) {
-        "x86_64-unknown-linux-gnu"
-    } else {
-        &target
-    };
-
-    let bindings = bindgen::Builder::default()
+    let mut builder = bindgen::Builder::default();
+    builder = builder
         .header(header_path)
         .clang_arg(format!("--target={}", target))
         // TODO: check for what is still needed
@@ -60,9 +45,16 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
         // Turn off a bunch of layout tests because they generate
         // "reference to packed field is unaligned" warnings.
         .layout_tests(false)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .generate()
-        .expect("Unable to generate bindings");
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+
+    // Not sure why, but setting the sysroot is needed for the clang
+    // windows targets. And it must not be set for the host target as
+    // it causes compilation to fail there.
+    if target.ends_with("windows-gnu") {
+        builder = builder.clang_args(&["--sysroot", "/usr"]);
+    }
+
+    let bindings = builder.generate().expect("Unable to generate bindings");
 
     let out_path = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
@@ -73,5 +65,27 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path) {
 fn main() {
     let vboot_ref = Utf8Path::new("../third_party/vboot_reference");
 
-    gen_fwlib_bindings(vboot_ref);
+    let target = env::var("TARGET").unwrap();
+    let target = match target.as_str() {
+        // UEFI target builds. There are a couple reasons why these are
+        // "-windows-gnu" rather than just "-windows":
+        //
+        // 1. The 32-bit target must be i686-unknown-windows-gnu rather than
+        //    just i686-unknown-windows due to a missing intrinsic. See the
+        //    long comment in
+        //    compiler/rustc_target/src/spec/i686_unknown_uefi.rs in the
+        //    rustlang repo for details.
+        //
+        // 2. It's easier to get the appropriate standard C headers for
+        //    these targets with "-windows-gnu", see README.md for the apt
+        //    packages containing these headers.
+        "i686-unknown-uefi" => "i686-unknown-windows-gnu",
+        "x86_64-unknown-uefi" => "x86_64-unknown-windows-gnu",
+
+        // For everything else (e.g. a host build like "cargo test")
+        // use the same target as rustc.
+        target => target,
+    };
+
+    gen_fwlib_bindings(vboot_ref, target);
 }

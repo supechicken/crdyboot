@@ -45,6 +45,10 @@ various `x.py` commands shown below.
 
     rustup install nightly
     rustup component add rust-src --toolchain nightly
+
+    # Provides headers needed for compiling C code compatible with the
+    # Rust UEFI targets.
+    sudo apt install mingw-w64-i686-dev mingw-w64-x86-64-dev
     
     # These are not direct dependencies of crdyboot, but used
     # for the OVMF build, image signing, and running in a VM.
