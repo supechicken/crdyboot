@@ -8,6 +8,7 @@ use core::ffi::c_void;
 use core::{mem, ptr, str};
 use log::{error, info};
 
+/// Fully verified kernel loaded into memory.
 pub struct LoadedKernel {
     data: Vec<u8>,
     bootloader_address: u64,
@@ -82,6 +83,9 @@ impl LoadedKernel {
     }
 }
 
+/// Find the best kernel. The details are up to the firmware library in
+/// vboot_reference. If successful, the kernel and the command-line data
+/// have been verified against `packed_pubkey`.
 pub fn load_kernel(
     packed_pubkey: &[u8],
     disk_io: &dyn DiskIo,

@@ -4,6 +4,7 @@
 //!
 //! This crate can be built for the host target so that tests can run.
 
+#![warn(missing_docs)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 #![feature(c_variadic)]
@@ -19,6 +20,7 @@ mod stubs;
 mod malloc;
 
 #[allow(clippy::missing_safety_doc)]
+#[allow(missing_docs)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
 pub mod vboot_sys {
