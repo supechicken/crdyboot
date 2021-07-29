@@ -31,12 +31,11 @@ pub mod vboot_sys {
     #[cfg(target_arch = "x86_64")]
     type vb2_error_t = i32;
 
-    include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
-
     // ctypes
     type c_char = i8;
-    type c_int = i32;
     type c_void = core::ffi::c_void;
+
+    include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
 }
 
 pub use disk::DiskIo;
