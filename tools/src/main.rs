@@ -1,4 +1,5 @@
 mod arch;
+mod build_mode;
 mod gen_disk;
 mod loopback;
 mod mount;
@@ -10,6 +11,7 @@ mod sign;
 use anyhow::Error;
 use arch::Arch;
 use argh::FromArgs;
+use build_mode::BuildMode;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
@@ -99,6 +101,10 @@ impl Opt {
 
     fn shim_build_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("shim_build")
+    }
+
+    fn build_mode(&self) -> BuildMode {
+        BuildMode::Release
     }
 }
 
@@ -226,23 +232,20 @@ fn run_clean(opt: &Opt) {
 }
 
 #[throws]
-fn run_uefi_build(project_dir: &Utf8Path) {
+fn run_uefi_build(project_dir: &Utf8Path, build_mode: BuildMode) {
     for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
             &[
                 "+nightly",
                 "build",
-                // TODO: for now always use release mode to avoid this
-                // error: "LLVM ERROR: Do not know how to split the result
-                // of this operator!"
-                "--release",
                 "-Zbuild-std=core,compiler_builtins,alloc",
                 "-Zbuild-std-features=compiler-builtins-mem",
                 "--target",
                 target,
             ],
         );
+        cmd.add_args(build_mode.cargo_args());
         modify_cmd_for_path_prefix(&mut cmd, project_dir);
         cmd.set_dir(project_dir);
         cmd.run()?;
@@ -251,7 +254,7 @@ fn run_uefi_build(project_dir: &Utf8Path) {
 
 #[throws]
 fn run_crdyboot_build(opt: &Opt) {
-    run_uefi_build(&opt.crdyboot_path())?;
+    run_uefi_build(&opt.crdyboot_path(), opt.build_mode())?;
 }
 
 #[throws]
@@ -276,7 +279,7 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 
 #[throws]
 fn run_build_enroller(opt: &Opt) {
-    run_uefi_build(&opt.enroller_path())?;
+    run_uefi_build(&opt.enroller_path(), opt.build_mode())?;
 
     gen_disk::gen_enroller_disk(opt)?;
 }
