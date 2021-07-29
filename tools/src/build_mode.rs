@@ -1,11 +1,8 @@
 #[derive(Clone, Copy, Debug)]
+// TODO: allow setting the build mode on the command-line.
+#[allow(dead_code)]
 pub enum BuildMode {
-    // TODO: Debug mode is not yet turned on anywhere.
-    #[allow(dead_code)]
     Debug,
-
-    // TODO: for now always use release mode to avoid this error: "LLVM
-    // ERROR: Do not know how to split the result of this operator!"
     Release,
 }
 
