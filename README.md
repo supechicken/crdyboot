@@ -43,16 +43,23 @@ various `x.py` commands shown below.
 
 ## Dependencies
 
+Install nightly Rust:
+
     rustup install nightly
     rustup component add rust-src --toolchain nightly
 
-    # Provides headers needed for compiling C code compatible with the
-    # Rust UEFI targets.
+Provides headers needed for compiling C code compatible with the
+Rust UEFI targets.
+
     sudo apt install mingw-w64-i686-dev mingw-w64-x86-64-dev
     
-    # These are not direct dependencies of crdyboot, but used
-    # for the OVMF build, image signing, and running in a VM.
-    sudo apt install acpica-tools efitools nasm qemu-system-x86 sbsigntool uuid-dev
+For building OVMF:
+
+    sudo apt install acpica-tools nasm uuid-dev
+    
+Other tools used for image signing and running in a VM:
+
+    sudo apt install efitools gdisk qemu-system-x86 sbsigntool
 
 ## Building and testing
 
