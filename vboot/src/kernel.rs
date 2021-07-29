@@ -31,6 +31,10 @@ pub enum VbootError {
     KeyBlockNotCompletelySigned,
 }
 
+unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
+    crate::struct_from_bytes(buf).ok_or(VbootError::BufferTooSmall)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Algorithm {
     Rsa8192Sha256,
@@ -98,24 +102,6 @@ fn u32_to_usize(v: u32) -> usize {
     // OK to unwrap since u32 should always fit in usize on the
     // required targets.
     v.try_into().unwrap()
-}
-
-/// Get an &T backed by a byte slice. The slice is checked to make sure it's at
-/// least as large as the size of T.
-///
-/// # Safety
-///
-/// This can only be called safely on `repr(C, packed)` structs whose fields
-/// are either numeric or structures that also meet these restrictions
-/// (recursively).
-pub unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Result<&T, VbootError> {
-    if buf.len() < mem::size_of::<T>() {
-        return Err(VbootError::BufferTooSmall);
-    }
-
-    let ptr = buf.as_ptr() as *const T;
-
-    Ok(&*ptr)
 }
 
 #[derive(Debug, PartialEq)]

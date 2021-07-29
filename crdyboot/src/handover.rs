@@ -107,7 +107,7 @@ pub fn execute_linux_kernel_32(
     system_table: SystemTable<Boot>,
     cmdline: &str,
 ) -> Result<()> {
-    let image_params = if let Ok(image_params) =
+    let image_params = if let Some(image_params) =
         unsafe { struct_from_bytes::<boot_params>(kernel_data) }
     {
         image_params
