@@ -28,10 +28,10 @@ Goals:
    
 ## Code layout
 
-The `vboot` subdirectory is a `no_std` library that implements just the
-necessary parts of vboot in Rust. It uses `bindgen` and `cc` to wrap the
-firmware library from `third_party/vboot_reference`. This crate can be
-built for the host target so that tests can run.
+The `vboot` subdirectory is a `no_std` library that handles loading and
+verifying the kernel. Internally it uses the `LoadKernel` function from
+`third_party/vboot_reference`. This crate can be built for the host target
+so that tests can run.
 
 The `crdyboot` subdirectory contains the actual bootloader. It can
 only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`

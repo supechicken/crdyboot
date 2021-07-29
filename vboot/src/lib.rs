@@ -1,3 +1,9 @@
+//! The vboot crate is a `no_std` library that handles loading and verifying
+//! the kernel. Internally it uses the `LoadKernel` function from
+//! `third_party/vboot_reference`.
+//!
+//! This crate can be built for the host target so that tests can run.
+
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 #![feature(c_variadic)]
