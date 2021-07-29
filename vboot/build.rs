@@ -1,10 +1,14 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::env;
 
+fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
+    println!("cargo:rerun-if-changed={}", path.as_ref());
+}
+
 fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
     let header_path = "src/bindgen.h";
 
-    println!("cargo:rerun-if-changed={}", header_path);
+    rerun_if_changed(header_path);
 
     let mut builder = bindgen::Builder::default();
     builder = builder
