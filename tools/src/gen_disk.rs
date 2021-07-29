@@ -12,34 +12,22 @@ use fs_err as fs;
 pub fn gen_enroller_disk(opt: &Opt) {
     let disk = opt.enroller_disk_path();
 
+    if disk.exists() {
+        fs::remove_file(&disk)?;
+    }
+
     // Generate empty image.
     Command::with_args("truncate", &["--size", "4MiB", disk.as_str()]).run()?;
 
-    // Make GPT table.
-    Command::with_args(
-        "parted",
-        &["--script", disk.as_str(), "mktable", "GPT"],
-    )
-    .run()?;
-
     // Create a single partition.
-    Command::with_args(
-        "parted",
-        &[
-            "--script",
-            disk.as_str(),
-            "mkpart",
-            "primary",
-            "2048s",
-            "100%",
-        ],
-    )
-    .run()?;
+    Command::with_args("sgdisk", &["--new", "1:2048s:-2048s", disk.as_str()])
+        .run()?;
 
     // Mark the partition bootable.
+    let esp_guid = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
     Command::with_args(
-        "parted",
-        &["--script", disk.as_str(), "set", "1", "esp", "on"],
+        "sgdisk",
+        &[&format!("--typecode=1:{}", esp_guid), disk.as_str()],
     )
     .run()?;
 
