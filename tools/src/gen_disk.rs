@@ -135,7 +135,8 @@ pub fn gen_enroller_disk(opt: &Opt) {
             .enroller_path()
             .join("target")
             .join(arch.uefi_target())
-            .join("release/enroller.efi");
+            .join(opt.build_mode().dir_name())
+            .join("enroller.efi");
         let dst = boot_dir.join(arch.efi_file_name("boot"));
         Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
             .run()?;
@@ -155,7 +156,8 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
             .crdyboot_path()
             .join("target")
             .join(arch.uefi_target())
-            .join("release/crdyboot.efi");
+            .join(opt.build_mode().dir_name())
+            .join("crdyboot.efi");
 
         let dst_name = arch.efi_file_name("grub");
         dst_names.push(dst_name.clone());
