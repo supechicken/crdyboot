@@ -7,7 +7,6 @@ extern crate alloc;
 mod disk;
 mod handover;
 mod linux;
-mod truncate;
 
 use alloc::vec::Vec;
 use core::convert::TryFrom;
