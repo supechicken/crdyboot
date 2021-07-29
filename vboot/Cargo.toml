@@ -14,8 +14,6 @@ bindgen = "0.58.1"
 camino = "1.0"
 
 [dev-dependencies]
-# TODO: we really just want the pem feature, but for some reason it's
-# not working correctly without std.
 rsa = { version = "0.4.0", default-features = false, features = ["std", "pem"] }
 
 [patch.crates-io]
