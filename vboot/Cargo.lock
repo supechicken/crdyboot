@@ -302,7 +302,7 @@ dependencies = [
 [[package]]
 name = "num-bigint-dig"
 version = "0.7.0"
-source = "git+https://github.com/nicholasbishop/num-bigint.git?rev=a2dc57562dd459dca0edaf539acca610bc4807d8#a2dc57562dd459dca0edaf539acca610bc4807d8"
+source = "git+https://github.com/dignifiedquire/num-bigint.git#56576b592fea6341b7e1711a1629e4cc1bfc419c"
 dependencies = [
  "autocfg",
  "byteorder",
