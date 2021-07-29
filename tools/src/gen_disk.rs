@@ -3,7 +3,7 @@ use crate::loopback::{LoopbackDevice, PartitionPaths};
 use crate::mount::Mount;
 use crate::{sign, Opt};
 use anyhow::Error;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
@@ -24,42 +24,105 @@ impl fmt::Display for GptPartitionType {
     }
 }
 
-#[throws]
-pub fn gen_enroller_disk(opt: &Opt) {
-    let disk = opt.enroller_disk_path();
+struct PartitionSettings {
+    label: &'static str,
+    start: &'static str,
+    end: &'static str,
+    type_guid: Option<GptPartitionType>,
+}
 
-    if disk.exists() {
-        fs::remove_file(&disk)?;
+struct Disk {
+    path: Utf8PathBuf,
+    num_partitions: u32,
+}
+
+impl Disk {
+    #[throws]
+    fn create(path: Utf8PathBuf, size: &str) -> Disk {
+        // Delete the file if it already exists.
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+
+        // Generate empty image.
+        Command::with_args("truncate", &["--size", size, path.as_str()])
+            .run()?;
+
+        Disk {
+            path,
+            num_partitions: 0,
+        }
     }
 
-    // Generate empty image.
-    Command::with_args("truncate", &["--size", "4MiB", disk.as_str()]).run()?;
+    #[throws]
+    fn add_partition(&mut self, settings: PartitionSettings) -> u32 {
+        // Get the partition number (starts at one, not zero).
+        let part_num = self.num_partitions + 1;
 
-    // Create a single partition.
-    Command::with_args("sgdisk", &["--new", "1:2048s:-2048s", disk.as_str()])
+        // Create a single partition.
+        Command::with_args(
+            "sgdisk",
+            &[
+                &format!(
+                    "--new={}:{}:{}",
+                    part_num, settings.start, settings.end
+                ),
+                self.path.as_str(),
+            ],
+        )
         .run()?;
 
-    // Mark the partition bootable.
-    Command::with_args(
-        "sgdisk",
-        &[
-            &format!("--typecode=1:{}", GptPartitionType::EfiSystem),
-            disk.as_str(),
-        ],
-    )
-    .run()?;
+        self.num_partitions += 1;
 
-    let lo_dev = LoopbackDevice::new(&disk)?;
+        // Set the partition label.
+        Command::with_args(
+            "sgdisk",
+            &[
+                &format!("--change-name={}:{}", part_num, settings.label),
+                self.path.as_str(),
+            ],
+        )
+        .run()?;
+
+        // Set partition type.
+        if let Some(guid) = settings.type_guid {
+            Command::with_args(
+                "sgdisk",
+                &[
+                    &format!("--typecode={}:{}", part_num, guid),
+                    self.path.as_str(),
+                ],
+            )
+            .run()?;
+        }
+
+        part_num
+    }
+}
+
+#[throws]
+pub fn gen_enroller_disk(opt: &Opt) {
+    let mut disk = Disk::create(opt.enroller_disk_path(), "4MiB")?;
+
+    // Create a single bootable partition.
+    let part_num = disk.add_partition(PartitionSettings {
+        label: "boot",
+        start: "2048s",
+        end: "-2048s",
+        type_guid: Some(GptPartitionType::EfiSystem),
+    })?;
+
+    let lo_dev = LoopbackDevice::new(&disk.path)?;
 
     // Format the partition.
     Command::with_args(
         "sudo",
-        &["mkfs.fat", lo_dev.partition_device(1).as_str()],
+        &["mkfs.fat", lo_dev.partition_device(part_num).as_str()],
     )
     .run()?;
 
     // Mount the partition.
-    let esp_mount = Mount::new(&lo_dev.partition_device(1))?;
+    let esp_mount = Mount::new(&lo_dev.partition_device(part_num))?;
     let esp = esp_mount.mount_point();
 
     // Create the standard boot directory.
