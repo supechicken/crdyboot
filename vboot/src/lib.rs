@@ -5,8 +5,6 @@
 extern crate alloc;
 
 mod disk;
-mod gpt;
-mod kernel;
 mod load_kernel;
 mod printf;
 mod stubs;
@@ -34,8 +32,6 @@ pub mod vboot_sys {
 }
 
 pub use disk::DiskIo;
-pub use gpt::CgptAttributes;
-pub use kernel::{verify_kernel, PublicKey};
 pub use load_kernel::{load_kernel, LoadedKernel};
 pub use vboot_sys::vb2_return_code as return_code;
 
