@@ -1,6 +1,11 @@
+use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
+use uefi::proto::loaded_image::LoadedImage;
+use uefi::proto::media::block::BlockIO;
 use uefi::Result;
+use vboot::return_code;
+use vboot::DiskIo;
 
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
@@ -60,7 +65,7 @@ fn is_parent_disk(
 
 /// Search `block_io_handles` for the device that is a parent of
 /// `partition_handle`. See `is_parent_disk` for details.
-pub fn find_parent_disk(
+fn find_parent_disk(
     block_io_handles: &[Handle],
     partition_handle: Handle,
     bt: &BootServices,
@@ -72,4 +77,80 @@ pub fn find_parent_disk(
     }
 
     Status::SUCCESS.into_with_val(|| None)
+}
+
+pub fn find_disk_block_io(
+    crdyboot_image: Handle,
+    bt: &BootServices,
+) -> Result<&BlockIO> {
+    // Get the LoadedImage protocol for the image handle. This provides a
+    // device handle which should correspond to the disk that the image was
+    // loaded from.
+    let loaded_image = bt
+        .handle_protocol::<LoadedImage>(crdyboot_image)
+        .log_warning()?;
+    let loaded_image = unsafe { &*loaded_image.get() };
+    let partition_handle = loaded_image.device();
+
+    // Get all handles that support BlockIO. This includes both disk devices
+    // and logical partition devices.
+    let block_io_handles = bt.find_handles::<BlockIO>().log_warning()?;
+
+    // Find the parent disk device of the logical partition device.
+    let disk_handle = if let Some(parent) =
+        find_parent_disk(&block_io_handles, partition_handle, bt)
+            .log_warning()?
+    {
+        parent
+    } else {
+        error!("parent disk not found");
+        return Status::NOT_FOUND.into_with_val(|| unreachable!());
+    };
+
+    let disk_block_io =
+        bt.handle_protocol::<BlockIO>(disk_handle).log_warning()?;
+    let disk_block_io = unsafe { &*disk_block_io.get() };
+    Status::SUCCESS.into_with_val(|| disk_block_io)
+}
+
+pub struct GptDisk<'a> {
+    block_io: &'a BlockIO,
+}
+
+impl<'a> GptDisk<'a> {
+    pub fn new(
+        crdyboot_image: Handle,
+        bt: &'a BootServices,
+    ) -> Result<GptDisk<'a>> {
+        let block_io = find_disk_block_io(crdyboot_image, bt).log_warning()?;
+
+        Status::SUCCESS.into_with_val(|| GptDisk { block_io })
+    }
+}
+
+impl<'a> DiskIo for GptDisk<'a> {
+    fn bytes_per_lba(&self) -> u64 {
+        self.block_io.media().block_size().into()
+    }
+
+    fn lba_count(&self) -> u64 {
+        self.block_io.media().last_block() + 1
+    }
+
+    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> return_code {
+        match self
+            .block_io
+            .read_blocks(self.block_io.media().media_id(), lba_start, buffer)
+            .log_warning()
+        {
+            Ok(()) => return_code::VB2_SUCCESS,
+            Err(err) => {
+                error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
+                       lba_start, buffer.len(), err);
+                // TODO: is there a more specific vb2 error code that would be
+                // better to return here?
+                return_code::VB2_ERROR_UNKNOWN
+            }
+        }
+    }
 }
