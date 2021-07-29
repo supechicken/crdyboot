@@ -44,8 +44,6 @@ fn run_kernel(
     st: SystemTable<Boot>,
     kernel: &LoadedKernel,
 ) -> Result<()> {
-    let st_clone: SystemTable<Boot> = unsafe { st.unsafe_clone() };
-
     // TODO: unwrap
     let load_options_utf8 = kernel.command_line().unwrap();
     info!("command line: {}", load_options_utf8);
@@ -57,7 +55,7 @@ fn run_kernel(
     linux::execute_linux_kernel(
         kernel.data(),
         crdyboot_image,
-        st_clone,
+        st,
         &load_options_utf8,
         &load_options_ucs2,
     )
