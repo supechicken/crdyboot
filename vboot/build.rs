@@ -10,13 +10,12 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
 
     rerun_if_changed(header_path);
 
+    let include_dirs = [vboot_ref, &vboot_ref.join("firmware/2lib/include")];
+
     let mut builder = bindgen::Builder::default();
     builder = builder
         .header(header_path)
         .clang_arg(format!("--target={}", target))
-        // TODO: check for what is still needed
-        .clang_arg(format!("-I{}", vboot_ref))
-        .clang_arg(format!("-I{}", vboot_ref.join("firmware/2lib/include")))
         .allowlist_type("LoadKernelParams")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("vb2_context")
@@ -50,6 +49,10 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
         // "reference to packed field is unaligned" warnings.
         .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+
+    for include_dir in include_dirs {
+        builder = builder.clang_arg(format!("-I{}", include_dir));
+    }
 
     // Not sure why, but setting the sysroot is needed for the clang
     // windows targets. And it must not be set for the host target as
