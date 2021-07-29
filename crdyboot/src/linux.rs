@@ -48,7 +48,7 @@ fn get_pe_entry_point(data: &[u8]) -> Option<u32> {
 
 fn modify_loaded_image(
     image: Handle,
-    system_table: SystemTable<Boot>,
+    system_table: &SystemTable<Boot>,
     kernel_data: &[u8],
     cmdline_ucs2: &[Char16],
 ) -> Result<()> {
@@ -116,7 +116,7 @@ pub fn execute_linux_efi_stub(
     // modify the existing image's parameters.
     modify_loaded_image(
         crdyboot_image,
-        unsafe { system_table.unsafe_clone() },
+        &system_table,
         kernel_data,
         cmdline_ucs2,
     )
