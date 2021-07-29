@@ -6,20 +6,9 @@ resolver = "2"
 
 [dependencies]
 log = "0.4"
-memoffset = "0.6.4"
 printf-compat = { version = "0.1.1", default-features = false }
-sha2 = { version = "0.9.5", default-features = false, features = ["force-soft"] }
-rsa = { version = "0.4.0", default-features = false, features = ["alloc"] }
 
 [build-dependencies]
 bindgen = "0.58.1"
 camino = "1.0"
 cc = "1.0"
-
-[dev-dependencies]
-rsa = { version = "0.4.0", default-features = false, features = ["std", "pem"] }
-
-[patch.crates-io]
-# TODO: once commit 56576b592fea6341b7e1711a1629e4cc1bfc419c is in an
-# official release can switch to that.
-num-bigint = { package = "num-bigint-dig", git = "https://github.com/dignifiedquire/num-bigint.git" }
