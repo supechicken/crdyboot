@@ -7,6 +7,22 @@ use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use std::fmt;
+
+enum GptPartitionType {
+    EfiSystem,
+}
+
+impl fmt::Display for GptPartitionType {
+    #[throws(fmt::Error)]
+    fn fmt(&self, f: &mut fmt::Formatter) {
+        match self {
+            GptPartitionType::EfiSystem => {
+                write!(f, "c12a7328-f81f-11d2-ba4b-00a0c93ec93b")?;
+            }
+        }
+    }
+}
 
 #[throws]
 pub fn gen_enroller_disk(opt: &Opt) {
@@ -24,10 +40,12 @@ pub fn gen_enroller_disk(opt: &Opt) {
         .run()?;
 
     // Mark the partition bootable.
-    let esp_guid = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
     Command::with_args(
         "sgdisk",
-        &[&format!("--typecode=1:{}", esp_guid), disk.as_str()],
+        &[
+            &format!("--typecode=1:{}", GptPartitionType::EfiSystem),
+            disk.as_str(),
+        ],
     )
     .run()?;
 
