@@ -11,6 +11,7 @@ use std::fmt;
 
 enum GptPartitionType {
     EfiSystem,
+    ChromeOsKernel,
 }
 
 impl fmt::Display for GptPartitionType {
@@ -19,6 +20,9 @@ impl fmt::Display for GptPartitionType {
         match self {
             GptPartitionType::EfiSystem => {
                 write!(f, "c12a7328-f81f-11d2-ba4b-00a0c93ec93b")?;
+            }
+            GptPartitionType::ChromeOsKernel => {
+                write!(f, "fe3a2a5d-4f32-41a7-b725-accc3285a309")?;
             }
         }
     }
@@ -29,6 +33,9 @@ struct PartitionSettings {
     start: &'static str,
     end: &'static str,
     type_guid: Option<GptPartitionType>,
+    set_successful_boot_bit: bool,
+    // 15: highest, 1: lowest, 0: not bootable.
+    priority: Option<u8>,
 }
 
 struct Disk {
@@ -96,8 +103,61 @@ impl Disk {
             .run()?;
         }
 
+        #[throws]
+        fn set_bit(disk: &Disk, part_num: u32, bit_num: u8) {
+            Command::with_args(
+                "sgdisk",
+                &[
+                    "-A",
+                    &format!("{}:set:{}", part_num, bit_num),
+                    disk.path.as_str(),
+                ],
+            )
+            .run()?;
+        }
+
+        if settings.set_successful_boot_bit {
+            set_bit(self, part_num, 56)?;
+        }
+
+        if let Some(priority) = settings.priority {
+            // Only priority 1 supported for now.
+            assert_eq!(priority, 1);
+            set_bit(self, part_num, 48)?;
+        }
+
         part_num
     }
+}
+
+#[throws]
+pub fn gen_vboot_test_disk(opt: &Opt) {
+    // 16MiB kernel partition, plus some extra space for GPT.
+    let mut disk = Disk::create(opt.vboot_test_disk_path(), "18MiB")?;
+
+    // Create kernel partition.
+    let part_num = disk.add_partition(PartitionSettings {
+        label: "KERN-A",
+        start: "1MiB",
+        end: "17MiB",
+        type_guid: Some(GptPartitionType::ChromeOsKernel),
+        set_successful_boot_bit: true,
+        priority: Some(1),
+    })?;
+
+    let vboot_disk_lo_dev = LoopbackDevice::new(&disk.path)?;
+    let cloudready_lo_dev = LoopbackDevice::new(&opt.disk_path())?;
+
+    // Copy a kernel partition from the cloudready disk to the new disk.
+    Command::with_args(
+        "sudo",
+        &[
+            "cp",
+            cloudready_lo_dev.partition_paths().kern_a.as_str(),
+            vboot_disk_lo_dev.partition_device(part_num).as_str(),
+        ],
+    )
+    .run()?;
 }
 
 #[throws]
@@ -110,6 +170,8 @@ pub fn gen_enroller_disk(opt: &Opt) {
         start: "2048s",
         end: "-2048s",
         type_guid: Some(GptPartitionType::EfiSystem),
+        set_successful_boot_bit: false,
+        priority: None,
     })?;
 
     let lo_dev = LoopbackDevice::new(&disk.path)?;

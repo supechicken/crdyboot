@@ -79,6 +79,10 @@ impl Opt {
         self.workspace_path().join("enroller.bin")
     }
 
+    fn vboot_test_disk_path(&self) -> Utf8PathBuf {
+        self.repo.join("vboot/test_data/disk.bin")
+    }
+
     fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
         let subdir = match arch {
             Arch::Ia32 => "uefi32",
@@ -123,6 +127,7 @@ enum Action {
     SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
+    BuildVbootTestDisk(BuildVbootTestDiskAction),
 }
 
 /// Build crdyboot.
@@ -139,6 +144,11 @@ struct BuildEnrollerAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build-ovmf")]
 struct BuildOvmfAction {}
+
+/// Build vboot test disk.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "build-vboot-test-disk")]
+struct BuildVbootTestDiskAction {}
 
 /// Format, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -346,7 +356,7 @@ fn run_clippy(opt: &Opt) {
 #[throws]
 fn run_tests(opt: &Opt) {
     let vboot_dir = opt.vboot_path();
-    let mut cmd = Command::with_args("cargo", &["test"]);
+    let mut cmd = Command::with_args("cargo", &["+nightly", "test"]);
     modify_cmd_for_path_prefix(&mut cmd, &vboot_dir);
     cmd.set_dir(&vboot_dir);
     cmd.run()?;
@@ -436,6 +446,7 @@ fn main() {
         Action::Build(_) => run_crdyboot_build(&opt),
         Action::BuildEnroller(_) => run_build_enroller(&opt),
         Action::BuildOvmf(_) => ovmf::run_build_ovmf(&opt),
+        Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&opt),
         Action::Check(_) => run_check(&opt),
         Action::Clean(_) => run_clean(&opt),
         Action::Format(_) => run_rustfmt(&opt),
