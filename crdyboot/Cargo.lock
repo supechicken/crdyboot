@@ -374,7 +374,7 @@ dependencies = [
 [[package]]
 name = "uefi"
 version = "0.11.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#305c245a99459332d46ee5ac563f6599dfd12a10"
+source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#6e718f931912dfbeb5de43b285ce1ad40cd056fd"
 dependencies = [
  "bitflags",
  "crc",
@@ -397,7 +397,7 @@ dependencies = [
 [[package]]
 name = "uefi-services"
 version = "0.8.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#305c245a99459332d46ee5ac563f6599dfd12a10"
+source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#6e718f931912dfbeb5de43b285ce1ad40cd056fd"
 dependencies = [
  "cfg-if",
  "log",
