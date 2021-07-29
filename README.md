@@ -28,11 +28,10 @@ Goals:
    
 ## Code layout
 
-The `vboot` subdirectory is a `no_std` library that implements just
-the necessary parts of vboot in Rust. It uses bindgen to access
-structs and constants from `vboot_reference`, but does not directly
-build any of the C code. This crate can be built for the host target
-so that tests can run.
+The `vboot` subdirectory is a `no_std` library that implements just the
+necessary parts of vboot in Rust. It uses `bindgen` and `cc` to wrap the
+firmware library from `third_party/vboot_reference`. This crate can be
+built for the host target so that tests can run.
 
 The `crdyboot` subdirectory contains the actual bootloader. It can
 only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
@@ -115,3 +114,9 @@ Unplug the enroller USB and plug in the cloudready USB, then reboot. Use the
 boot menu to select the USB.
 
 [writedisk]: https://crates.io/crates/writedisk
+
+## Developer notes
+
+An older pure-Rust version can be found in the `pure-rust-20210729`
+branch. Since then we have switched to building the C vboot library and
+loading/verifying the kernel through that library.
