@@ -5,29 +5,83 @@ fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
     println!("cargo:rerun-if-changed={}", path.as_ref());
 }
 
-fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
+fn build_vboot_lib(
+    vboot_ref: &Utf8Path,
+    include_dirs: &[Utf8PathBuf],
+    target: &str,
+) {
+    let firmware = vboot_ref.join("firmware");
+    let source_files = [
+        "src/bridge.c".into(),
+        firmware.join("2lib/2api.c"),
+        firmware.join("2lib/2common.c"),
+        firmware.join("2lib/2context.c"),
+        firmware.join("2lib/2crc8.c"),
+        firmware.join("2lib/2crypto.c"),
+        firmware.join("2lib/2packed_key.c"),
+        firmware.join("2lib/2rsa.c"),
+        firmware.join("2lib/2secdata_fwmp.c"),
+        firmware.join("2lib/2sha1.c"),
+        firmware.join("2lib/2sha256.c"),
+        firmware.join("2lib/2sha512.c"),
+        firmware.join("2lib/2sha_utility.c"),
+        firmware.join("2lib/2struct.c"),
+        firmware.join("lib/cgptlib/cgptlib.c"),
+        firmware.join("lib/cgptlib/cgptlib_internal.c"),
+        firmware.join("lib/cgptlib/crc32.c"),
+        firmware.join("lib/gpt_misc.c"),
+        firmware.join("lib/vboot_kernel.c"),
+        // Stubs
+        firmware.join("2lib/2stub_hwcrypto.c"),
+        firmware.join("stub/vboot_api_stub_stream.c"),
+    ];
+
+    for path in &source_files {
+        rerun_if_changed(path);
+    }
+
+    rerun_if_changed("src/c/libc.h");
+
+    cc::Build::new()
+        .compiler("clang")
+        .target(target)
+        .flag("-Wno-address-of-packed-member")
+        .flag("-Wno-int-to-pointer-cast")
+        .flag("-Wno-sign-compare")
+        .flag("-Wno-unused-parameter")
+        .warnings_into_errors(true)
+        .includes(include_dirs)
+        .files(source_files)
+        .compile("vboot_c");
+}
+
+fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
     let header_path = "src/bindgen.h";
 
     rerun_if_changed(header_path);
-
-    let include_dirs = [vboot_ref, &vboot_ref.join("firmware/2lib/include")];
 
     let mut builder = bindgen::Builder::default();
     builder = builder
         .header(header_path)
         .clang_arg(format!("--target={}", target))
-        .allowlist_type("LoadKernelParams")
+        .allowlist_function("LoadKernel")
+        .allowlist_function("crdyboot_set_kernel_key")
+        .allowlist_function("vb2_workbuf_alloc")
+        .allowlist_function("vb2_workbuf_from_ctx")
+        .allowlist_function("vb2api_init")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("vb2_context")
         .allowlist_type("vb2_crypto_algorithm")
-        .allowlist_type("vb2_error_t")
         .allowlist_type("vb2_kernel_preamble")
         .allowlist_type("vb2_keyblock")
+        .allowlist_type("vb2_nv_param")
         .allowlist_type("vb2_packed_key")
         .allowlist_type("vb2_public_key")
         .allowlist_type("vb2_return_code")
+        .allowlist_type("vb2_secdata_kernel_param")
         .allowlist_type("vb2_signature")
         .allowlist_type("vb2_signature_algorithm")
+        .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
         .allowlist_var("VB2_KERNEL_PREAMBLE_HEADER_VERSION_MAJOR")
@@ -38,9 +92,12 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
             is_bitfield: false,
         })
         .translate_enum_integer_types(true)
+        // See vb2_error_t comment in lib.rs.
+        .blocklist_type("vb2_error_t")
         // Block-listing these types avoids some unnecessary
         // generation of ctype typedefs.
         .blocklist_type("__uint8_t")
+        .blocklist_type("__uint16_t")
         .blocklist_type("__uint32_t")
         .blocklist_type("__uint64_t")
         .use_core()
@@ -72,6 +129,16 @@ fn gen_fwlib_bindings(vboot_ref: &Utf8Path, target: &str) {
 fn main() {
     let vboot_ref = Utf8Path::new("../third_party/vboot_reference");
 
+    let include_dirs = vec![
+        Utf8PathBuf::from("src"),
+        vboot_ref.to_path_buf(),
+        vboot_ref.join("firmware/2lib/include"),
+        vboot_ref.join("firmware/include"),
+        vboot_ref.join("firmware/lib/cgptlib/include"),
+        vboot_ref.join("firmware/lib/include"),
+        vboot_ref.join("firmware/lib20/include"),
+    ];
+
     let target = env::var("TARGET").unwrap();
     let target = match target.as_str() {
         // UEFI target builds. There are a couple reasons why these are
@@ -94,5 +161,6 @@ fn main() {
         target => target,
     };
 
-    gen_fwlib_bindings(vboot_ref, target);
+    build_vboot_lib(vboot_ref, &include_dirs, target);
+    gen_fwlib_bindings(&include_dirs, target);
 }
