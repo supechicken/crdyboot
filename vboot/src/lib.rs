@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
+// Needed by the printf module.
 #![feature(c_variadic)]
 
 extern crate alloc;
@@ -16,9 +17,12 @@ mod load_kernel;
 mod printf;
 mod stubs;
 
+// The UEFI targets don't have the C library. This module provides
+// malloc/free wrappers that delegate to Rust's `alloc`.
 #[cfg(not(target_env = "gnu"))]
 mod malloc;
 
+/// Bindgen wrappers for parts of vboot_reference.
 #[allow(clippy::missing_safety_doc)]
 #[allow(missing_docs)]
 #[allow(non_camel_case_types)]
