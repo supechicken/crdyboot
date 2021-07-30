@@ -20,6 +20,9 @@ pub enum LoadKernelError {
     /// Failed to convert numeric type.
     BadNumericConversion(&'static str),
 
+    /// Packed pubkey buffer is too small.
+    PubkeyTooSmall(usize),
+
     /// Call to `vb2api_init` failed.
     ApiInitFailed(return_code),
 
@@ -38,6 +41,9 @@ impl fmt::Display for LoadKernelError {
         match self {
             BadNumericConversion(info) => {
                 write!(f, "failed to convert numeric type: {}", info)
+            }
+            PubkeyTooSmall(size) => {
+                write!(f, "packed pubkey buffer is too small: {}", size)
             }
             ApiInitFailed(rc) => {
                 write_with_rc("call to vb2api_init failed", rc)
@@ -117,6 +123,30 @@ impl LoadedKernel {
     }
 }
 
+/// Validate the size of the pubkey buffer. It must be at least as large as
+/// the `vb2_packed_key` struct to cast it to that type, and then the
+/// `key_size` field is checked to make sure that it is exactly the same as
+/// the buffer length, less the size of the header struct.
+fn validate_packed_pubkey_size(
+    packed_pubkey: &[u8],
+) -> Result<(), LoadKernelError> {
+    use vboot_sys::vb2_packed_key;
+
+    let packed_pubkey_struct: &vb2_packed_key = unsafe {
+        crate::struct_from_bytes(packed_pubkey).ok_or_else(|| {
+            LoadKernelError::PubkeyTooSmall(packed_pubkey.len())
+        })?
+    };
+
+    let key_size = u32_to_usize(packed_pubkey_struct.key_size)
+        .ok_or(LoadKernelError::BadNumericConversion("packed pubkey size"))?;
+    if key_size + mem::size_of::<vb2_packed_key>() == packed_pubkey.len() {
+        Ok(())
+    } else {
+        Err(LoadKernelError::PubkeyTooSmall(packed_pubkey.len()))
+    }
+}
+
 /// Find the best kernel. The details are up to the firmware library in
 /// vboot_reference. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
@@ -161,10 +191,7 @@ pub fn load_kernel(
             .as_ptr()
             .copy_to_nonoverlapping(kernel_key_ptr, packed_pubkey.len());
 
-        assert!(
-            packed_pubkey.len() >= mem::size_of::<vboot_sys::vb2_packed_key>()
-        );
-
+        validate_packed_pubkey_size(packed_pubkey)?;
         vboot_sys::crdyboot_set_kernel_key(
             ctx_ptr,
             kernel_key_ptr as *const vboot_sys::vb2_packed_key,
