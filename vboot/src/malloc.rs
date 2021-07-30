@@ -18,7 +18,7 @@ unsafe fn wrapped_alloc(layout: Layout) -> *mut u8 {
 
     let (to_request, offset) = header_layout
         .extend(layout)
-        .expect("real code should probably return null");
+        .expect("failed to extend header layout");
 
     let orig_ptr = underlying_alloc(to_request);
     if orig_ptr.is_null() {
