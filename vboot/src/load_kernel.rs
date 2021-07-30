@@ -1,11 +1,11 @@
 use crate::disk::{Disk, DiskIo};
-use crate::{return_code, vboot_sys};
+use crate::{return_code, return_code_to_str, vboot_sys};
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::convert::TryInto;
 use core::ffi::c_void;
-use core::{mem, ptr, str};
+use core::{fmt, mem, ptr, str};
 use log::{error, info};
 
 /// Fully verified kernel loaded into memory.
@@ -13,6 +13,40 @@ pub struct LoadedKernel {
     data: Vec<u8>,
     bootloader_address: u64,
     unique_partition_guid: [u8; 16],
+}
+
+/// Errors produced by `load_kernel`.
+pub enum LoadKernelError {
+    /// Failed to convert numeric type.
+    BadNumericConversion(&'static str),
+
+    /// Call to `vb2api_init` failed.
+    ApiInitFailed(return_code),
+
+    /// Call to `LoadKernel` failed.
+    LoadKernelFailed(return_code),
+}
+
+impl fmt::Display for LoadKernelError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use LoadKernelError::*;
+
+        let mut write_with_rc = |msg, rc: &return_code| {
+            write!(f, "{}: 0x{:x} ({})", msg, rc.0, return_code_to_str(*rc))
+        };
+
+        match self {
+            BadNumericConversion(info) => {
+                write!(f, "failed to convert numeric type: {}", info)
+            }
+            ApiInitFailed(rc) => {
+                write_with_rc("call to vb2api_init failed", rc)
+            }
+            LoadKernelFailed(rc) => {
+                write_with_rc("call to LoadKernel failed", rc)
+            }
+        }
+    }
 }
 
 fn u32_to_u64(v: u32) -> u64 {
@@ -89,7 +123,7 @@ impl LoadedKernel {
 pub fn load_kernel(
     packed_pubkey: &[u8],
     disk_io: &dyn DiskIo,
-) -> Result<LoadedKernel, return_code> {
+) -> Result<LoadedKernel, LoadKernelError> {
     // TODO: this could probably be smaller.
     let mut workbuf = vec![0u8; 4096 * 50];
 
@@ -107,7 +141,7 @@ pub fn load_kernel(
         ));
         if status != return_code::VB2_SUCCESS {
             error!("vb2api_init failed: 0x{:x}", status.0);
-            return Err(status);
+            return Err(LoadKernelError::ApiInitFailed(status));
         }
 
         let mut kernel_key_wb = vboot_sys::vb2_workbuf {
@@ -167,7 +201,7 @@ pub fn load_kernel(
             })
         } else {
             error!("LoadKernel failed: 0x{:x}", status.0);
-            Err(status)
+            Err(LoadKernelError::LoadKernelFailed(status))
         }
     }
 }
@@ -196,6 +230,20 @@ mod tests {
             buffer.copy_from_slice(&self.data[start..end]);
             return_code::VB2_SUCCESS
         }
+    }
+
+    #[test]
+    fn test_error_display() {
+        let expected = "call to LoadKernel failed: 0x100b2000 (VB2_ERROR_LK_NO_KERNEL_FOUND)";
+        assert_eq!(
+            format!(
+                "{}",
+                LoadKernelError::LoadKernelFailed(
+                    return_code::VB2_ERROR_LK_NO_KERNEL_FOUND
+                )
+            ),
+            expected
+        );
     }
 
     #[test]
@@ -241,8 +289,8 @@ mod tests {
                     Some(expected_command_line.into())
                 );
             }
-            Err(status) => {
-                panic!("load_kernel failed: 0x{:x}", status.0);
+            Err(err) => {
+                panic!("load_kernel failed: {}", err);
             }
         }
     }
