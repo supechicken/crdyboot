@@ -3,6 +3,7 @@ use crate::ReturnCode;
 use core::convert::TryInto;
 use core::marker::PhantomData;
 use core::{ptr, slice};
+use log::error;
 
 /// Interface for random-access disk IO.
 pub trait DiskIo {
@@ -100,6 +101,6 @@ extern "C" fn VbExDiskWrite(
     _lba_count: u64,
     _buffer: *const u8,
 ) -> ReturnCode {
-    // TODO
+    error!("VbExDiskWrite not implemented");
     ReturnCode::VB2_ERROR_EX_UNIMPLEMENTED
 }
