@@ -7,7 +7,6 @@
 #include <futility/kernel_blob.h>
 #include <vboot_kernel.h>
 
-void crdyboot_set_kernel_key(
-    struct vb2_context *ctx,
-    const struct vb2_packed_key *packed_key,
-    const struct vb2_workbuf *wb);
+void crdyboot_set_kernel_key(struct vb2_context *ctx,
+                             const struct vb2_packed_key *packed_key,
+                             const struct vb2_workbuf *wb);
