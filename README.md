@@ -25,6 +25,10 @@ Goals:
 * Verify the signature of everything loaded from the kernel partition.
 * Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
   environments.
+  
+## License
+
+[Apache License Version 2.0]
    
 ## Code layout
 
@@ -113,10 +117,11 @@ wait for it to complete.
 Unplug the enroller USB and plug in the cloudready USB, then reboot. Use the
 boot menu to select the USB.
 
-[writedisk]: https://crates.io/crates/writedisk
-
 ## Developer notes
 
 An older pure-Rust version can be found in the `pure-rust-20210729`
 branch. Since then we have switched to building the C vboot library and
 loading/verifying the kernel through that library.
+
+[Apache License Version 2.0]: http://www.apache.org/licenses/LICENSE-2.0.txt
+[writedisk]: https://crates.io/crates/writedisk
