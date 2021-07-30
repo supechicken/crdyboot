@@ -147,6 +147,49 @@ fn validate_packed_pubkey_size(
     }
 }
 
+unsafe fn init_vb2_context(
+    packed_pubkey: &[u8],
+    workbuf: &mut [u8],
+) -> Result<*mut vboot_sys::vb2_context, LoadKernelError> {
+    let mut ctx_ptr = ptr::null_mut();
+
+    info!("vb2api_init");
+    let status = return_code(vboot_sys::vb2api_init(
+        workbuf.as_mut_ptr() as *mut c_void,
+        workbuf.len().try_into().map_err(|_| {
+            LoadKernelError::BadNumericConversion("workbuf length")
+        })?,
+        &mut ctx_ptr,
+    ));
+    if status != return_code::VB2_SUCCESS {
+        error!("vb2api_init failed: 0x{:x}", status.0);
+        return Err(LoadKernelError::ApiInitFailed(status));
+    }
+
+    let mut kernel_key_wb = vboot_sys::vb2_workbuf {
+        buf: ptr::null_mut(),
+        size: 0,
+    };
+    vboot_sys::vb2_workbuf_from_ctx(ctx_ptr, &mut kernel_key_wb);
+    let kernel_key_ptr = vboot_sys::vb2_workbuf_alloc(
+        &mut kernel_key_wb,
+        packed_pubkey.len().try_into().map_err(|_| {
+            LoadKernelError::BadNumericConversion("pubkey length")
+        })?,
+    ) as *mut u8;
+    packed_pubkey
+        .as_ptr()
+        .copy_to_nonoverlapping(kernel_key_ptr, packed_pubkey.len());
+
+    vboot_sys::crdyboot_set_kernel_key(
+        ctx_ptr,
+        kernel_key_ptr as *const vboot_sys::vb2_packed_key,
+        &kernel_key_wb as *const vboot_sys::vb2_workbuf,
+    );
+
+    Ok(ctx_ptr)
+}
+
 /// Find the best kernel. The details are up to the firmware library in
 /// vboot_reference. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
@@ -160,43 +203,11 @@ pub fn load_kernel(
     // TODO: arbitrary choose 32MiB for now.
     let mut kernel_buffer = vec![0u8; 32 * 1024 * 1024];
 
+    // Check the size of the key buffer before using it.
+    validate_packed_pubkey_size(packed_pubkey)?;
+
     unsafe {
-        let mut ctx_ptr = ptr::null_mut();
-
-        info!("vb2api_init");
-        let status = return_code(vboot_sys::vb2api_init(
-            workbuf.as_mut_ptr() as *mut c_void,
-            workbuf.len().try_into().map_err(|_| {
-                LoadKernelError::BadNumericConversion("workbuf length")
-            })?,
-            &mut ctx_ptr,
-        ));
-        if status != return_code::VB2_SUCCESS {
-            error!("vb2api_init failed: 0x{:x}", status.0);
-            return Err(LoadKernelError::ApiInitFailed(status));
-        }
-
-        let mut kernel_key_wb = vboot_sys::vb2_workbuf {
-            buf: ptr::null_mut(),
-            size: 0,
-        };
-        vboot_sys::vb2_workbuf_from_ctx(ctx_ptr, &mut kernel_key_wb);
-        let kernel_key_ptr = vboot_sys::vb2_workbuf_alloc(
-            &mut kernel_key_wb,
-            packed_pubkey.len().try_into().map_err(|_| {
-                LoadKernelError::BadNumericConversion("pubkey length")
-            })?,
-        ) as *mut u8;
-        packed_pubkey
-            .as_ptr()
-            .copy_to_nonoverlapping(kernel_key_ptr, packed_pubkey.len());
-
-        validate_packed_pubkey_size(packed_pubkey)?;
-        vboot_sys::crdyboot_set_kernel_key(
-            ctx_ptr,
-            kernel_key_ptr as *const vboot_sys::vb2_packed_key,
-            &kernel_key_wb as *const vboot_sys::vb2_workbuf,
-        );
+        let ctx_ptr = init_vb2_context(packed_pubkey, &mut workbuf)?;
 
         let mut params = vboot_sys::VbSelectAndLoadKernelParams {
             // Initialize inputs.
