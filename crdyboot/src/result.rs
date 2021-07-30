@@ -18,8 +18,11 @@ pub enum Error {
     // TODO: think about how to print better errors
     LoadKernelFailed(vboot::return_code),
 
-    // TODO: break into more specific errors?
-    RunKernelFailed(Status),
+    GetPeEntryPointFailed,
+    KernelTooSmall,
+    InvalidBootParameters,
+    KernelDataTooBig(usize),
+    CommandLineTooBig(usize),
 
     KernelDidNotTakeControl,
 }

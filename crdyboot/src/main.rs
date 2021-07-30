@@ -60,9 +60,7 @@ fn run_kernel(
         st,
         &load_options_utf8,
         &load_options_ucs2,
-    )
-    .log_warning()
-    .map_err(|err| Error::RunKernelFailed(err.status()))?;
+    )?;
 
     Ok(())
 }

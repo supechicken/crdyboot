@@ -6,12 +6,12 @@
 //! without the handover protocol":
 //! https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=17054f492dfd4d91e093ebb87013807812ec42a4
 
+use crate::result::{Error, Result};
 use alloc::vec;
 use core::convert::TryInto;
 use core::{mem, ptr};
-use log::error;
 use uefi::table::{Boot, SystemTable};
-use uefi::{Handle, Result, Status};
+use uefi::Handle;
 use vboot::struct_from_bytes;
 
 #[repr(C, packed)]
@@ -112,8 +112,7 @@ pub fn execute_linux_kernel_32(
     {
         image_params
     } else {
-        error!("kernel is too small to contain boot parameters");
-        return Status::LOAD_ERROR.into();
+        return Err(Error::KernelTooSmall);
     };
 
     if image_params.hdr.boot_flag != 0xAA55
@@ -121,8 +120,7 @@ pub fn execute_linux_kernel_32(
         || image_params.hdr.version < 0x20b
         || image_params.hdr.relocatable_kernel == 0
     {
-        error!("invalid boot parameters");
-        return Status::LOAD_ERROR.into();
+        return Err(Error::InvalidBootParameters);
     }
 
     let mut boot_params_raw = vec![0; 0x4000];
@@ -162,5 +160,5 @@ pub fn execute_linux_kernel_32(
         (handover)(crdyboot_image, system_table, boot_params);
     }
 
-    unreachable!("kernel returned control");
+    Err(Error::KernelDidNotTakeControl)
 }
