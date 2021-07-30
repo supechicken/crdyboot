@@ -18,5 +18,10 @@ vboot = { path = "../vboot" }
 # This is needed to fix uefi-services' dep on uefi
 uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
 
+[features]
+# If enabled, the max log level is set to Debug. If disabled (the default),
+# the max log level is set to Warn.
+verbose = []
+
 [profile.release]
 overflow-checks = true
