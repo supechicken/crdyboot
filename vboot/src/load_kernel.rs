@@ -90,10 +90,10 @@ pub fn load_kernel(
     packed_pubkey: &[u8],
     disk_io: &dyn DiskIo,
 ) -> Result<LoadedKernel, return_code> {
-    // TODO: I have no idea how big this needs to be.
+    // TODO: this could probably be smaller.
     let mut workbuf = vec![0u8; 4096 * 50];
 
-    // TODO... arbitrary choose 32MiB for now.
+    // TODO: arbitrary choose 32MiB for now.
     let mut kernel_buffer = vec![0u8; 32 * 1024 * 1024];
 
     unsafe {
@@ -132,7 +132,6 @@ pub fn load_kernel(
             packed_pubkey.len() >= mem::size_of::<vboot_sys::vb2_packed_key>()
         );
 
-        info!("crdyboot_set_kernel_key");
         vboot_sys::crdyboot_set_kernel_key(
             ctx_ptr,
             kernel_key_ptr as *const vboot_sys::vb2_packed_key,
@@ -153,7 +152,6 @@ pub fn load_kernel(
             flags: 0,
         };
 
-        // TODO
         let mut disk = Disk::new(disk_io);
         let mut disk_info = disk.info();
 
