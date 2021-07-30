@@ -136,7 +136,9 @@ pub fn load_kernel(
         info!("vb2api_init");
         let status = return_code(vboot_sys::vb2api_init(
             workbuf.as_mut_ptr() as *mut c_void,
-            workbuf.len().try_into().unwrap(),
+            workbuf.len().try_into().map_err(|_| {
+                LoadKernelError::BadNumericConversion("workbuf length")
+            })?,
             &mut ctx_ptr,
         ));
         if status != return_code::VB2_SUCCESS {
@@ -151,8 +153,9 @@ pub fn load_kernel(
         vboot_sys::vb2_workbuf_from_ctx(ctx_ptr, &mut kernel_key_wb);
         let kernel_key_ptr = vboot_sys::vb2_workbuf_alloc(
             &mut kernel_key_wb,
-            // TODO: unwrap
-            packed_pubkey.len().try_into().unwrap(),
+            packed_pubkey.len().try_into().map_err(|_| {
+                LoadKernelError::BadNumericConversion("pubkey length")
+            })?,
         ) as *mut u8;
         packed_pubkey
             .as_ptr()
@@ -169,11 +172,13 @@ pub fn load_kernel(
         );
 
         let mut params = vboot_sys::VbSelectAndLoadKernelParams {
+            // Initialize inputs.
             kernel_buffer: kernel_buffer.as_mut_ptr() as *mut c_void,
-            // TODO: unwrap
-            kernel_buffer_size: kernel_buffer.len().try_into().unwrap(),
+            kernel_buffer_size: kernel_buffer.len().try_into().map_err(
+                |_| LoadKernelError::BadNumericConversion("kernel buffer size"),
+            )?,
 
-            // Init outputs
+            // Initialize outputs.
             disk_handle: ptr::null_mut(),
             partition_number: 0,
             bootloader_address: 0,
