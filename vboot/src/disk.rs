@@ -84,9 +84,10 @@ unsafe extern "C" fn VbExDiskRead(
 ) -> ReturnCode {
     let disk = Disk::from_handle(handle);
 
-    let buffer_len = (disk.bytes_per_lba() * lba_count).try_into().unwrap();
+    let buffer_len = (disk.bytes_per_lba() * lba_count)
+        .try_into()
+        .expect("invalid read size");
 
-    // TODO: unwrap
     let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
 
     disk.read(lba_start, buffer)
