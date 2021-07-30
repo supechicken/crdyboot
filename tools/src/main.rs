@@ -133,7 +133,11 @@ enum Action {
 /// Build crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build")]
-struct BuildAction {}
+struct BuildAction {
+    /// build crdyboot with the "verbose" feature
+    #[argh(switch)]
+    enable_verbose_feature: bool,
+}
 
 /// Build enroller.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -153,7 +157,11 @@ struct BuildVbootTestDiskAction {}
 /// Format, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
-struct CheckAction {}
+struct CheckAction {
+    /// build crdyboot with the "verbose" feature
+    #[argh(switch)]
+    enable_verbose_feature: bool,
+}
 
 /// Clean out all the target directories.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -223,11 +231,16 @@ fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
 }
 
 #[throws]
-fn run_check(opt: &Opt) {
+fn run_check(opt: &Opt, action: &CheckAction) {
     run_rustfmt(opt)?;
     run_clippy(opt)?;
     run_tests(opt)?;
-    run_crdyboot_build(opt)?;
+    run_crdyboot_build(
+        opt,
+        &BuildAction {
+            enable_verbose_feature: action.enable_verbose_feature,
+        },
+    )?;
 }
 
 #[throws]
@@ -242,7 +255,11 @@ fn run_clean(opt: &Opt) {
 }
 
 #[throws]
-fn run_uefi_build(project_dir: &Utf8Path, build_mode: BuildMode) {
+fn run_uefi_build(
+    project_dir: &Utf8Path,
+    build_mode: BuildMode,
+    features: &[&str],
+) {
     for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
@@ -255,6 +272,9 @@ fn run_uefi_build(project_dir: &Utf8Path, build_mode: BuildMode) {
                 target,
             ],
         );
+        if !features.is_empty() {
+            cmd.add_args(&["--features", &features.join(",")]);
+        }
         cmd.add_args(build_mode.cargo_args());
         modify_cmd_for_path_prefix(&mut cmd, project_dir);
         cmd.set_dir(project_dir);
@@ -263,8 +283,12 @@ fn run_uefi_build(project_dir: &Utf8Path, build_mode: BuildMode) {
 }
 
 #[throws]
-fn run_crdyboot_build(opt: &Opt) {
-    run_uefi_build(&opt.crdyboot_path(), opt.build_mode())?;
+fn run_crdyboot_build(opt: &Opt, action: &BuildAction) {
+    let mut features = Vec::new();
+    if action.enable_verbose_feature {
+        features.push("verbose");
+    }
+    run_uefi_build(&opt.crdyboot_path(), opt.build_mode(), &features)?;
 }
 
 #[throws]
@@ -289,7 +313,7 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 
 #[throws]
 fn run_build_enroller(opt: &Opt) {
-    run_uefi_build(&opt.enroller_path(), opt.build_mode())?;
+    run_uefi_build(&opt.enroller_path(), opt.build_mode(), &[])?;
 
     gen_disk::gen_enroller_disk(opt)?;
 }
@@ -443,11 +467,11 @@ fn main() {
     initial_setup(&opt)?;
 
     match &opt.action {
-        Action::Build(_) => run_crdyboot_build(&opt),
+        Action::Build(action) => run_crdyboot_build(&opt, action),
         Action::BuildEnroller(_) => run_build_enroller(&opt),
         Action::BuildOvmf(_) => ovmf::run_build_ovmf(&opt),
         Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&opt),
-        Action::Check(_) => run_check(&opt),
+        Action::Check(action) => run_check(&opt, action),
         Action::Clean(_) => run_clean(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::UpdateDisk(_) => run_update_disk(&opt),
