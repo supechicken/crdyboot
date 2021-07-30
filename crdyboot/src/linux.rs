@@ -123,7 +123,7 @@ pub fn execute_linux_efi_stub(
     )?;
 
     let entry_point = ((kernel_data.as_ptr() as u64)
-        + entry_point_offset as u64) as *const ();
+        + u64::from(entry_point_offset)) as *const ();
 
     unsafe {
         type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
