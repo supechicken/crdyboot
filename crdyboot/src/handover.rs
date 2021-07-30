@@ -139,14 +139,18 @@ pub fn execute_linux_kernel_32(
     };
 
     boot_params.hdr.code32_start =
-        (kernel_data.as_ptr() as u64).try_into().unwrap();
+        (kernel_data.as_ptr() as u64).try_into().map_err(|_| {
+            Error::BadNumericConversion("boot_params.hdr.code32_start")
+        })?;
     boot_params.hdr.code32_start += (setup_sectors + 1) * 512;
 
     let mut cmdline = cmdline.as_bytes().to_vec();
     cmdline.push(0);
 
     boot_params.hdr.cmd_line_ptr =
-        (cmdline.as_ptr() as u64).try_into().unwrap();
+        (cmdline.as_ptr() as u64).try_into().map_err(|_| {
+            Error::BadNumericConversion("boot_params.hdr.cmd_line_ptr")
+        })?;
 
     let start = boot_params.hdr.code32_start + image_params.hdr.handover_offset;
 
