@@ -137,6 +137,10 @@ struct BuildAction {
     /// build crdyboot with the "verbose" feature
     #[argh(switch)]
     enable_verbose_feature: bool,
+
+    /// build crdyboot with a non-test key
+    #[argh(switch)]
+    disable_test_key: bool,
 }
 
 /// Build enroller.
@@ -161,6 +165,10 @@ struct CheckAction {
     /// build crdyboot with the "verbose" feature
     #[argh(switch)]
     enable_verbose_feature: bool,
+
+    /// build crdyboot with a non-test key
+    #[argh(switch)]
+    disable_test_key: bool,
 }
 
 /// Clean out all the target directories.
@@ -239,6 +247,7 @@ fn run_check(opt: &Opt, action: &CheckAction) {
         opt,
         &BuildAction {
             enable_verbose_feature: action.enable_verbose_feature,
+            disable_test_key: action.disable_test_key,
         },
     )?;
 }
@@ -287,6 +296,9 @@ fn run_crdyboot_build(opt: &Opt, action: &BuildAction) {
     let mut features = Vec::new();
     if action.enable_verbose_feature {
         features.push("verbose");
+    }
+    if !action.disable_test_key {
+        features.push("use_test_key");
     }
     run_uefi_build(&opt.crdyboot_path(), opt.build_mode(), &features)?;
 }
