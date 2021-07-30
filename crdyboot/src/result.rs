@@ -15,6 +15,8 @@ pub enum Error {
 
     LoadKernelFailed(vboot::return_code),
 
+    BadNumericConversion(&'static str),
+
     GetPeEntryPointFailed,
     KernelTooSmall,
     InvalidBootParameters,
@@ -65,6 +67,10 @@ impl fmt::Display for Error {
                     "failed to load kernel: {}",
                     vboot::return_code_to_str(*code)
                 )
+            }
+
+            BadNumericConversion(info) => {
+                write!(f, "failed to convert numeric type: {}", info)
             }
 
             GetPeEntryPointFailed => {
