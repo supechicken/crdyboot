@@ -1,5 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use std::env;
+use serde::Deserialize;
+use std::{env, fs, process};
 
 fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
     println!("cargo:rerun-if-changed={}", path.as_ref());
@@ -115,6 +116,73 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .expect("Couldn't write bindings!");
 }
 
+/// Clang AST node.
+#[derive(Debug, Deserialize)]
+struct AstNode {
+    kind: String,
+    name: Option<String>,
+    value: Option<String>,
+    #[serde(default)]
+    inner: Vec<AstNode>,
+}
+
+/// Generate a Rust function that converts from a vb2_return_code integer
+/// value to a somewhat human-readable string.
+fn gen_return_code_strings(vboot_ref: &Utf8Path) {
+    let header_path = vboot_ref.join("firmware/2lib/include/2return_codes.h");
+    rerun_if_changed(&header_path);
+
+    // Use clang to get an AST in JSON.
+    let output = process::Command::new("clang")
+        .args(&[
+            "-Xclang",
+            "-ast-dump=json",
+            "-fsyntax-only",
+            header_path.as_str(),
+        ])
+        .output()
+        .expect("failed to get AST (clang not found)");
+    assert!(output.status.success(), "failed to get AST (clang failed)");
+
+    // Parse the JSON.
+    let ast: AstNode = serde_json::from_slice(&output.stdout)
+        .expect("failed to parse AST JSON");
+
+    // Find the vb2_return_code enum.
+    let enum_node = ast
+        .inner
+        .iter()
+        .find(|node| {
+            node.kind == "EnumDecl"
+                && node.name.as_deref() == Some("vb2_return_code")
+        })
+        .expect("failed to find vb2_return_code");
+
+    // Get an iterator of enum member names.
+    let members = enum_node.inner.iter().map(|node| {
+        assert_eq!(node.kind, "EnumConstantDecl");
+        node.name.as_ref().expect("missing node name")
+    });
+
+    // Generate conversion code.
+    let mut lines = vec![
+        "pub fn return_code_to_str(code: vb2_return_code) -> &'static str {"
+            .to_string(),
+    ];
+    for name in members {
+        lines.push(format!("  if code == vb2_return_code::{} {{", name));
+        lines.push(format!("    return \"{}\";", name));
+        lines.push("  }".to_string());
+    }
+    lines.push("  \"unknown return code\"".to_string());
+    lines.push("}".to_string());
+
+    // Write to a file.
+    let out_dir = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = out_dir.join("vboot_return_codes.rs");
+    fs::write(&out_path, lines.join("\n")).unwrap();
+}
+
 fn main() {
     let vboot_ref = Utf8Path::new("../third_party/vboot_reference");
 
@@ -152,4 +220,5 @@ fn main() {
 
     build_vboot_lib(vboot_ref, &include_dirs, target);
     gen_fwlib_bindings(&include_dirs, target);
+    gen_return_code_strings(vboot_ref);
 }

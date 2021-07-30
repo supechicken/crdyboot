@@ -36,10 +36,12 @@ pub mod vboot_sys {
     type c_void = core::ffi::c_void;
 
     include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
+    include!(concat!(env!("OUT_DIR"), "/vboot_return_codes.rs"));
 }
 
 pub use disk::DiskIo;
 pub use load_kernel::{load_kernel, LoadedKernel};
+pub use vboot_sys::return_code_to_str;
 pub use vboot_sys::vb2_return_code as return_code;
 
 /// Get an &T backed by a byte slice. The slice is checked to make sure it's
