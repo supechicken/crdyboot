@@ -1,5 +1,6 @@
 use core::fmt;
 use uefi::Status;
+use vboot::LoadKernelError;
 
 pub enum Error {
     UefiServicesInitFailed(Status),
@@ -13,7 +14,7 @@ pub enum Error {
 
     ParentDiskNotFound,
 
-    LoadKernelFailed(vboot::return_code),
+    LoadKernelFailed(LoadKernelError),
 
     BadNumericConversion(&'static str),
 
@@ -61,12 +62,8 @@ impl fmt::Display for Error {
                 write!(f, "failed to get parent disk")
             }
 
-            LoadKernelFailed(code) => {
-                write!(
-                    f,
-                    "failed to load kernel: {}",
-                    vboot::return_code_to_str(*code)
-                )
+            LoadKernelFailed(err) => {
+                write!(f, "failed to load kernel: {}", err)
             }
 
             BadNumericConversion(info) => {
