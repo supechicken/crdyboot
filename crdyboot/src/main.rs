@@ -65,14 +65,12 @@ fn run_kernel(
 }
 
 fn run(crdyboot_image: Handle, st: SystemTable<Boot>) -> Result<()> {
-    let st_clone = unsafe { st.unsafe_clone() };
-    let bt = st_clone.boot_services();
-
     // TODO
     let test_key_vbpubk =
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
 
-    let gpt_disk = disk::GptDisk::new(crdyboot_image, bt).log_warning()?;
+    let gpt_disk =
+        disk::GptDisk::new(crdyboot_image, st.boot_services()).log_warning()?;
     let kernel = vboot::load_kernel(test_key_vbpubk, &gpt_disk).unwrap();
 
     if let Err(err) = run_kernel(crdyboot_image, st, &kernel).log_warning() {
