@@ -23,6 +23,11 @@ vboot = { path = "../vboot" }
 uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
 
 [features]
+# If enabled, a test key in the repo will be used to validate the kernel. If
+# disabled (the default), a key must be provided in this file (relative to
+# the repo root): "keys/kernel_key.vbpubk".
+use_test_key = []
+
 # If enabled, the max log level is set to Debug. If disabled (the default),
 # the max log level is set to Warn.
 verbose = []

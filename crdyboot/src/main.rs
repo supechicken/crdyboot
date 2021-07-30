@@ -72,6 +72,19 @@ fn set_log_level() {
     log::set_max_level(level);
 }
 
+/// Get the public key used to verify the kernel. By default the key is read
+/// from `keys/kernel_key.vbpubk`. If the `use_test_key` feature is enabled
+/// then the key is read from a test file in the repo instead.
+fn get_kernel_verification_key() -> &'static [u8] {
+    #[cfg(feature = "use_test_key")]
+    let key = include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
+
+    #[cfg(not(feature = "use_test_key"))]
+    let key = include_bytes!("../../keys/kernel_key.vbpubk");
+
+    key
+}
+
 fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .log_warning()
@@ -79,12 +92,9 @@ fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
 
     set_log_level();
 
-    // TODO
-    let test_key_vbpubk =
-        include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
-
+    let kernel_verification_key = get_kernel_verification_key();
     let gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())?;
-    let kernel = vboot::load_kernel(test_key_vbpubk, &gpt_disk)
+    let kernel = vboot::load_kernel(kernel_verification_key, &gpt_disk)
         .map_err(Error::LoadKernelFailed)?;
 
     run_kernel(crdyboot_image, st, &kernel)?;

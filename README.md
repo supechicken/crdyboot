@@ -101,6 +101,10 @@ Then run it in QEMU:
 By default crdyboot sets the max log level to Warn. Pass
 `--enable-verbose-feature` to the `check` or `build` command to set the max
 log level to Debug instead.
+
+By default crdyboot is built with a test key in the repo. To build embed a
+different key, place it `keys/kernel_key.vbpubk` (relative to the repo root)
+and run the `check` or `build` command with `--disable-test-key`.
     
 ## Testing on real hardware
 
