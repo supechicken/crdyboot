@@ -4,7 +4,12 @@
 //!
 //! This crate can be built for the host target so that tests can run.
 
-#![warn(missing_docs)]
+#![deny(clippy::cast_lossless)]
+#![deny(clippy::cast_possible_truncation)]
+#![deny(clippy::cast_possible_wrap)]
+#![deny(clippy::cast_precision_loss)]
+#![deny(clippy::cast_sign_loss)]
+#![deny(missing_docs)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 // Needed by the printf module.
