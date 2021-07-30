@@ -76,9 +76,7 @@ fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     let test_key_vbpubk =
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
 
-    let gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())
-        .log_warning()
-        .map_err(|err| Error::Gpt(err.status()))?;
+    let gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())?;
     let kernel = vboot::load_kernel(test_key_vbpubk, &gpt_disk)
         .map_err(Error::LoadKernelFailed)?;
 

@@ -9,8 +9,11 @@ pub enum Error {
 
     CommandLineIsNotAscii,
 
-    // TODO: break into more specific errors?
-    Gpt(Status),
+    DevicePathProtocolMissing(Status),
+    LoadedImageProtocolMissing(Status),
+    BlockIoProtocolMissing(Status),
+
+    ParentDiskNotFound,
 
     // TODO: think about how to print better errors
     LoadKernelFailed(vboot::return_code),
