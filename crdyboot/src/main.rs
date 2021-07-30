@@ -11,7 +11,7 @@ mod result;
 
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use log::info;
+use log::{info, LevelFilter};
 use result::{Error, Result};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
@@ -63,10 +63,21 @@ fn run_kernel(
     Ok(())
 }
 
+fn set_log_level() {
+    #[cfg(feature = "verbose")]
+    let level = LevelFilter::Debug;
+    #[cfg(not(feature = "verbose"))]
+    let level = LevelFilter::Warn;
+
+    log::set_max_level(level);
+}
+
 fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .log_warning()
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
+
+    set_log_level();
 
     // TODO
     let test_key_vbpubk =
