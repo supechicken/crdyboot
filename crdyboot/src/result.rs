@@ -5,7 +5,7 @@ pub enum Error {
     UefiServicesInitFailed(Status),
 
     GetCommandLineFailed,
-    CommandLineIsNotAscii,
+    CommandLineUcs2ConversionFailed,
 
     BlockIoProtocolMissing(Status),
     DevicePathProtocolMissing(Status),
@@ -41,7 +41,7 @@ impl fmt::Display for Error {
             GetCommandLineFailed => {
                 write!(f, "failed to get kernel command line")
             }
-            CommandLineIsNotAscii => {
+            CommandLineUcs2ConversionFailed => {
                 write!(f, "failed to convert kernel command line to UCS-2")
             }
 

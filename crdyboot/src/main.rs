@@ -20,22 +20,20 @@ use vboot::LoadedKernel;
 
 // TODO: open protocol vs handle protocol
 
-// TODO: check if uefi-rs already has a way to do this.
 fn ascii_str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
-    if !input.is_ascii() {
-        return Err(Error::CommandLineIsNotAscii);
-    }
-
     // Expect two bytes for each byte of the input, plus a null byte.
     let mut output = Vec::with_capacity(input.len() + 1);
 
-    output.extend(
-        input
-            .encode_utf16()
-            // OK to unwrap because all ASCII characters are
-            // valid UCS-2.
-            .map(|c| Char16::try_from(c).unwrap()),
-    );
+    // Convert to UTF-16, then convert to UCS-2.
+    for c in input.encode_utf16() {
+        if let Ok(c) = Char16::try_from(c) {
+            output.push(c);
+        } else {
+            return Err(Error::CommandLineUcs2ConversionFailed);
+        }
+    }
+
+    // Add trailing nul.
     output.push(NUL_16);
 
     Ok(output)
