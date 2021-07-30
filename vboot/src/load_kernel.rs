@@ -1,5 +1,5 @@
 use crate::disk::{Disk, DiskIo};
-use crate::{return_code, return_code_to_str, vboot_sys};
+use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
@@ -24,17 +24,17 @@ pub enum LoadKernelError {
     PubkeyTooSmall(usize),
 
     /// Call to `vb2api_init` failed.
-    ApiInitFailed(return_code),
+    ApiInitFailed(ReturnCode),
 
     /// Call to `LoadKernel` failed.
-    LoadKernelFailed(return_code),
+    LoadKernelFailed(ReturnCode),
 }
 
 impl fmt::Display for LoadKernelError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use LoadKernelError::*;
 
-        let mut write_with_rc = |msg, rc: &return_code| {
+        let mut write_with_rc = |msg, rc: &ReturnCode| {
             write!(f, "{}: 0x{:x} ({})", msg, rc.0, return_code_to_str(*rc))
         };
 
@@ -154,14 +154,14 @@ unsafe fn init_vb2_context(
     let mut ctx_ptr = ptr::null_mut();
 
     info!("vb2api_init");
-    let status = return_code(vboot_sys::vb2api_init(
+    let status = ReturnCode(vboot_sys::vb2api_init(
         workbuf.as_mut_ptr() as *mut c_void,
         workbuf.len().try_into().map_err(|_| {
             LoadKernelError::BadNumericConversion("workbuf length")
         })?,
         &mut ctx_ptr,
     ));
-    if status != return_code::VB2_SUCCESS {
+    if status != ReturnCode::VB2_SUCCESS {
         error!("vb2api_init failed: 0x{:x}", status.0);
         return Err(LoadKernelError::ApiInitFailed(status));
     }
@@ -229,12 +229,12 @@ pub fn load_kernel(
         let mut disk_info = disk.info();
 
         info!("LoadKernel");
-        let status = return_code(vboot_sys::LoadKernel(
+        let status = ReturnCode(vboot_sys::LoadKernel(
             ctx_ptr,
             &mut params,
             disk_info.as_mut_ptr(),
         ));
-        if status == return_code::VB2_SUCCESS {
+        if status == ReturnCode::VB2_SUCCESS {
             info!("LoadKernel success");
 
             Ok(LoadedKernel {
@@ -252,7 +252,6 @@ pub fn load_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::return_code;
 
     struct MemDisk {
         data: &'static [u8],
@@ -267,11 +266,11 @@ mod tests {
             self.data.len() as u64 / self.bytes_per_lba()
         }
 
-        fn read(&self, lba_start: u64, buffer: &mut [u8]) -> return_code {
+        fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
             let start = (lba_start * self.bytes_per_lba()) as usize;
             let end = start + buffer.len();
             buffer.copy_from_slice(&self.data[start..end]);
-            return_code::VB2_SUCCESS
+            ReturnCode::VB2_SUCCESS
         }
     }
 
@@ -282,7 +281,7 @@ mod tests {
             format!(
                 "{}",
                 LoadKernelError::LoadKernelFailed(
-                    return_code::VB2_ERROR_LK_NO_KERNEL_FOUND
+                    ReturnCode::VB2_ERROR_LK_NO_KERNEL_FOUND
                 )
             ),
             expected

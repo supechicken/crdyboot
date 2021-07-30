@@ -1,5 +1,5 @@
-use crate::return_code;
 use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
+use crate::ReturnCode;
 use core::convert::TryInto;
 use core::marker::PhantomData;
 use core::{ptr, slice};
@@ -13,7 +13,7 @@ pub trait DiskIo {
     fn lba_count(&self) -> u64;
 
     /// Read LBA sectors starting at `lba_start` from the device into `buffer`.
-    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> return_code;
+    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode;
 }
 
 pub struct DiskInfo<'a> {
@@ -70,7 +70,7 @@ impl<'a> DiskIo for Disk<'a> {
         self.io.lba_count()
     }
 
-    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> return_code {
+    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
         self.io.read(lba_start, buffer)
     }
 }
@@ -81,7 +81,7 @@ unsafe extern "C" fn VbExDiskRead(
     lba_start: u64,
     lba_count: u64,
     buffer: *mut u8,
-) -> return_code {
+) -> ReturnCode {
     let disk = Disk::from_handle(handle);
 
     let buffer_len = (disk.bytes_per_lba() * lba_count).try_into().unwrap();
@@ -98,7 +98,7 @@ extern "C" fn VbExDiskWrite(
     _lba_start: u64,
     _lba_count: u64,
     _buffer: *const u8,
-) -> return_code {
+) -> ReturnCode {
     // TODO
-    return_code::VB2_ERROR_EX_UNIMPLEMENTED
+    ReturnCode::VB2_ERROR_EX_UNIMPLEMENTED
 }

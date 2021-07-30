@@ -4,8 +4,8 @@ use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
-use vboot::return_code;
 use vboot::DiskIo;
+use vboot::ReturnCode;
 
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
@@ -135,19 +135,19 @@ impl<'a> DiskIo for GptDisk<'a> {
         self.block_io.media().last_block() + 1
     }
 
-    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> return_code {
+    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
         match self
             .block_io
             .read_blocks(self.block_io.media().media_id(), lba_start, buffer)
             .log_warning()
         {
-            Ok(()) => return_code::VB2_SUCCESS,
+            Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
                        lba_start, buffer.len(), err);
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?
-                return_code::VB2_ERROR_UNKNOWN
+                ReturnCode::VB2_ERROR_UNKNOWN
             }
         }
     }
