@@ -20,7 +20,7 @@ struct MyLoadedImage {
 
     // Source location of the image
     device_handle: Handle,
-    _file_path: *const c_void, // TODO: not supported yet
+    _file_path: *const c_void,
     _reserved: *const c_void,
 
     // Image load options
