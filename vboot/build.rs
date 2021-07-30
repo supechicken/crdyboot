@@ -82,8 +82,6 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
             is_bitfield: false,
         })
         .translate_enum_integer_types(true)
-        // See vb2_error_t comment in lib.rs.
-        .blocklist_type("vb2_error_t")
         // Block-listing these types avoids some unnecessary
         // generation of ctype typedefs.
         .blocklist_type("__uint8_t")

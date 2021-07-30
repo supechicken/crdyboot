@@ -24,13 +24,6 @@ mod malloc;
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
 pub mod vboot_sys {
-    // The signedness of vb2_return_code created by bindgen differs
-    // depending on the target
-    #[cfg(target_arch = "x86")]
-    type vb2_error_t = u32;
-    #[cfg(target_arch = "x86_64")]
-    type vb2_error_t = i32;
-
     // ctypes
     type c_char = i8;
     type c_void = core::ffi::c_void;
