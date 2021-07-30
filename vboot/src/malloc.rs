@@ -1,9 +1,10 @@
-use alloc::alloc::{
-    alloc as underlying_alloc, dealloc as underlying_dealloc, Layout,
-};
-use core::mem::size_of;
+//! Implement `malloc` and `free` so that vboot_reference can call those
+//! functions in a UEFI environment with no standard C library.
+//!
+//! Code in this file was adapted from: https://shift.click/blog/on-dealloc/
 
-// Adapted from https://shift.click/blog/on-dealloc/
+use alloc::alloc::Layout;
+use core::mem;
 
 #[derive(Copy, Clone)]
 struct AllocInfo {
@@ -11,7 +12,12 @@ struct AllocInfo {
     ptr: *mut u8,
 }
 
-unsafe fn wrapped_alloc(layout: Layout) -> *mut u8 {
+#[no_mangle]
+unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
+    let align = 8;
+    let layout =
+        Layout::from_size_align(size, align).expect("failed to create layout");
+
     // Compute a layout sufficient to store `AllocInfo`
     // immediately before it.
     let header_layout = Layout::new::<AllocInfo>();
@@ -20,7 +26,7 @@ unsafe fn wrapped_alloc(layout: Layout) -> *mut u8 {
         .extend(layout)
         .expect("failed to extend header layout");
 
-    let orig_ptr = underlying_alloc(to_request);
+    let orig_ptr = alloc::alloc::alloc(to_request);
     if orig_ptr.is_null() {
         return orig_ptr;
     }
@@ -29,7 +35,8 @@ unsafe fn wrapped_alloc(layout: Layout) -> *mut u8 {
     // Write `AllocInfo` immediately prior to the pointer we return.
     // This way, we always know where to get it for passing to
     // `underlying_dealloc`.
-    let info_ptr = result_ptr.sub(size_of::<AllocInfo>()) as *mut AllocInfo;
+    let info_ptr =
+        result_ptr.sub(mem::size_of::<AllocInfo>()) as *mut AllocInfo;
     info_ptr.write_unaligned(AllocInfo {
         layout: to_request,
         ptr: orig_ptr,
@@ -37,22 +44,11 @@ unsafe fn wrapped_alloc(layout: Layout) -> *mut u8 {
     result_ptr
 }
 
-unsafe fn wrapped_dealloc(ptr: *mut u8) {
+#[no_mangle]
+unsafe extern "C" fn free(ptr: *mut u8) {
     assert!(!ptr.is_null());
-    // Simply read the AllocInfo we wrote in `alloc`, and pass it into dealloc.
-    let info_ptr = ptr.sub(size_of::<AllocInfo>()) as *const AllocInfo;
+    // Read the `AllocInfo` we wrote in `malloc`, and pass it into `dealloc`.
+    let info_ptr = ptr.sub(mem::size_of::<AllocInfo>()) as *const AllocInfo;
     let info = info_ptr.read_unaligned();
-    underlying_dealloc(info.ptr, info.layout);
-}
-
-#[no_mangle]
-unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
-    let align = 8;
-    let layout = Layout::from_size_align(size, align).unwrap();
-    wrapped_alloc(layout)
-}
-
-#[no_mangle]
-unsafe extern "C" fn free(p: *mut u8) {
-    wrapped_dealloc(p)
+    alloc::alloc::dealloc(info.ptr, info.layout);
 }
