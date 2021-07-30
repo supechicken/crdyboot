@@ -100,15 +100,11 @@ pub fn load_kernel(
         let mut ctx_ptr = ptr::null_mut();
 
         info!("vb2api_init");
-        let status = return_code(
-            vboot_sys::vb2api_init(
-                workbuf.as_mut_ptr() as *mut c_void,
-                workbuf.len().try_into().unwrap(),
-                &mut ctx_ptr,
-            )
-            .try_into()
-            .unwrap(),
-        );
+        let status = return_code(vboot_sys::vb2api_init(
+            workbuf.as_mut_ptr() as *mut c_void,
+            workbuf.len().try_into().unwrap(),
+            &mut ctx_ptr,
+        ));
         if status != return_code::VB2_SUCCESS {
             error!("vb2api_init failed: 0x{:x}", status.0);
             return Err(status);
@@ -156,11 +152,11 @@ pub fn load_kernel(
         let mut disk_info = disk.info();
 
         info!("LoadKernel");
-        let status = return_code(
-            vboot_sys::LoadKernel(ctx_ptr, &mut params, disk_info.as_mut_ptr())
-                .try_into()
-                .unwrap(),
-        );
+        let status = return_code(vboot_sys::LoadKernel(
+            ctx_ptr,
+            &mut params,
+            disk_info.as_mut_ptr(),
+        ));
         if status == return_code::VB2_SUCCESS {
             info!("LoadKernel success");
 
