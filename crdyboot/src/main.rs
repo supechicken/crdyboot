@@ -7,21 +7,23 @@ extern crate alloc;
 mod disk;
 mod handover;
 mod linux;
+mod result;
 
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use log::{error, info};
+use log::info;
+use result::{Error, Result};
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
-use uefi::{Char16, Result};
+use uefi::Char16;
 use vboot::LoadedKernel;
 
 // TODO: open protocol vs handle protocol
 
 // TODO: check if uefi-rs already has a way to do this.
-fn ascii_str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
+fn ascii_str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
     if !input.is_ascii() {
-        return None;
+        return Err(Error::CommandLineIsNotAscii);
     }
 
     // Expect two bytes for each byte of the input, plus a null byte.
@@ -36,7 +38,7 @@ fn ascii_str_to_uefi_str(input: &str) -> Option<Vec<Char16>> {
     );
     output.push(NUL_16);
 
-    Some(output)
+    Ok(output)
 }
 
 fn run_kernel(
@@ -44,12 +46,12 @@ fn run_kernel(
     st: SystemTable<Boot>,
     kernel: &LoadedKernel,
 ) -> Result<()> {
-    // TODO: unwrap
-    let load_options_utf8 = kernel.command_line().unwrap();
+    let load_options_utf8 =
+        kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {}", load_options_utf8);
 
     // Convert the string to UCS-2.
-    let load_options_ucs2 = ascii_str_to_uefi_str(&load_options_utf8).unwrap();
+    let load_options_ucs2 = ascii_str_to_uefi_str(&load_options_utf8)?;
 
     // Run the kernel.
     linux::execute_linux_kernel(
@@ -59,36 +61,40 @@ fn run_kernel(
         &load_options_utf8,
         &load_options_ucs2,
     )
-    .log_warning()?;
+    .log_warning()
+    .map_err(|err| Error::RunKernelFailed(err.status()))?;
 
-    Status::SUCCESS.into()
+    Ok(())
 }
 
-fn run(crdyboot_image: Handle, st: SystemTable<Boot>) -> Result<()> {
+fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
+    uefi_services::init(&mut st)
+        .log_warning()
+        .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
+
     // TODO
     let test_key_vbpubk =
         include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
 
-    let gpt_disk =
-        disk::GptDisk::new(crdyboot_image, st.boot_services()).log_warning()?;
-    let kernel = vboot::load_kernel(test_key_vbpubk, &gpt_disk).unwrap();
+    let gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())
+        .log_warning()
+        .map_err(|err| Error::Gpt(err.status()))?;
+    let kernel = vboot::load_kernel(test_key_vbpubk, &gpt_disk)
+        .map_err(Error::LoadKernelFailed)?;
 
-    if let Err(err) = run_kernel(crdyboot_image, st, &kernel).log_warning() {
-        error!("failed to run kernel: {:?}", err);
-    }
+    run_kernel(crdyboot_image, st, &kernel)?;
 
-    // Failed to run any kernel.
-    Status::LOAD_ERROR.into()
+    Err(Error::KernelDidNotTakeControl)
 }
 
 #[entry]
-fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut st)
-        .expect_success("failed to initialize utilities");
-
-    run(image, st).expect_success("run failed");
-
-    panic!("failed to run any kernel");
+fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
+    match run(image, st) {
+        Ok(()) => unreachable!("kernel did not take control"),
+        Err(err) => {
+            panic!("boot failed: {}", err);
+        }
+    }
 }
 
 #[no_mangle]
