@@ -60,8 +60,11 @@ impl fmt::Display for Error {
             }
 
             LoadKernelFailed(code) => {
-                // TODO: print human-readable error names.
-                write!(f, "failed to load kernel: {:x}", code.0)
+                write!(
+                    f,
+                    "failed to load kernel: {}",
+                    vboot::return_code_to_str(*code)
+                )
             }
 
             GetPeEntryPointFailed => {
