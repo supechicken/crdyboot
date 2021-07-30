@@ -1,9 +1,9 @@
+use crate::result::{Error, Result};
 use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
-use uefi::Result;
 use vboot::return_code;
 use vboot::DiskIo;
 
@@ -12,9 +12,12 @@ fn device_paths_for_handle(
     handle: Handle,
     bt: &BootServices,
 ) -> Result<&DevicePath> {
-    let device_path = bt.handle_protocol::<DevicePath>(handle).log_warning()?;
+    let device_path = bt
+        .handle_protocol::<DevicePath>(handle)
+        .log_warning()
+        .map_err(|err| Error::DevicePathProtocolMissing(err.status()))?;
     let device_path = unsafe { &*device_path.get() };
-    Status::SUCCESS.into_with_val(|| device_path)
+    Ok(device_path)
 }
 
 /// True if `potential_parent` is the handle representing the disk that
@@ -28,20 +31,16 @@ fn is_parent_disk(
     partition: Handle,
     bt: &BootServices,
 ) -> Result<bool> {
-    let ret = |val: bool| Status::SUCCESS.into_with_val(|| val);
-
     let potential_parent_paths_iter =
-        device_paths_for_handle(potential_parent, bt)
-            .log_warning()?
-            .iter();
+        device_paths_for_handle(potential_parent, bt)?.iter();
     let mut partition_paths_iter =
-        device_paths_for_handle(partition, bt).log_warning()?.iter();
+        device_paths_for_handle(partition, bt)?.iter();
 
     for (parent_path, partition_path) in
         potential_parent_paths_iter.zip(&mut partition_paths_iter)
     {
         if parent_path != partition_path {
-            return ret(false);
+            return Ok(false);
         }
     }
 
@@ -50,17 +49,17 @@ fn is_parent_disk(
     let final_partition_path = if let Some(path) = partition_paths_iter.next() {
         path
     } else {
-        return ret(false);
+        return Ok(false);
     };
 
     // That final path should be a Hard Drive Media Device Path.
     if final_partition_path.full_type()
         != (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE)
     {
-        return ret(false);
+        return Ok(false);
     }
 
-    ret(true)
+    Ok(true)
 }
 
 /// Search `block_io_handles` for the device that is a parent of
@@ -69,14 +68,14 @@ fn find_parent_disk(
     block_io_handles: &[Handle],
     partition_handle: Handle,
     bt: &BootServices,
-) -> Result<Option<Handle>> {
+) -> Result<Handle> {
     for handle in block_io_handles {
-        if is_parent_disk(*handle, partition_handle, bt).log_warning()? {
-            return Status::SUCCESS.into_with_val(|| Some(*handle));
+        if is_parent_disk(*handle, partition_handle, bt)? {
+            return Ok(*handle);
         }
     }
 
-    Status::SUCCESS.into_with_val(|| None)
+    Err(Error::ParentDiskNotFound)
 }
 
 pub fn find_disk_block_io(
@@ -88,29 +87,28 @@ pub fn find_disk_block_io(
     // loaded from.
     let loaded_image = bt
         .handle_protocol::<LoadedImage>(crdyboot_image)
-        .log_warning()?;
+        .log_warning()
+        .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let loaded_image = unsafe { &*loaded_image.get() };
     let partition_handle = loaded_image.device();
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
-    let block_io_handles = bt.find_handles::<BlockIO>().log_warning()?;
+    let block_io_handles = bt
+        .find_handles::<BlockIO>()
+        .log_warning()
+        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle = if let Some(parent) =
-        find_parent_disk(&block_io_handles, partition_handle, bt)
-            .log_warning()?
-    {
-        parent
-    } else {
-        error!("parent disk not found");
-        return Status::NOT_FOUND.into_with_val(|| unreachable!());
-    };
+    let disk_handle =
+        find_parent_disk(&block_io_handles, partition_handle, bt)?;
 
-    let disk_block_io =
-        bt.handle_protocol::<BlockIO>(disk_handle).log_warning()?;
+    let disk_block_io = bt
+        .handle_protocol::<BlockIO>(disk_handle)
+        .log_warning()
+        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
     let disk_block_io = unsafe { &*disk_block_io.get() };
-    Status::SUCCESS.into_with_val(|| disk_block_io)
+    Ok(disk_block_io)
 }
 
 pub struct GptDisk<'a> {
@@ -122,9 +120,9 @@ impl<'a> GptDisk<'a> {
         crdyboot_image: Handle,
         bt: &'a BootServices,
     ) -> Result<GptDisk<'a>> {
-        let block_io = find_disk_block_io(crdyboot_image, bt).log_warning()?;
+        let block_io = find_disk_block_io(crdyboot_image, bt)?;
 
-        Status::SUCCESS.into_with_val(|| GptDisk { block_io })
+        Ok(GptDisk { block_io })
     }
 }
 
