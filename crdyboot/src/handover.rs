@@ -95,6 +95,14 @@ struct boot_params {
 
 const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
 
+/// Convert the slice to a pointer, then attempt to convert the pointer to a
+/// `u32`. Return `Error::BadNumericConversion` on failure.
+fn u8_slice_to_ptr_to_u32(slice: &[u8], info: &'static str) -> Result<u32> {
+    let int = slice.as_ptr() as usize;
+    int.try_into()
+        .map_err(|_| Error::BadNumericConversion(info))
+}
+
 /// Run the kernel using the EFI handover protocol.
 ///
 /// - https://www.kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
@@ -133,24 +141,20 @@ pub fn execute_linux_kernel_32(
     boot_params.hdr.type_of_loader = 0xff;
 
     let setup_sectors: u32 = if image_params.hdr.setup_sects > 0 {
-        image_params.hdr.setup_sects as u32
+        image_params.hdr.setup_sects.into()
     } else {
         4
     };
 
     boot_params.hdr.code32_start =
-        (kernel_data.as_ptr() as u64).try_into().map_err(|_| {
-            Error::BadNumericConversion("boot_params.hdr.code32_start")
-        })?;
+        u8_slice_to_ptr_to_u32(kernel_data, "boot_params.hdr.code32_start")?;
     boot_params.hdr.code32_start += (setup_sectors + 1) * 512;
 
     let mut cmdline = cmdline.as_bytes().to_vec();
     cmdline.push(0);
 
     boot_params.hdr.cmd_line_ptr =
-        (cmdline.as_ptr() as u64).try_into().map_err(|_| {
-            Error::BadNumericConversion("boot_params.hdr.cmd_line_ptr")
-        })?;
+        u8_slice_to_ptr_to_u32(&cmdline, "boot_params.hdr.cmd_line_ptr")?;
 
     let start = boot_params.hdr.code32_start + image_params.hdr.handover_offset;
 
