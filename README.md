@@ -98,6 +98,10 @@ Then run it in QEMU:
 
     ./x.py qemu [--ia32] [--secure-boot]
     
+By default crdyboot sets the max log level to Warn. Pass
+`--enable-verbose-feature` to the `check` or `build` command to set the max
+log level to Debug instead.
+    
 ## Testing on real hardware
 
 To test secure boot with real hardware you will need to enroll custom
