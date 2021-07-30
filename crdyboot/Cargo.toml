@@ -1,8 +1,12 @@
 [package]
 name = "crdyboot"
-version = "0.1.0"
 edition = "2018"
 resolver = "2"
+
+# These two fields are also used when generating sbat.csv.
+# TODO: update this once the repo is public.
+repository = "https://neverware-internal.git.corp.google.com/crdyboot"
+version = "0.1.0"
 
 [dependencies]
 log = "0.4"

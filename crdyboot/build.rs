@@ -7,16 +7,16 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
-struct SbatEntry {
-    component_name: &'static str,
+struct SbatEntry<'a> {
+    component_name: &'a str,
     component_generation: u32,
-    vendor_name: &'static str,
-    vendor_package_name: &'static str,
-    vendor_version: &'static str,
-    vendor_url: &'static str,
+    vendor_name: &'a str,
+    vendor_package_name: &'a str,
+    vendor_version: &'a str,
+    vendor_url: &'a str,
 }
 
-impl SbatEntry {
+impl<'a> SbatEntry<'a> {
     fn to_csv(&self) -> String {
         format!(
             "{},{},{},{},{},{}",
@@ -30,11 +30,11 @@ impl SbatEntry {
     }
 }
 
-struct Sbat {
-    entries: Vec<SbatEntry>,
+struct Sbat<'a> {
+    entries: Vec<SbatEntry<'a>>,
 }
 
-impl Sbat {
+impl<'a> Sbat<'a> {
     fn to_csv(&self) -> String {
         let lines: Vec<_> =
             self.entries.iter().map(SbatEntry::to_csv).collect();
@@ -45,9 +45,8 @@ impl Sbat {
 fn main() {
     let crdyboot_name = "crdyboot";
     let crdyboot_generation = 1;
-    let crdyboot_version = "0.1.0";
-    let crdyboot_url =
-        "https://neverware-internal.git.corp.google.com/crdyboot";
+    let crdyboot_version = env::var("CARGO_PKG_VERSION").unwrap();
+    let crdyboot_url = env::var("CARGO_PKG_REPOSITORY").unwrap();
 
     let mut sbat = Sbat {
         entries: Vec::new(),
@@ -65,8 +64,8 @@ fn main() {
         component_generation: crdyboot_generation,
         vendor_name: "Google",
         vendor_package_name: crdyboot_name,
-        vendor_version: crdyboot_version,
-        vendor_url: crdyboot_url,
+        vendor_version: &crdyboot_version,
+        vendor_url: &crdyboot_url,
     });
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
