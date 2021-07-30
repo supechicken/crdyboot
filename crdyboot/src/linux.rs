@@ -1,13 +1,14 @@
 use crate::handover;
+use crate::result::{Error, Result};
 use core::convert::TryInto;
 use core::ffi::c_void;
 use core::mem;
-use log::{error, info};
+use log::info;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
 use uefi::table::{Boot, SystemTable};
-use uefi::{Char16, Handle, Result, Status};
+use uefi::{Char16, Handle, Status};
 
 // TODO, copied from uefi-rs so that we can set some of the non-public
 // options. Should just make them public...
@@ -54,7 +55,10 @@ fn modify_loaded_image(
 ) -> Result<()> {
     let bt = system_table.boot_services();
 
-    let li = bt.handle_protocol::<LoadedImage>(image).log_warning()?;
+    let li = bt
+        .handle_protocol::<LoadedImage>(image)
+        .log_warning()
+        .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let li: &mut LoadedImage = unsafe { &mut *li.get() };
     let li: &mut MyLoadedImage =
         unsafe { &mut *(li as *mut LoadedImage as *mut MyLoadedImage) };
@@ -63,20 +67,18 @@ fn modify_loaded_image(
     li.image_size = if let Ok(size) = kernel_data.len().try_into() {
         size
     } else {
-        error!("kernel data is too big");
-        return Status::LOAD_ERROR.into();
+        return Err(Error::KernelDataTooBig(kernel_data.len()));
     };
 
     li.load_options = cmdline_ucs2.as_ptr();
-    li.load_options_size = if let Ok(size) = (2 * cmdline_ucs2.len()).try_into()
-    {
+    let load_options_size = 2 * cmdline_ucs2.len();
+    li.load_options_size = if let Ok(size) = load_options_size.try_into() {
         size
     } else {
-        error!("command-line data is too big");
-        return Status::LOAD_ERROR.into();
+        return Err(Error::CommandLineTooBig(load_options_size));
     };
 
-    Status::SUCCESS.into()
+    Ok(())
 }
 
 /// Hand off control to the Linux EFI stub.
@@ -106,8 +108,7 @@ pub fn execute_linux_efi_stub(
         if let Some(offset) = get_pe_entry_point(kernel_data) {
             offset
         } else {
-            error!("failed to get PE entry point");
-            return Status::LOAD_ERROR.into();
+            return Err(Error::GetPeEntryPointFailed);
         };
 
     // Ideally we could create a new image here, but I'm not sure
@@ -119,8 +120,7 @@ pub fn execute_linux_efi_stub(
         &system_table,
         kernel_data,
         cmdline_ucs2,
-    )
-    .log_warning()?;
+    )?;
 
     let entry_point = ((kernel_data.as_ptr() as u64)
         + entry_point_offset as u64) as *const ();
@@ -131,7 +131,7 @@ pub fn execute_linux_efi_stub(
         (entry_point)(crdyboot_image, system_table);
     }
 
-    unreachable!("kernel returned control");
+    Err(Error::KernelDidNotTakeControl)
 }
 
 pub fn execute_linux_kernel(
