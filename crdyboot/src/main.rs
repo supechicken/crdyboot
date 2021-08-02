@@ -24,8 +24,6 @@ use uefi::prelude::*;
 use uefi::Char16;
 use vboot::LoadedKernel;
 
-// TODO: open protocol vs handle protocol
-
 fn ascii_str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
     // Expect two bytes for each byte of the input, plus a null byte.
     let mut output = Vec::with_capacity(input.len() + 1);
