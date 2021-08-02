@@ -18,7 +18,8 @@ pub enum Error {
 
     BadNumericConversion(&'static str),
 
-    GetPeEntryPointFailed,
+    PeHeaderTooSmall,
+    InvalidPeMagic,
     KernelTooSmall,
     InvalidBootParameters,
     KernelDataTooBig(usize),
@@ -70,10 +71,12 @@ impl fmt::Display for Error {
                 write!(f, "failed to convert numeric type: {}", info)
             }
 
-            GetPeEntryPointFailed => {
-                write!(f, "failed to get PE entry point")
+            PeHeaderTooSmall => {
+                write!(f, "PE header is too small")
             }
-
+            InvalidPeMagic => {
+                write!(f, "invalid PE magic")
+            }
             KernelTooSmall => {
                 write!(f, "kernel data is too small to contain boot parameters")
             }
