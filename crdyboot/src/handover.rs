@@ -133,7 +133,7 @@ pub fn execute_linux_kernel_32(
 
     let mut boot_params_raw = vec![0; 0x4000];
     let boot_params: &mut boot_params =
-        unsafe { &mut *(boot_params_raw.as_mut_ptr() as *mut boot_params) };
+        unsafe { &mut *boot_params_raw.as_mut_ptr().cast::<boot_params>() };
 
     unsafe {
         ptr::copy(&image_params.hdr, &mut boot_params.hdr, 1);

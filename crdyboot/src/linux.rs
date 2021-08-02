@@ -61,9 +61,9 @@ fn modify_loaded_image(
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let li: &mut LoadedImage = unsafe { &mut *li.get() };
     let li: &mut MyLoadedImage =
-        unsafe { &mut *(li as *mut LoadedImage as *mut MyLoadedImage) };
+        unsafe { &mut *((li as *mut LoadedImage).cast::<MyLoadedImage>()) };
 
-    li.image_base = kernel_data.as_ptr() as *const c_void;
+    li.image_base = kernel_data.as_ptr().cast::<c_void>();
     li.image_size = if let Ok(size) = kernel_data.len().try_into() {
         size
     } else {

@@ -31,11 +31,11 @@ fn device_path_eq(a: &DevicePath, b: &DevicePath) -> bool {
     // comparing the fields of the `DevicePath` struct.
     unsafe {
         let a_bytes = slice::from_raw_parts(
-            a as *const DevicePath as *const u8,
+            (a as *const DevicePath).cast::<u8>(),
             a.length() as usize,
         );
         let b_bytes = slice::from_raw_parts(
-            b as *const DevicePath as *const u8,
+            (b as *const DevicePath).cast::<u8>(),
             b.length() as usize,
         );
 
