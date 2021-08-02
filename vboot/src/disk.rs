@@ -1,6 +1,7 @@
 use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
 use crate::ReturnCode;
 use core::convert::TryInto;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::{ptr, slice};
 use log::error;
@@ -40,11 +41,11 @@ impl<'a> Disk<'a> {
     }
 
     fn as_handle(&mut self) -> VbExDiskHandle_t {
-        self as *mut Disk as VbExDiskHandle_t
+        (self as *mut Disk).cast::<c_void>()
     }
 
     unsafe fn from_handle(handle: VbExDiskHandle_t) -> &'a mut Disk<'a> {
-        &mut *(handle as *mut Disk)
+        &mut *handle.cast::<Disk>()
     }
 
     pub fn info(&mut self) -> DiskInfo {

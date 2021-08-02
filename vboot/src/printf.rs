@@ -28,7 +28,7 @@ unsafe extern "C" fn printf_wrapper(
 ) {
     let func = str_from_c_str(func);
     printf::format(
-        fmt as *const i8,
+        fmt.cast::<i8>(),
         args.as_va_list(),
         printf::output::fmt_write(output),
     );
