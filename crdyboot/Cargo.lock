@@ -120,21 +120,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10c2722795460108a7872e1cd933a85d6ec38abc4baecad51028f702da28889f"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccaeedb56da03b09f598226e25e80088cb4cd25f316e6e4df7d695f0feeb1403"
-
-[[package]]
 name = "crdyboot"
 version = "1.0.0"
 dependencies = [
@@ -417,10 +402,9 @@ dependencies = [
 [[package]]
 name = "uefi"
 version = "0.11.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#6e718f931912dfbeb5de43b285ce1ad40cd056fd"
+source = "git+https://github.com/rust-osdev/uefi-rs.git?branch=master#b1416adce922609752487dc32897d8d675fa8f94"
 dependencies = [
  "bitflags",
- "crc",
  "log",
  "ucs2",
  "uefi-macros",
@@ -440,7 +424,7 @@ dependencies = [
 [[package]]
 name = "uefi-services"
 version = "0.8.0"
-source = "git+https://github.com/nicholasbishop/uefi-rs.git?branch=bishop-integration-branch#6e718f931912dfbeb5de43b285ce1ad40cd056fd"
+source = "git+https://github.com/rust-osdev/uefi-rs.git?branch=master#b1416adce922609752487dc32897d8d675fa8f94"
 dependencies = [
  "cfg-if",
  "log",

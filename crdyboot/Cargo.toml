@@ -11,16 +11,16 @@ version = "1.0.0"
 [dependencies]
 log = "0.4"
 
-# TODO: get remaining stuff in the integration branch PR'd and merged upstream
-# and into a new uefi-rs release, then switch these two deps back to crates.io.
-uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch", features = ["exts", "ignore-logger-errors"] }
-uefi-services = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
+# TODO: the current 0.11.0 release doesn't everything we need yet, once a
+# new release is out switch these two deps back to crates.io.
+uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", branch = "master", features = ["exts", "ignore-logger-errors"] }
+uefi-services = { git = "https://github.com/rust-osdev/uefi-rs.git", branch = "master" }
 
 vboot = { path = "../vboot" }
 
 [patch.crates-io]
 # This is needed to fix uefi-services' dep on uefi
-uefi = { git = "https://github.com/nicholasbishop/uefi-rs.git", branch = "bishop-integration-branch" }
+uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", branch = "master" }
 
 [features]
 # If enabled, a test key in the repo will be used to validate the kernel. If
