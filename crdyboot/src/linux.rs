@@ -3,7 +3,7 @@ use crate::result::{Error, Result};
 use core::convert::TryInto;
 use core::ffi::c_void;
 use core::mem;
-use log::info;
+use log::{error, info};
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
@@ -36,14 +36,45 @@ struct MyLoadedImage {
     unload: extern "efiapi" fn(image_handle: Handle) -> Status,
 }
 
-fn get_pe_entry_point(data: &[u8]) -> Option<u32> {
-    let pe_header_offset =
-        u32::from_le_bytes(data.get(0x3c..0x3c + 4)?.try_into().ok()?) as usize;
+fn get_pe_entry_point(data: &[u8]) -> Result<u32> {
+    // Check the magic bytes in the DOS header.
+    let dos_magic = data.get(0..2).ok_or(Error::PeHeaderTooSmall)?;
+    if dos_magic != [0x4d, 0x5a] {
+        error!("invalid DOS header magic: {:x?}", dos_magic);
+        return Err(Error::InvalidPeMagic);
+    }
 
-    let pe_header = &data.get(pe_header_offset..)?;
+    // Get the offset of the PE header. This is stored as a u32 at offset
+    // 0x3c.
+    let offset_of_pe_header_offset = 0x3c;
+    let pe_header_offset_bytes = data
+        .get(offset_of_pe_header_offset..offset_of_pe_header_offset + 4)
+        .ok_or(Error::PeHeaderTooSmall)?;
+    let pe_header_offset: usize = u32::from_le_bytes(
+        pe_header_offset_bytes.try_into().expect("not enough bytes"),
+    )
+    .try_into()
+    .expect("usize too small");
 
-    Some(u32::from_le_bytes(
-        pe_header.get(0x28..0x28 + 4)?.try_into().ok()?,
+    let pe_header = &data
+        .get(pe_header_offset..)
+        .ok_or(Error::PeHeaderTooSmall)?;
+
+    // Check the magic bytes in the PE header.
+    let pe_magic = pe_header.get(0..4).ok_or(Error::PeHeaderTooSmall)?;
+    if pe_magic != [0x50, 0x45, 0x00, 0x00] {
+        error!("invalid PE header magic: {:x?}", pe_magic);
+        return Err(Error::InvalidPeMagic);
+    }
+
+    // Get the entry point, which is stored as a u32 at offset 0x28 within
+    // the PE header.
+    let offset_of_entry_point = 0x28;
+    let entry_point_bytes = pe_header
+        .get(offset_of_entry_point..offset_of_entry_point + 4)
+        .ok_or(Error::PeHeaderTooSmall)?;
+    Ok(u32::from_le_bytes(
+        entry_point_bytes.try_into().expect("not enough bytes"),
     ))
 }
 
@@ -104,12 +135,7 @@ pub fn execute_linux_efi_stub(
     system_table: SystemTable<Boot>,
     cmdline_ucs2: &[Char16],
 ) -> Result<()> {
-    let entry_point_offset =
-        if let Some(offset) = get_pe_entry_point(kernel_data) {
-            offset
-        } else {
-            return Err(Error::GetPeEntryPointFailed);
-        };
+    let entry_point_offset = get_pe_entry_point(kernel_data)?;
 
     // Ideally we could create a new image here, but I'm not sure
     // there's any way to do that without calling LoadImage, which we
