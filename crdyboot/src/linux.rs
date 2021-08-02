@@ -10,6 +10,8 @@ use uefi::table::boot::MemoryType;
 use uefi::table::{Boot, SystemTable};
 use uefi::{Char16, Handle, Status};
 
+type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
+
 // TODO, copied from uefi-rs so that we can set some of the non-public
 // options. Should just make them public...
 #[repr(C)]
@@ -36,7 +38,7 @@ struct MyLoadedImage {
     unload: extern "efiapi" fn(image_handle: Handle) -> Status,
 }
 
-fn get_pe_entry_point(data: &[u8]) -> Result<u32> {
+fn get_pe_entry_point(data: &[u8]) -> Result<Entrypoint> {
     // Check the magic bytes in the DOS header.
     let dos_magic = data.get(0..2).ok_or(Error::PeHeaderTooSmall)?;
     if dos_magic != [0x4d, 0x5a] {
@@ -44,17 +46,30 @@ fn get_pe_entry_point(data: &[u8]) -> Result<u32> {
         return Err(Error::InvalidPeMagic);
     }
 
+    // Get `size_of(T)` bytes starting at `offset` from `data`.
+    fn get_slice<T>(data: &[u8], offset: usize) -> Result<&[u8]> {
+        data.get(offset..offset + mem::size_of::<T>())
+            .ok_or(Error::PeHeaderTooSmall)
+    }
+
+    // Get a little-endian u32 from `data` at `offset` and convert to a
+    // `usize`.
+    fn get_u32_as_usize(data: &[u8], offset: usize) -> Result<usize> {
+        let bytes = get_slice::<u32>(data, offset)?;
+
+        let val = u32::from_le_bytes(
+            // OK to unwrap because we just got 4 bytes.
+            bytes.try_into().expect("not enough bytes"),
+        );
+
+        // OK to unwrap because usize is always at least as big as a u32 on
+        // our targets.
+        Ok(val.try_into().expect("usize too small"))
+    }
+
     // Get the offset of the PE header. This is stored as a u32 at offset
     // 0x3c.
-    let offset_of_pe_header_offset = 0x3c;
-    let pe_header_offset_bytes = data
-        .get(offset_of_pe_header_offset..offset_of_pe_header_offset + 4)
-        .ok_or(Error::PeHeaderTooSmall)?;
-    let pe_header_offset: usize = u32::from_le_bytes(
-        pe_header_offset_bytes.try_into().expect("not enough bytes"),
-    )
-    .try_into()
-    .expect("usize too small");
+    let pe_header_offset = get_u32_as_usize(data, 0x3c)?;
 
     let pe_header = &data
         .get(pe_header_offset..)
@@ -67,15 +82,20 @@ fn get_pe_entry_point(data: &[u8]) -> Result<u32> {
         return Err(Error::InvalidPeMagic);
     }
 
-    // Get the entry point, which is stored as a u32 at offset 0x28 within
-    // the PE header.
-    let offset_of_entry_point = 0x28;
-    let entry_point_bytes = pe_header
-        .get(offset_of_entry_point..offset_of_entry_point + 4)
-        .ok_or(Error::PeHeaderTooSmall)?;
-    Ok(u32::from_le_bytes(
-        entry_point_bytes.try_into().expect("not enough bytes"),
-    ))
+    // Get the entry point offset (relative to the start of the kernel
+    // data), which is stored as a u32 at offset 0x28 within the PE header.
+    let entry_point_offset = get_u32_as_usize(pe_header, 0x28)?;
+
+    let entry_point_address = (data.as_ptr() as usize) + entry_point_offset;
+    info!("entry_point_address: 0x{:x}", entry_point_address);
+
+    // Convert the address back to a pointer and transmute to the desired
+    // function pointer type.
+    let entry_point = entry_point_address as *const ();
+    unsafe {
+        let entry_point: Entrypoint = mem::transmute(entry_point);
+        Ok(entry_point)
+    }
 }
 
 fn modify_loaded_image(
@@ -135,7 +155,7 @@ pub fn execute_linux_efi_stub(
     system_table: SystemTable<Boot>,
     cmdline_ucs2: &[Char16],
 ) -> Result<()> {
-    let entry_point_offset = get_pe_entry_point(kernel_data)?;
+    let entry_point = get_pe_entry_point(kernel_data)?;
 
     // Ideally we could create a new image here, but I'm not sure
     // there's any way to do that without calling LoadImage, which we
@@ -148,12 +168,7 @@ pub fn execute_linux_efi_stub(
         cmdline_ucs2,
     )?;
 
-    let entry_point = ((kernel_data.as_ptr() as u64)
-        + u64::from(entry_point_offset)) as *const ();
-
     unsafe {
-        type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
-        let entry_point: Entrypoint = mem::transmute(entry_point);
         (entry_point)(crdyboot_image, system_table);
     }
 
