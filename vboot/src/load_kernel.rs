@@ -155,7 +155,7 @@ unsafe fn init_vb2_context(
 
     info!("vb2api_init");
     let status = ReturnCode(vboot_sys::vb2api_init(
-        workbuf.as_mut_ptr() as *mut c_void,
+        workbuf.as_mut_ptr().cast::<c_void>(),
         workbuf.len().try_into().map_err(|_| {
             LoadKernelError::BadNumericConversion("workbuf length")
         })?,
@@ -176,7 +176,8 @@ unsafe fn init_vb2_context(
         packed_pubkey.len().try_into().map_err(|_| {
             LoadKernelError::BadNumericConversion("pubkey length")
         })?,
-    ) as *mut u8;
+    )
+    .cast::<u8>();
     packed_pubkey
         .as_ptr()
         .copy_to_nonoverlapping(kernel_key_ptr, packed_pubkey.len());
@@ -211,7 +212,7 @@ pub fn load_kernel(
 
         let mut params = vboot_sys::VbSelectAndLoadKernelParams {
             // Initialize inputs.
-            kernel_buffer: kernel_buffer.as_mut_ptr() as *mut c_void,
+            kernel_buffer: kernel_buffer.as_mut_ptr().cast::<c_void>(),
             kernel_buffer_size: kernel_buffer.len().try_into().map_err(
                 |_| LoadKernelError::BadNumericConversion("kernel buffer size"),
             )?,

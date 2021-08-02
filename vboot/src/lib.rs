@@ -9,6 +9,7 @@
 #![deny(clippy::cast_possible_wrap)]
 #![deny(clippy::cast_precision_loss)]
 #![deny(clippy::cast_sign_loss)]
+#![deny(clippy::ptr_as_ptr)]
 #![deny(missing_docs)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
@@ -29,6 +30,7 @@ mod malloc;
 
 /// Bindgen wrappers for parts of vboot_reference.
 #[allow(clippy::missing_safety_doc)]
+#[allow(clippy::ptr_as_ptr)]
 #[allow(missing_docs)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
@@ -59,7 +61,7 @@ pub unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Option<&T> {
         return None;
     }
 
-    let ptr = buf.as_ptr() as *const T;
+    let ptr = buf.as_ptr().cast::<T>();
 
     Some(&*ptr)
 }
