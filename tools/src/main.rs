@@ -1,5 +1,6 @@
 mod arch;
 mod build_mode;
+mod config;
 mod gen_disk;
 mod loopback;
 mod mount;
@@ -14,6 +15,7 @@ use argh::FromArgs;
 use build_mode::BuildMode;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
+use config::Config;
 use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
@@ -34,6 +36,14 @@ pub struct Opt {
 }
 
 impl Opt {
+    fn conf_path(&self) -> Utf8PathBuf {
+        self.repo.join("crdyboot.conf")
+    }
+
+    fn default_conf_path(&self) -> Utf8PathBuf {
+        self.tools_path().join("default.conf")
+    }
+
     fn crdyboot_path(&self) -> Utf8PathBuf {
         self.repo.join("crdyboot")
     }
@@ -133,15 +143,7 @@ enum Action {
 /// Build crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build")]
-struct BuildAction {
-    /// build crdyboot with the "verbose" feature
-    #[argh(switch)]
-    enable_verbose_feature: bool,
-
-    /// build crdyboot with a non-test key
-    #[argh(switch)]
-    disable_test_key: bool,
-}
+struct BuildAction {}
 
 /// Build enroller.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -161,15 +163,7 @@ struct BuildVbootTestDiskAction {}
 /// Format, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
-struct CheckAction {
-    /// build crdyboot with the "verbose" feature
-    #[argh(switch)]
-    enable_verbose_feature: bool,
-
-    /// build crdyboot with a non-test key
-    #[argh(switch)]
-    disable_test_key: bool,
-}
+struct CheckAction {}
 
 /// Clean out all the target directories.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -239,17 +233,11 @@ fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
 }
 
 #[throws]
-fn run_check(opt: &Opt, action: &CheckAction) {
+fn run_check(opt: &Opt, conf: &Config) {
     run_rustfmt(opt)?;
-    run_clippy(opt)?;
     run_tests(opt)?;
-    run_crdyboot_build(
-        opt,
-        &BuildAction {
-            enable_verbose_feature: action.enable_verbose_feature,
-            disable_test_key: action.disable_test_key,
-        },
-    )?;
+    run_crdyboot_build(opt, conf)?;
+    run_clippy(opt)?;
 }
 
 #[throws]
@@ -292,12 +280,12 @@ fn run_uefi_build(
 }
 
 #[throws]
-fn run_crdyboot_build(opt: &Opt, action: &BuildAction) {
+fn run_crdyboot_build(opt: &Opt, conf: &Config) {
     let mut features = Vec::new();
-    if action.enable_verbose_feature {
+    if conf.enable_verbose_logging {
         features.push("verbose");
     }
-    if !action.disable_test_key {
+    if conf.use_test_key {
         features.push("use_test_key");
     }
     run_uefi_build(&opt.crdyboot_path(), opt.build_mode(), &features)?;
@@ -390,12 +378,21 @@ fn run_clippy(opt: &Opt) {
 }
 
 #[throws]
-fn run_tests(opt: &Opt) {
-    let vboot_dir = opt.vboot_path();
-    let mut cmd = Command::with_args("cargo", &["+nightly", "test"]);
-    modify_cmd_for_path_prefix(&mut cmd, &vboot_dir);
-    cmd.set_dir(&vboot_dir);
+fn run_tests_in_dir(dir: &Utf8Path, nightly: bool) {
+    let mut cmd = Command::new("cargo");
+    if nightly {
+        cmd.add_arg("+nightly");
+    }
+    cmd.add_arg("test");
+    modify_cmd_for_path_prefix(&mut cmd, dir);
+    cmd.set_dir(dir);
     cmd.run()?;
+}
+
+#[throws]
+fn run_tests(opt: &Opt) {
+    run_tests_in_dir(&opt.tools_path(), /* nightly=*/ false)?;
+    run_tests_in_dir(&opt.vboot_path(), /* nightly=*/ true)?;
 }
 
 #[throws]
@@ -463,6 +460,10 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
 
 #[throws]
 fn initial_setup(opt: &Opt) {
+    if !opt.conf_path().exists() {
+        copy_file(opt.default_conf_path(), opt.conf_path())?;
+    }
+
     Command::with_args(
         "git",
         &["-C", opt.repo.as_str(), "submodule", "update", "--init"],
@@ -478,12 +479,14 @@ fn main() {
 
     initial_setup(&opt)?;
 
+    let conf = Config::load(&opt)?;
+
     match &opt.action {
-        Action::Build(action) => run_crdyboot_build(&opt, action),
+        Action::Build(_) => run_crdyboot_build(&opt, &conf),
         Action::BuildEnroller(_) => run_build_enroller(&opt),
         Action::BuildOvmf(_) => ovmf::run_build_ovmf(&opt),
         Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&opt),
-        Action::Check(action) => run_check(&opt, action),
+        Action::Check(_) => run_check(&opt, &conf),
         Action::Clean(_) => run_clean(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::UpdateDisk(_) => run_update_disk(&opt),
