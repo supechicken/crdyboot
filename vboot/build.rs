@@ -41,8 +41,6 @@ fn build_vboot_lib(
         rerun_if_changed(path);
     }
 
-    rerun_if_changed("src/c/libc.h");
-
     cc::Build::new()
         .compiler("clang")
         .target(target)
