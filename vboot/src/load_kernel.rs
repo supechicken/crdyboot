@@ -1,5 +1,8 @@
 use crate::disk::{Disk, DiskIo};
-use crate::{return_code_to_str, vboot_sys, ReturnCode};
+use crate::{
+    kernel_data_as_boot_params, return_code_to_str, vboot_sys, BootParamsError,
+    ReturnCode,
+};
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
@@ -28,6 +31,12 @@ pub enum LoadKernelError {
 
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
+
+    /// Failed to unpack kernel boot params.
+    BadBootParams(BootParamsError),
+
+    /// The buffer allocated to hold the kernel is not big enough.
+    KernelBufferTooSmall(u32, usize),
 }
 
 impl fmt::Display for LoadKernelError {
@@ -50,6 +59,16 @@ impl fmt::Display for LoadKernelError {
             }
             LoadKernelFailed(rc) => {
                 write_with_rc("call to LoadKernel failed", rc)
+            }
+            BadBootParams(err) => {
+                write!(f, "bad boot parameters: {}", err)
+            }
+            KernelBufferTooSmall(required, allocated) => {
+                write!(
+                    f,
+                    "allocated kernel buffer not big enough: {}b > {}b",
+                    required, allocated
+                )
             }
         }
     }
@@ -190,6 +209,22 @@ unsafe fn init_vb2_context(
     Ok(ctx_ptr)
 }
 
+fn validate_kernel_buffer_size(
+    kernel_buffer: &[u8],
+) -> Result<(), LoadKernelError> {
+    let boot_params = kernel_data_as_boot_params(kernel_buffer)
+        .map_err(LoadKernelError::BadBootParams)?;
+    info!("required size: {}", { boot_params.hdr.init_size });
+    if u32_to_usize(boot_params.hdr.init_size) <= kernel_buffer.len() {
+        Ok(())
+    } else {
+        Err(LoadKernelError::KernelBufferTooSmall(
+            boot_params.hdr.init_size,
+            kernel_buffer.len(),
+        ))
+    }
+}
+
 /// Find the best kernel. The details are up to the firmware library in
 /// vboot_reference. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
@@ -200,7 +235,12 @@ pub fn load_kernel(
     // TODO: this could probably be smaller.
     let mut workbuf = vec![0u8; 4096 * 50];
 
-    // TODO: somewhat arbitrary choose 64MiB for now.
+    // Allocate a fairly large buffer. This buffer must be big enough to
+    // hold the kernel data loaded by vboot, but also big enough for the
+    // kernel to successfully run without relocation. The latter requirement
+    // is checked below with `validate_kernel_buffer_size`. The actual
+    // required size is currently around 35 MiB, so 64 MiB should be plenty
+    // for the forseeable future.
     let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
 
     // Check the size of the key buffer before using it.
@@ -236,6 +276,11 @@ pub fn load_kernel(
         ));
         if status == ReturnCode::VB2_SUCCESS {
             info!("LoadKernel success");
+
+            // Ensure the buffer is large enough to actually run the
+            // kernel. We could just allocate a bigger buffer here, but it
+            // shouldn't be needed unless something has gone wrong anyway.
+            validate_kernel_buffer_size(&kernel_buffer)?;
 
             Ok(LoadedKernel {
                 data: kernel_buffer,

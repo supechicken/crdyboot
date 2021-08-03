@@ -1,5 +1,7 @@
 //! Header structures at the beginning of the Linux kernel data.
 
+use core::fmt;
+
 /// Header struct in `BootParams`.
 #[allow(missing_docs)]
 #[repr(C, packed)]
@@ -40,7 +42,7 @@ pub struct SetupHeader {
     payload_length: u32,
     setup_data: u64,
     pref_address: u64,
-    init_size: u32,
+    pub init_size: u32,
     pub handover_offset: u32,
 }
 
@@ -91,6 +93,21 @@ pub enum BootParamsError {
     InputTooSmall,
     /// `SetupHeader` doesn't contain the expected magic bytes.
     InvalidMagic,
+}
+
+impl fmt::Display for BootParamsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use BootParamsError::*;
+
+        match self {
+            InputTooSmall => {
+                write!(f, "kernel data is too small to contain boot parameters")
+            }
+            InvalidMagic => {
+                write!(f, "invalid magic in the setup header")
+            }
+        }
+    }
 }
 
 /// Get `BootParams` from `kernel_data`. Returns an error if the input is
