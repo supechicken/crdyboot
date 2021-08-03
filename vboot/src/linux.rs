@@ -86,7 +86,7 @@ pub struct BootParams {
 const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
 
 /// Errors returned by `kernel_data_as_boot_params`.
-pub enum LinuxError {
+pub enum BootParamsError {
     /// Input data is not big enough.
     InputTooSmall,
     /// `SetupHeader` doesn't contain the expected magic bytes.
@@ -97,13 +97,13 @@ pub enum LinuxError {
 /// not big enough or if the expected magic bytes aren't found.
 pub fn kernel_data_as_boot_params(
     kernel_data: &[u8],
-) -> Result<&BootParams, LinuxError> {
+) -> Result<&BootParams, BootParamsError> {
     let params = unsafe { crate::struct_from_bytes::<BootParams>(kernel_data) }
-        .ok_or(LinuxError::InputTooSmall)?;
+        .ok_or(BootParamsError::InputTooSmall)?;
 
     if params.hdr.header == SETUP_MAGIC {
         Ok(params)
     } else {
-        Err(LinuxError::InvalidMagic)
+        Err(BootParamsError::InvalidMagic)
     }
 }
