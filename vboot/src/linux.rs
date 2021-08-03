@@ -1,7 +1,7 @@
 //! Header structures at the beginning of the Linux kernel data.
 
-#![allow(missing_docs)]
-
+/// Header struct in `BootParams`.
+#[allow(missing_docs)]
 #[repr(C, packed)]
 pub struct SetupHeader {
     pub setup_sects: u8,
@@ -44,6 +44,7 @@ pub struct SetupHeader {
     pub handover_offset: u32,
 }
 
+/// Structure at the start of the kernel data.
 #[repr(C, packed)]
 pub struct BootParams {
     screen_info: [u8; 64],
@@ -72,6 +73,7 @@ pub struct BootParams {
     _pad5: [u8; 2],
     sentinel: u8,
     _pad6: [u8; 1],
+    /// Setup header.
     pub hdr: SetupHeader,
     _pad7: [u8; 40],
     edd_mbr_sig_buffer: [u32; 16],
@@ -83,8 +85,11 @@ pub struct BootParams {
 
 const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
 
+/// Errors returned by `kernel_data_as_boot_params`.
 pub enum LinuxError {
+    /// Input data is not big enough.
     InputTooSmall,
+    /// `SetupHeader` doesn't contain the expected magic bytes.
     InvalidMagic,
 }
 
