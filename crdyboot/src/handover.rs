@@ -12,7 +12,7 @@ use core::convert::TryInto;
 use core::{mem, ptr};
 use uefi::table::{Boot, SystemTable};
 use uefi::Handle;
-use vboot::{kernel_data_as_boot_params, BootParams, LinuxError};
+use vboot::{kernel_data_as_boot_params, BootParams, BootParamsError};
 
 /// Convert the slice to a pointer, then attempt to convert the pointer to a
 /// `u32`. Return `Error::BadNumericConversion` on failure.
@@ -36,10 +36,10 @@ pub fn execute_linux_kernel_32(
 ) -> Result<()> {
     let image_params = match kernel_data_as_boot_params(kernel_data) {
         Ok(params) => params,
-        Err(LinuxError::InputTooSmall) => {
+        Err(BootParamsError::InputTooSmall) => {
             return Err(Error::KernelTooSmall);
         }
-        Err(LinuxError::InvalidMagic) => {
+        Err(BootParamsError::InvalidMagic) => {
             return Err(Error::InvalidBootParameters);
         }
     };
