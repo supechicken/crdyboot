@@ -80,11 +80,18 @@ fn set_log_level() {
 /// from `keys/kernel_key.vbpubk`. If the `use_test_key` feature is enabled
 /// then the key is read from a test file in the repo instead.
 fn get_kernel_verification_key() -> &'static [u8] {
+    let key;
+
     #[cfg(feature = "use_test_key")]
-    let key = include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
+    {
+        log::warn!("using test key for kernel verification");
+        key = include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
+    }
 
     #[cfg(not(feature = "use_test_key"))]
-    let key = include_bytes!("../../keys/kernel_key.vbpubk");
+    {
+        key = include_bytes!("../../keys/kernel_key.vbpubk");
+    }
 
     key
 }
