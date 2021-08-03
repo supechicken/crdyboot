@@ -12,7 +12,7 @@ pub struct SetupHeader {
     root_dev: u16,
     pub boot_flag: u16,
     jump: u16,
-    pub header: u32,
+    header: u32,
     pub version: u16,
     realmode_swtch: u32,
     start_sys_seg: u16,
@@ -81,4 +81,24 @@ pub struct BootParams {
     _pad9: [u8; 276],
 }
 
-pub const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
+const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
+
+pub enum LinuxError {
+    InputTooSmall,
+    InvalidMagic,
+}
+
+/// Get `BootParams` from `kernel_data`. Returns an error if the input is
+/// not big enough or if the expected magic bytes aren't found.
+pub fn kernel_data_as_boot_params(
+    kernel_data: &[u8],
+) -> Result<&BootParams, LinuxError> {
+    let params = unsafe { crate::struct_from_bytes::<BootParams>(kernel_data) }
+        .ok_or(LinuxError::InputTooSmall)?;
+
+    if params.hdr.header == SETUP_MAGIC {
+        Ok(params)
+    } else {
+        Err(LinuxError::InvalidMagic)
+    }
+}
