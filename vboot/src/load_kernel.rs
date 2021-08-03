@@ -201,8 +201,8 @@ pub fn load_kernel(
     // TODO: this could probably be smaller.
     let mut workbuf = vec![0u8; 4096 * 50];
 
-    // TODO: arbitrary choose 32MiB for now.
-    let mut kernel_buffer = vec![0u8; 32 * 1024 * 1024];
+    // TODO: somewhat arbitrary choose 64MiB for now.
+    let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
 
     // Check the size of the key buffer before using it.
     validate_packed_pubkey_size(packed_pubkey)?;
