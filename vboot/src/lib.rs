@@ -19,6 +19,7 @@
 extern crate alloc;
 
 mod disk;
+mod linux;
 mod load_kernel;
 mod printf;
 mod stubs;
@@ -44,6 +45,7 @@ pub mod vboot_sys {
 }
 
 pub use disk::DiskIo;
+pub use linux::{BootParams, SETUP_MAGIC};
 pub use load_kernel::{load_kernel, LoadKernelError, LoadedKernel};
 pub use vboot_sys::return_code_to_str;
 pub use vboot_sys::vb2_return_code as ReturnCode;
