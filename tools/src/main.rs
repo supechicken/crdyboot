@@ -21,7 +21,6 @@ use fs_err as fs;
 use loopback::LoopbackDevice;
 use qemu::{OvmfPaths, Qemu};
 use sign::KeyPaths;
-use std::env;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -220,9 +219,10 @@ struct QemuAction {
 const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
 
 fn update_rustflags_path_prefix(project_dir: &Utf8Path) -> String {
-    let mut val = env::var(RUSTFLAGS_ENV_VAR).unwrap_or_else(|_| String::new());
-    val += &format!(" --remap-path-prefix=src={}/src", project_dir);
-    val
+    // TODO: update the variable rather than overwriting it. It's important
+    // to avoid having multiple remap-path-prefixes though, that can cause
+    // unwanted rebuilds of the tools project.
+    format!("--remap-path-prefix=src={}/src", project_dir)
 }
 
 fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
