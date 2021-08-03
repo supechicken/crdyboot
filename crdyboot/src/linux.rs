@@ -3,7 +3,7 @@ use crate::result::{Error, Result};
 use core::convert::TryInto;
 use core::ffi::c_void;
 use core::mem;
-use log::{error, info};
+use log::info;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
@@ -39,52 +39,10 @@ struct MyLoadedImage {
 }
 
 fn get_pe_entry_point(data: &[u8]) -> Result<Entrypoint> {
-    // Check the magic bytes in the DOS header.
-    let dos_magic = data.get(0..2).ok_or(Error::PeHeaderTooSmall)?;
-    if dos_magic != [0x4d, 0x5a] {
-        error!("invalid DOS header magic: {:x?}", dos_magic);
-        return Err(Error::InvalidPeMagic);
-    }
+    let pe = goblin::pe::PE::parse(data).map_err(Error::InvalidPe)?;
 
-    // Get `size_of(T)` bytes starting at `offset` from `data`.
-    fn get_slice<T>(data: &[u8], offset: usize) -> Result<&[u8]> {
-        data.get(offset..offset + mem::size_of::<T>())
-            .ok_or(Error::PeHeaderTooSmall)
-    }
-
-    // Get a little-endian u32 from `data` at `offset` and convert to a
-    // `usize`.
-    fn get_u32_as_usize(data: &[u8], offset: usize) -> Result<usize> {
-        let bytes = get_slice::<u32>(data, offset)?;
-
-        let val = u32::from_le_bytes(
-            // OK to unwrap because we just got 4 bytes.
-            bytes.try_into().expect("not enough bytes"),
-        );
-
-        // OK to unwrap because usize is always at least as big as a u32 on
-        // our targets.
-        Ok(val.try_into().expect("usize too small"))
-    }
-
-    // Get the offset of the PE header. This is stored as a u32 at offset
-    // 0x3c.
-    let pe_header_offset = get_u32_as_usize(data, 0x3c)?;
-
-    let pe_header = &data
-        .get(pe_header_offset..)
-        .ok_or(Error::PeHeaderTooSmall)?;
-
-    // Check the magic bytes in the PE header.
-    let pe_magic = pe_header.get(0..4).ok_or(Error::PeHeaderTooSmall)?;
-    if pe_magic != [0x50, 0x45, 0x00, 0x00] {
-        error!("invalid PE header magic: {:x?}", pe_magic);
-        return Err(Error::InvalidPeMagic);
-    }
-
-    // Get the entry point offset (relative to the start of the kernel
-    // data), which is stored as a u32 at offset 0x28 within the PE header.
-    let entry_point_offset = get_u32_as_usize(pe_header, 0x28)?;
+    let entry_point_offset = pe.entry;
+    info!("entry_point_offset: 0x{:x}", entry_point_offset);
 
     let entry_point_address = (data.as_ptr() as usize) + entry_point_offset;
     info!("entry_point_address: 0x{:x}", entry_point_address);
