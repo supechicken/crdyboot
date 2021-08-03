@@ -98,13 +98,11 @@ Then run it in QEMU:
 
     ./x.py qemu [--ia32] [--secure-boot]
     
-By default crdyboot sets the max log level to Warn. Pass
-`--enable-verbose-feature` to the `check` or `build` command to set the max
-log level to Debug instead.
-
-By default crdyboot is built with a test key in the repo. To build embed a
-different key, place it `keys/kernel_key.vbpubk` (relative to the repo root)
-and run the `check` or `build` command with `--disable-test-key`.
+Some additional build options can be set in `crdyboot.conf` (in the root of
+the repo). This file will be created automatically if it doesn't already
+exist by copying `tools/default.conf`. The defaults are appropriate for
+development. In a release build, verbose logging and the test key should be
+turned off.
     
 ## Testing on real hardware
 
