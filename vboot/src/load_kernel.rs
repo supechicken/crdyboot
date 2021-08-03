@@ -59,8 +59,8 @@ fn u32_to_u64(v: u32) -> u64 {
     v.into()
 }
 
-fn u32_to_usize(v: u32) -> Option<usize> {
-    v.try_into().ok()
+fn u32_to_usize(v: u32) -> usize {
+    v.try_into().expect("size of usize is smaller than u32")
 }
 
 #[allow(clippy::many_single_char_names)]
@@ -97,7 +97,7 @@ impl LoadedKernel {
 
         // Get the entire command-line area.
         let command_line_end = command_line_start
-            .checked_add(u32_to_usize(vboot_sys::CROS_CONFIG_SIZE)?)?;
+            .checked_add(u32_to_usize(vboot_sys::CROS_CONFIG_SIZE))?;
         let command_line =
             self.data.get(command_line_start..command_line_end)?;
 
@@ -138,8 +138,7 @@ fn validate_packed_pubkey_size(
         })?
     };
 
-    let key_size = u32_to_usize(packed_pubkey_struct.key_size)
-        .ok_or(LoadKernelError::BadNumericConversion("packed pubkey size"))?;
+    let key_size = u32_to_usize(packed_pubkey_struct.key_size);
     if key_size + mem::size_of::<vb2_packed_key>() == packed_pubkey.len() {
         Ok(())
     } else {
