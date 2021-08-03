@@ -1,5 +1,4 @@
 use crate::result::{Error, Result};
-use core::slice;
 use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
@@ -21,28 +20,6 @@ fn device_paths_for_handle(
     Ok(device_path)
 }
 
-// TODO(nicholasbishop): https://github.com/rust-osdev/uefi-rs/pull/265 adds
-// this comparison as a PartialEq implementation on `DevicePath`. Once
-// that's merged we can drop this function.
-fn device_path_eq(a: &DevicePath, b: &DevicePath) -> bool {
-    // Check for equality with a byte-by-byte comparison of the device
-    // paths. Note that this covers the entire payload of the device path
-    // using the `length` field in the header, so it's not the same as just
-    // comparing the fields of the `DevicePath` struct.
-    unsafe {
-        let a_bytes = slice::from_raw_parts(
-            (a as *const DevicePath).cast::<u8>(),
-            a.length() as usize,
-        );
-        let b_bytes = slice::from_raw_parts(
-            (b as *const DevicePath).cast::<u8>(),
-            b.length() as usize,
-        );
-
-        a_bytes == b_bytes
-    }
-}
-
 /// True if `potential_parent` is the handle representing the disk that
 /// contains the `partition` device.
 ///
@@ -62,7 +39,7 @@ fn is_parent_disk(
     for (parent_path, partition_path) in
         potential_parent_paths_iter.zip(&mut partition_paths_iter)
     {
-        if !device_path_eq(parent_path, partition_path) {
+        if parent_path != partition_path {
             return Ok(false);
         }
     }
