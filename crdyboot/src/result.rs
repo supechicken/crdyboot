@@ -1,6 +1,6 @@
 use core::fmt;
 use uefi::Status;
-use vboot::LoadKernelError;
+use vboot::{LoadKernelError, PeError};
 
 pub enum Error {
     UefiServicesInitFailed(Status),
@@ -18,7 +18,7 @@ pub enum Error {
 
     BadNumericConversion(&'static str),
 
-    InvalidPe(goblin::error::Error),
+    InvalidPe(PeError),
     KernelTooSmall,
     InvalidBootParameters,
     KernelDataTooBig(usize),
