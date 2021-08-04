@@ -35,40 +35,152 @@ impl<'a> PeExecutable<'a> {
         let data_size: usize = section.size_of_raw_data.try_into().ok()?;
         let section_data = self.data.get(data_start..data_start + data_size)?;
 
-        const ELEM_TYPE_END_OF_LIST: u8 = 0;
-        const ELEM_TYPE_V1: u8 = 1;
+        find_compat_entry_point_in_section(
+            section_data,
+            goblin::pe::header::COFF_MACHINE_X86,
+        )
+    }
+}
 
-        let mut outer_offset: usize = 0;
-        loop {
-            let mut offset = outer_offset;
+#[derive(Debug, PartialEq)]
+struct CompatEntryV1 {
+    machine_type: u16,
+    entry_point: u32,
+}
 
-            // Get the elem_type type.
-            let elem_type: u8 = section_data.gread(&mut offset).ok()?;
-            if elem_type == ELEM_TYPE_END_OF_LIST {
-                break;
-            }
+#[derive(Debug, PartialEq)]
+struct CompatEntry {
+    entry_type: u8,
+    size: u8,
+    v1: Option<CompatEntryV1>,
+}
 
-            // Get the element size in bytes.
-            let elem_size: u8 = section_data.gread(&mut offset).ok()?;
-            let elem_size: usize = elem_size.into();
+struct CompatEntryIter<'a> {
+    data: &'a [u8],
+    offset: usize,
+}
 
-            // Known element type.
-            if elem_type == ELEM_TYPE_V1 {
-                // Read the machine type and check if it matches IA32.
-                let machine_type: u16 = section_data.gread(&mut offset).ok()?;
-                if machine_type == goblin::pe::header::COFF_MACHINE_X86 {
-                    // Read the entry point offset and return it.
-                    let entry_point: u32 =
-                        section_data.gread(&mut offset).ok()?;
-                    return entry_point.try_into().ok();
-                }
-            }
+impl<'a> CompatEntryIter<'a> {
+    fn new(section: &[u8]) -> CompatEntryIter {
+        CompatEntryIter {
+            data: section,
+            offset: 0,
+        }
+    }
+}
 
-            // Continue to next element.
-            outer_offset += elem_size;
+impl<'a> Iterator for CompatEntryIter<'a> {
+    type Item = CompatEntry;
+
+    fn next(&mut self) -> Option<CompatEntry> {
+        const ENTRY_TYPE_END_OF_LIST: u8 = 0;
+        const ENTRY_TYPE_V1: u8 = 1;
+
+        let mut offset = self.offset;
+        let ctx = scroll::LE;
+
+        // Get the entry_type type, end iteration if at the end of the
+        // entries.
+        let entry_type: u8 = self.data.gread_with(&mut offset, ctx).ok()?;
+        if entry_type == ENTRY_TYPE_END_OF_LIST {
+            return None;
         }
 
-        // No matching compat entry found.
-        None
+        // Get the entry size in bytes. End iteration if this is zero to
+        // prevent a potential infinite loop.
+        let entry_size: u8 = self.data.gread_with(&mut offset, ctx).ok()?;
+        if entry_size == 0 {
+            return None;
+        }
+
+        // Update iterator offset.
+        self.offset += usize::from(entry_size);
+
+        let entry_v1 = if entry_type == ENTRY_TYPE_V1 {
+            // Known entry type, read machine type and entry point.
+            let machine_type: u16 =
+                self.data.gread_with(&mut offset, ctx).ok()?;
+            let entry_point: u32 =
+                self.data.gread_with(&mut offset, ctx).ok()?;
+
+            Some(CompatEntryV1 {
+                machine_type,
+                entry_point,
+            })
+        } else {
+            // Otherwise return an empty entry.
+            None
+        };
+
+        Some(CompatEntry {
+            entry_type,
+            size: entry_size,
+            v1: entry_v1,
+        })
+    }
+}
+
+fn find_compat_entry_point_in_section(
+    section: &[u8],
+    target_machine_type: u16,
+) -> Option<usize> {
+    for entry in CompatEntryIter::new(section) {
+        if let Some(entry) = entry.v1 {
+            if entry.machine_type == target_machine_type {
+                return entry.entry_point.try_into().ok();
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compat_entry() {
+        let section = [
+            // Small entry of unknown type.
+            0x02, 0x02, // ARM entry point.
+            0x1, 0x8, 0xc0, 0x01, 0x77, 0x66, 0x55, 0x44,
+            // IA32 entry point.
+            0x1, 0x8, 0x4c, 0x01, 0x78, 0x56, 0x34, 0x12,
+            // Ending entry.
+            0x0,
+        ];
+
+        let iter = CompatEntryIter::new(&section);
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            [
+                CompatEntry {
+                    entry_type: 2,
+                    size: 2,
+                    v1: None,
+                },
+                CompatEntry {
+                    entry_type: 1,
+                    size: 8,
+                    v1: Some(CompatEntryV1 {
+                        machine_type: 0x1c0,
+                        entry_point: 0x44556677,
+                    }),
+                },
+                CompatEntry {
+                    entry_type: 1,
+                    size: 8,
+                    v1: Some(CompatEntryV1 {
+                        machine_type: 0x14c,
+                        entry_point: 0x12345678,
+                    }),
+                }
+            ]
+        );
+
+        assert_eq!(
+            find_compat_entry_point_in_section(&section, 0x14c),
+            Some(0x12345678)
+        );
     }
 }
