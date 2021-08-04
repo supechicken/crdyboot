@@ -1,10 +1,13 @@
 //! This module implements running the Linux kernel via the handover
 //! protocol.
 //!
-//! This is only needed on 32-bit UEFI. Hopefully it can be dropped once we're
-//! on a kernel new enough to include "efi/x86: Implement mixed mode boot
-//! without the handover protocol":
-//! https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=17054f492dfd4d91e093ebb87013807812ec42a4
+//! This is only needed on 32-bit UEFI, and only for older kernels that
+//! don't have this commit:
+//!
+//!     efi/x86: Implement mixed mode boot without the handover protocol
+//!
+//! Currently handover is needed for 5.4 kernels, it's not needed in 5.10
+//! kernels.
 
 use crate::result::{Error, Result};
 use alloc::vec;
