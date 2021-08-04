@@ -379,7 +379,13 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 fn initial_setup(conf: &Config) {
     Command::with_args(
         "git",
-        &["-C", conf.repo.as_str(), "submodule", "update", "--init"],
+        &[
+            "-C",
+            conf.repo_path().as_str(),
+            "submodule",
+            "update",
+            "--init",
+        ],
     )
     .run()?;
 

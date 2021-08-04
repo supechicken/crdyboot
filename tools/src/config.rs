@@ -8,11 +8,10 @@ use fehler::throws;
 use fs_err as fs;
 
 pub struct Config {
-    pub enable_verbose_logging: bool,
-    pub use_test_key: bool,
-
+    enable_verbose_logging: bool,
+    use_test_key: bool,
     /// Absolute path of the crdyboot repo.
-    pub repo: Utf8PathBuf,
+    repo: Utf8PathBuf,
 }
 
 /// Path of the config file relative to the repo root directory.
@@ -89,6 +88,10 @@ impl Config {
             features.push("use_test_key");
         }
         features
+    }
+
+    pub fn repo_path(&self) -> &Utf8Path {
+        &self.repo
     }
 
     pub fn crdyboot_path(&self) -> Utf8PathBuf {
