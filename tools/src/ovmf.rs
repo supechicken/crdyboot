@@ -1,5 +1,6 @@
 use crate::arch::Arch;
-use crate::{copy_file, update_local_repo, Opt};
+use crate::config::Config;
+use crate::{copy_file, update_local_repo};
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;
@@ -19,8 +20,8 @@ fn build_ovmf(arch_flags: &[&str], edk2_dir: &Utf8Path) {
 }
 
 #[throws]
-pub fn run_build_ovmf(opt: &Opt) {
-    let edk2_dir = opt.workspace_path().join("edk2");
+pub fn run_build_ovmf(conf: &Config) {
+    let edk2_dir = conf.workspace_path().join("edk2");
     let edk2_url = "https://github.com/tianocore/edk2.git";
     // Known-working commit.
     let edk2_rev = "75e9154f818a58ffc3a28db9f8c97279e723f02d";
@@ -52,7 +53,7 @@ pub fn run_build_ovmf(opt: &Opt) {
         let fv_dir = src_dir.join("FV");
         let efi_dir = src_dir.join(efi_dir_name);
 
-        let dst = opt.ovmf_paths(arch);
+        let dst = conf.ovmf_paths(arch);
         copy_file(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
         copy_file(fv_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
         copy_file(

@@ -1,9 +1,9 @@
 use crate::arch::Arch;
+use crate::config::Config;
 use crate::copy_file;
 use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
 use crate::sign;
-use crate::Opt;
 use anyhow::Error;
 use camino::Utf8Path;
 use command_run::Command;
@@ -12,8 +12,8 @@ use fs_err as fs;
 use std::env;
 
 #[throws]
-fn build_shim(opt: &Opt) {
-    let shim_dir = opt.shim_build_path();
+fn build_shim(conf: &Config) {
+    let shim_dir = conf.shim_build_path();
     let shim_url = "https://github.com/neverware/shim-build.git";
     let shim_rev = "f91f23e3ce3f93fe8532d8bbcfe90ace755a5fed";
 
@@ -25,7 +25,7 @@ fn build_shim(opt: &Opt) {
         .run()?;
 
     copy_file(
-        opt.secure_boot_shim_key_paths().pub_der(),
+        conf.secure_boot_shim_key_paths().pub_der(),
         shim_dir.join("neverware.cer"),
     )?;
 
@@ -73,8 +73,8 @@ fn build_shim(opt: &Opt) {
 }
 
 #[throws]
-pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
-    build_shim(opt)?;
+pub fn update_shim(conf: &Config, partitions: &PartitionPaths) {
+    build_shim(conf)?;
 
     let efi_mount = Mount::new(&partitions.efi)?;
     let efi = efi_mount.mount_point();
@@ -82,7 +82,7 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
     let mut to_sign = Vec::new();
 
     for arch in Arch::all() {
-        let src = opt.shim_build_path().join(arch.efi_file_name("shim"));
+        let src = conf.shim_build_path().join(arch.efi_file_name("shim"));
 
         let dst_file_name = arch.efi_file_name("boot");
         let dst = efi.join("efi/boot").join(&dst_file_name);
@@ -93,5 +93,5 @@ pub fn update_shim(opt: &Opt, partitions: &PartitionPaths) {
         to_sign.push(dst_file_name);
     }
 
-    sign::sign_all(efi, &opt.secure_boot_root_key_paths(), &to_sign)?;
+    sign::sign_all(efi, &conf.secure_boot_root_key_paths(), &to_sign)?;
 }
