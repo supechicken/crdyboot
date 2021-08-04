@@ -123,9 +123,7 @@ dependencies = [
 name = "crdyboot"
 version = "1.0.0"
 dependencies = [
- "goblin",
  "log",
- "scroll",
  "uefi",
  "uefi-services",
  "vboot",
@@ -489,8 +487,10 @@ dependencies = [
  "bindgen",
  "camino",
  "cc",
+ "goblin",
  "log",
  "printf-compat",
+ "scroll",
  "serde",
  "serde_json",
 ]
