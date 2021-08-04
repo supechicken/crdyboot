@@ -125,6 +125,7 @@ version = "1.0.0"
 dependencies = [
  "goblin",
  "log",
+ "scroll",
  "uefi",
  "uefi-services",
  "vboot",
