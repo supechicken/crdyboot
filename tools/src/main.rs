@@ -19,8 +19,7 @@ use config::Config;
 use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
-use qemu::{OvmfPaths, Qemu};
-use sign::KeyPaths;
+use qemu::Qemu;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -32,93 +31,6 @@ pub struct Opt {
     /// action to run
     #[argh(subcommand)]
     action: Action,
-}
-
-impl Opt {
-    fn conf_path(&self) -> Utf8PathBuf {
-        self.repo.join("crdyboot.conf")
-    }
-
-    fn default_conf_path(&self) -> Utf8PathBuf {
-        self.tools_path().join("default.conf")
-    }
-
-    fn crdyboot_path(&self) -> Utf8PathBuf {
-        self.repo.join("crdyboot")
-    }
-
-    fn enroller_path(&self) -> Utf8PathBuf {
-        self.repo.join("enroller")
-    }
-
-    fn workspace_path(&self) -> Utf8PathBuf {
-        self.repo.join("workspace")
-    }
-
-    fn tools_path(&self) -> Utf8PathBuf {
-        self.repo.join("tools")
-    }
-
-    fn vboot_path(&self) -> Utf8PathBuf {
-        self.repo.join("vboot")
-    }
-
-    fn project_paths(&self) -> Vec<Utf8PathBuf> {
-        vec![
-            self.crdyboot_path(),
-            self.enroller_path(),
-            self.tools_path(),
-            self.vboot_path(),
-        ]
-    }
-
-    fn vboot_reference_path(&self) -> Utf8PathBuf {
-        self.repo.join("third_party/vboot_reference")
-    }
-
-    fn futility_executable_path(&self) -> Utf8PathBuf {
-        self.vboot_reference_path().join("build/futility/futility")
-    }
-
-    fn disk_path(&self) -> Utf8PathBuf {
-        self.workspace_path().join("disk.bin")
-    }
-
-    fn enroller_disk_path(&self) -> Utf8PathBuf {
-        self.workspace_path().join("enroller.bin")
-    }
-
-    fn vboot_test_disk_path(&self) -> Utf8PathBuf {
-        self.repo.join("vboot/test_data/disk.bin")
-    }
-
-    fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
-        let subdir = match arch {
-            Arch::Ia32 => "uefi32",
-            Arch::X64 => "uefi64",
-        };
-        OvmfPaths::new(self.workspace_path().join(subdir))
-    }
-
-    /// This cert will be enrolled as the PK, first KEK, and first DB
-    /// entry. The private key is used to sign shim.
-    fn secure_boot_root_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("secure_boot_root_key"))
-    }
-
-    /// This cert is embedded in shim and the private key is used to
-    /// sign crdyboot.
-    fn secure_boot_shim_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("secure_boot_shim_key"))
-    }
-
-    fn shim_build_path(&self) -> Utf8PathBuf {
-        self.workspace_path().join("shim_build")
-    }
-
-    fn build_mode(&self) -> BuildMode {
-        BuildMode::Release
-    }
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -233,16 +145,16 @@ fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
 }
 
 #[throws]
-fn run_check(opt: &Opt, conf: &Config) {
-    run_rustfmt(opt)?;
-    run_tests(opt)?;
-    run_crdyboot_build(opt, conf)?;
-    run_clippy(opt, conf)?;
+fn run_check(conf: &Config) {
+    run_rustfmt(conf)?;
+    run_tests(conf)?;
+    run_crdyboot_build(conf)?;
+    run_clippy(conf)?;
 }
 
 #[throws]
-fn run_clean(opt: &Opt) {
-    for project in opt.project_paths() {
+fn run_clean(conf: &Config) {
+    for project in conf.project_paths() {
         println!("{}:", project);
         let mut cmd = Command::with_args("cargo", &["clean"]);
         modify_cmd_for_path_prefix(&mut cmd, &project);
@@ -285,10 +197,10 @@ fn run_uefi_build(
 }
 
 #[throws]
-fn run_crdyboot_build(opt: &Opt, conf: &Config) {
+fn run_crdyboot_build(conf: &Config) {
     run_uefi_build(
-        &opt.crdyboot_path(),
-        opt.build_mode(),
+        &conf.crdyboot_path(),
+        conf.build_mode(),
         &conf.get_crdyboot_features(),
     )?;
 }
@@ -314,10 +226,10 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 }
 
 #[throws]
-fn run_build_enroller(opt: &Opt) {
-    run_uefi_build(&opt.enroller_path(), opt.build_mode(), &[])?;
+fn run_build_enroller(conf: &Config) {
+    run_uefi_build(&conf.enroller_path(), conf.build_mode(), &[])?;
 
-    gen_disk::gen_enroller_disk(opt)?;
+    gen_disk::gen_enroller_disk(conf)?;
 }
 
 #[throws]
@@ -333,8 +245,8 @@ where
 }
 
 #[throws]
-fn run_rustfmt(opt: &Opt) {
-    for project in opt.project_paths() {
+fn run_rustfmt(conf: &Config) {
+    for project in conf.project_paths() {
         let cargo_path = project.join("Cargo.toml");
         Command::with_args(
             "cargo",
@@ -345,32 +257,32 @@ fn run_rustfmt(opt: &Opt) {
 }
 
 #[throws]
-fn run_prep_disk(opt: &Opt) {
-    let disk = opt.disk_path();
+fn run_prep_disk(conf: &Config) {
+    let disk = conf.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    shim::update_shim(opt, &partitions)?;
+    shim::update_shim(conf, &partitions)?;
 
     // Sign both kernel partitions.
-    gen_disk::sign_kernel_partition(opt, &partitions.kern_a)?;
-    gen_disk::sign_kernel_partition(opt, &partitions.kern_b)?;
+    gen_disk::sign_kernel_partition(conf, &partitions.kern_a)?;
+    gen_disk::sign_kernel_partition(conf, &partitions.kern_b)?;
 }
 
 #[throws]
-fn run_update_disk(opt: &Opt) {
-    let disk = opt.disk_path();
+fn run_update_disk(conf: &Config) {
+    let disk = conf.disk_path();
 
     let lo_dev = LoopbackDevice::new(&disk)?;
     let partitions = lo_dev.partition_paths();
 
-    gen_disk::copy_in_crdyboot(opt, &partitions)?;
+    gen_disk::copy_in_crdyboot(conf, &partitions)?;
 }
 
 #[throws]
-fn run_clippy(opt: &Opt, conf: &Config) {
-    for project in opt.project_paths() {
+fn run_clippy(conf: &Config) {
+    for project in conf.project_paths() {
         println!("{}:", project);
         let mut cmd = Command::with_args("cargo", &["+nightly", "clippy"]);
         if project.ends_with("crdyboot") {
@@ -395,23 +307,23 @@ fn run_tests_in_dir(dir: &Utf8Path, nightly: bool) {
 }
 
 #[throws]
-fn run_tests(opt: &Opt) {
-    run_tests_in_dir(&opt.tools_path(), /* nightly=*/ false)?;
-    run_tests_in_dir(&opt.vboot_path(), /* nightly=*/ true)?;
+fn run_tests(conf: &Config) {
+    run_tests_in_dir(&conf.tools_path(), /* nightly=*/ false)?;
+    run_tests_in_dir(&conf.vboot_path(), /* nightly=*/ true)?;
 }
 
 #[throws]
-fn generate_secure_boot_keys(opt: &Opt) {
+fn generate_secure_boot_keys(conf: &Config) {
     sign::generate_key(
-        &opt.secure_boot_root_key_paths(),
+        &conf.secure_boot_root_key_paths(),
         "SecureBootRootTestKey",
     )?;
     sign::generate_key(
-        &opt.secure_boot_shim_key_paths(),
+        &conf.secure_boot_shim_key_paths(),
         "SecureBootShimTestKey",
     )?;
 
-    let root_key_paths = opt.secure_boot_root_key_paths();
+    let root_key_paths = conf.secure_boot_root_key_paths();
 
     // Generate the PK/KEK and db vars for use with the non-VM enroller.
     sign::generate_signed_vars(&root_key_paths, "PK")?;
@@ -430,7 +342,7 @@ fn generate_secure_boot_keys(opt: &Opt) {
 }
 
 #[throws]
-fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
+fn run_secure_boot_setup(conf: &Config, action: &SecureBootSetupAction) {
     let po = if action.verbose {
         qemu::PrintOutput::Yes
     } else {
@@ -438,24 +350,24 @@ fn run_secure_boot_setup(opt: &Opt, action: &SecureBootSetupAction) {
     };
 
     for arch in Arch::all() {
-        let ovmf = opt.ovmf_paths(arch);
+        let ovmf = conf.ovmf_paths(arch);
 
         copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
         let qemu = Qemu::new(ovmf);
-        let oemstr_path = opt.secure_boot_root_key_paths().enroll_data();
+        let oemstr_path = conf.secure_boot_root_key_paths().enroll_data();
         qemu.enroll(&oemstr_path, po)?;
     }
 }
 
 #[throws]
-fn run_qemu(opt: &Opt, action: &QemuAction) {
-    let disk = opt.disk_path();
+fn run_qemu(conf: &Config, action: &QemuAction) {
+    let disk = conf.disk_path();
 
     let ovmf = if action.ia32 {
-        opt.ovmf_paths(Arch::Ia32)
+        conf.ovmf_paths(Arch::Ia32)
     } else {
-        opt.ovmf_paths(Arch::X64)
+        conf.ovmf_paths(Arch::X64)
     };
 
     let mut qemu = Qemu::new(ovmf);
@@ -464,41 +376,44 @@ fn run_qemu(opt: &Opt, action: &QemuAction) {
 }
 
 #[throws]
-fn initial_setup(opt: &Opt) {
-    if !opt.conf_path().exists() {
-        copy_file(opt.default_conf_path(), opt.conf_path())?;
-    }
-
+fn initial_setup(conf: &Config) {
     Command::with_args(
         "git",
-        &["-C", opt.repo.as_str(), "submodule", "update", "--init"],
+        &["-C", conf.repo.as_str(), "submodule", "update", "--init"],
     )
     .run()?;
 
-    generate_secure_boot_keys(opt)?;
+    generate_secure_boot_keys(conf)?;
 }
 
 #[throws]
 fn main() {
     let opt: Opt = argh::from_env();
+    let repo_root = &opt.repo;
 
-    initial_setup(&opt)?;
+    // Create the config file from the default if it doesn't already exist.
+    let conf_path = config::config_path(repo_root);
+    let default_conf_path = repo_root.join("tools/default.conf");
+    if !conf_path.exists() {
+        copy_file(&default_conf_path, &conf_path)?;
+    }
+    let conf = Config::load(repo_root)?;
 
-    let conf = Config::load(&opt)?;
+    initial_setup(&conf)?;
 
     match &opt.action {
-        Action::Build(_) => run_crdyboot_build(&opt, &conf),
-        Action::BuildEnroller(_) => run_build_enroller(&opt),
-        Action::BuildOvmf(_) => ovmf::run_build_ovmf(&opt),
-        Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&opt),
-        Action::Check(_) => run_check(&opt, &conf),
-        Action::Clean(_) => run_clean(&opt),
-        Action::Format(_) => run_rustfmt(&opt),
-        Action::UpdateDisk(_) => run_update_disk(&opt),
-        Action::Lint(_) => run_clippy(&opt, &conf),
-        Action::PrepDisk(_) => run_prep_disk(&opt),
-        Action::SecureBootSetup(action) => run_secure_boot_setup(&opt, action),
-        Action::Test(_) => run_tests(&opt),
-        Action::Qemu(action) => run_qemu(&opt, action),
+        Action::Build(_) => run_crdyboot_build(&conf),
+        Action::BuildEnroller(_) => run_build_enroller(&conf),
+        Action::BuildOvmf(_) => ovmf::run_build_ovmf(&conf),
+        Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&conf),
+        Action::Check(_) => run_check(&conf),
+        Action::Clean(_) => run_clean(&conf),
+        Action::Format(_) => run_rustfmt(&conf),
+        Action::UpdateDisk(_) => run_update_disk(&conf),
+        Action::Lint(_) => run_clippy(&conf),
+        Action::PrepDisk(_) => run_prep_disk(&conf),
+        Action::SecureBootSetup(action) => run_secure_boot_setup(&conf, action),
+        Action::Test(_) => run_tests(&conf),
+        Action::Qemu(action) => run_qemu(&conf, action),
     }?;
 }

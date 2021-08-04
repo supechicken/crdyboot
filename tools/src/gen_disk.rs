@@ -1,7 +1,8 @@
 use crate::arch::Arch;
+use crate::config::Config;
 use crate::loopback::{LoopbackDevice, PartitionPaths};
 use crate::mount::Mount;
-use crate::{sign, Opt};
+use crate::sign;
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -131,9 +132,9 @@ impl Disk {
 }
 
 #[throws]
-pub fn gen_vboot_test_disk(opt: &Opt) {
+pub fn gen_vboot_test_disk(conf: &Config) {
     // 16MiB kernel partition, plus some extra space for GPT.
-    let mut disk = Disk::create(opt.vboot_test_disk_path(), "18MiB")?;
+    let mut disk = Disk::create(conf.vboot_test_disk_path(), "18MiB")?;
 
     // Create kernel partition.
     let part_num = disk.add_partition(PartitionSettings {
@@ -146,7 +147,7 @@ pub fn gen_vboot_test_disk(opt: &Opt) {
     })?;
 
     let vboot_disk_lo_dev = LoopbackDevice::new(&disk.path)?;
-    let cloudready_lo_dev = LoopbackDevice::new(&opt.disk_path())?;
+    let cloudready_lo_dev = LoopbackDevice::new(&conf.disk_path())?;
 
     // Copy a kernel partition from the cloudready disk to the new disk.
     Command::with_args(
@@ -161,8 +162,8 @@ pub fn gen_vboot_test_disk(opt: &Opt) {
 }
 
 #[throws]
-pub fn gen_enroller_disk(opt: &Opt) {
-    let mut disk = Disk::create(opt.enroller_disk_path(), "4MiB")?;
+pub fn gen_enroller_disk(conf: &Config) {
+    let mut disk = Disk::create(conf.enroller_disk_path(), "4MiB")?;
 
     // Create a single bootable partition.
     let part_num = disk.add_partition(PartitionSettings {
@@ -193,11 +194,11 @@ pub fn gen_enroller_disk(opt: &Opt) {
 
     // Copy in the two enroller executables.
     for arch in Arch::all() {
-        let src = opt
+        let src = conf
             .enroller_path()
             .join("target")
             .join(arch.uefi_target())
-            .join(opt.build_mode().dir_name())
+            .join(conf.build_mode().dir_name())
             .join("enroller.efi");
         let dst = boot_dir.join(arch.efi_file_name("boot"));
         Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
@@ -207,18 +208,18 @@ pub fn gen_enroller_disk(opt: &Opt) {
 
 /// Replace both grub executables with crdyboot.
 #[throws]
-pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
+pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
     let efi_mount = Mount::new(&partitions.efi)?;
     let efi = efi_mount.mount_point();
 
     let mut dst_names = Vec::new();
 
     for arch in Arch::all() {
-        let src = opt
+        let src = conf
             .crdyboot_path()
             .join("target")
             .join(arch.uefi_target())
-            .join(opt.build_mode().dir_name())
+            .join(conf.build_mode().dir_name())
             .join("crdyboot.efi");
 
         let dst_name = arch.efi_file_name("grub");
@@ -232,19 +233,19 @@ pub fn copy_in_crdyboot(opt: &Opt, partitions: &PartitionPaths) {
             .run()?;
     }
 
-    sign::sign_all(efi, &opt.secure_boot_shim_key_paths(), &dst_names)?;
+    sign::sign_all(efi, &conf.secure_boot_shim_key_paths(), &dst_names)?;
 }
 
 #[throws]
-pub fn sign_kernel_partition(opt: &Opt, partition_device_path: &Utf8Path) {
+pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
-    let futility = opt.futility_executable_path();
+    let futility = conf.futility_executable_path();
     let futility = futility.as_str();
 
     // TODO: for now just use a pregenerated test keys.
-    let test_data = opt.vboot_path().join("test_data");
+    let test_data = conf.vboot_path().join("test_data");
     let kernel_key_public = test_data.join("kernel_key.vbpubk");
     let kernel_data_key_private = test_data.join("kernel_data_key.vbprivk");
     let kernel_data_key_keyblock = test_data.join("kernel_data_key.keyblock");
