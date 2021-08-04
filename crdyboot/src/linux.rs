@@ -38,6 +38,14 @@ struct MyLoadedImage {
     unload: extern "efiapi" fn(image_handle: Handle) -> Status,
 }
 
+fn is_64bit() -> bool {
+    match mem::size_of::<usize>() {
+        8 => true,
+        4 => false,
+        other => panic!("invalid size of usize: {}", other),
+    }
+}
+
 fn get_pe_entry_point(data: &[u8]) -> Result<Entrypoint> {
     let pe = goblin::pe::PE::parse(data).map_err(Error::InvalidPe)?;
 
@@ -140,13 +148,7 @@ pub fn execute_linux_kernel(
     cmdline: &str,
     cmdline_ucs2: &[Char16],
 ) -> Result<()> {
-    let is_64bit = match mem::size_of::<usize>() {
-        8 => true,
-        4 => false,
-        other => panic!("invalid size of usize: {}", other),
-    };
-
-    if is_64bit {
+    if is_64bit() {
         execute_linux_efi_stub(
             kernel_data,
             crdyboot_image,
