@@ -1,3 +1,16 @@
+//! PE executable parsing.
+//!
+//! This uses the goblin library to parse a PE executable and find its entry
+//! point.
+//!
+//! When booting from a 64-bit UEFI environment, the normal PE entry point
+//! in the PE header can be used.
+//!
+//! When booting from a 32-bit UEFI environment, newer kernels can provide a
+//! compatibility entry point. This requires a kernel with this commit:
+//!
+//!    efi/x86: Implement mixed mode boot without the handover protocol
+
 use core::convert::TryInto;
 pub use goblin::error::Error as PeError;
 use goblin::pe::PE;
@@ -24,6 +37,10 @@ impl<'a> PeExecutable<'a> {
     }
 
     /// Get an IA32 entry point, if available.
+    ///
+    /// This looks for a PE header named ".compat", which contains a list of
+    /// entries. Each entry can specify a machine type and an entry
+    /// point. Search for an IA32 entry and return that entry point if found.
     pub fn get_ia32_compat_entry_point(&self) -> Option<usize> {
         // Look for a section named ".compat".
         let section = self
