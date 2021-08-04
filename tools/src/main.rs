@@ -281,14 +281,11 @@ fn run_uefi_build(
 
 #[throws]
 fn run_crdyboot_build(opt: &Opt, conf: &Config) {
-    let mut features = Vec::new();
-    if conf.enable_verbose_logging {
-        features.push("verbose");
-    }
-    if conf.use_test_key {
-        features.push("use_test_key");
-    }
-    run_uefi_build(&opt.crdyboot_path(), opt.build_mode(), &features)?;
+    run_uefi_build(
+        &opt.crdyboot_path(),
+        opt.build_mode(),
+        &conf.get_crdyboot_features(),
+    )?;
 }
 
 #[throws]
