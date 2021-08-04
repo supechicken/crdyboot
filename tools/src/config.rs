@@ -65,6 +65,18 @@ impl Config {
             use_test_key: use_test_key.unwrap_or(false),
         }
     }
+
+    /// Get all cargo features to enable while building crdyboot.
+    pub fn get_crdyboot_features(&self) -> Vec<&'static str> {
+        let mut features = Vec::new();
+        if self.enable_verbose_logging {
+            features.push("verbose");
+        }
+        if self.use_test_key {
+            features.push("use_test_key");
+        }
+        features
+    }
 }
 
 #[cfg(test)]
