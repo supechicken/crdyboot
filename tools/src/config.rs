@@ -24,7 +24,7 @@ impl Config {
     #[throws]
     pub fn load(repo_root: &Utf8Path) -> Config {
         let ini = fs::read_to_string(config_path(repo_root))?;
-        Config::parse(&ini, &repo_root)?
+        Config::parse(&ini, repo_root)?
     }
 
     #[throws]
