@@ -13,6 +13,7 @@
 
 use core::convert::TryInto;
 pub use goblin::error::Error as PeError;
+use goblin::pe::section_table::SectionTable;
 use goblin::pe::PE;
 use scroll::Pread;
 
@@ -42,15 +43,8 @@ impl<'a> PeExecutable<'a> {
     /// entries. Each entry can specify a machine type and an entry
     /// point. Search for an IA32 entry and return that entry point if found.
     pub fn get_ia32_compat_entry_point(&self) -> Option<usize> {
-        // Look for a section named ".compat".
-        let section = self
-            .parsed
-            .sections
-            .iter()
-            .find(|s| &s.name == b".compat\0")?;
-        let data_start: usize = section.pointer_to_raw_data.try_into().ok()?;
-        let data_size: usize = section.size_of_raw_data.try_into().ok()?;
-        let section_data = self.data.get(data_start..data_start + data_size)?;
+        let section_data =
+            find_section_data(self.data, &self.parsed.sections, b".compat\0")?;
 
         find_compat_entry_point_in_section(
             section_data,
@@ -137,6 +131,19 @@ impl<'a> Iterator for CompatEntryIter<'a> {
     }
 }
 
+/// Search for a section with the specified `name` and return its data (as a
+/// slice within `data`).
+fn find_section_data<'a>(
+    data: &'a [u8],
+    sections: &[SectionTable],
+    name: &[u8; 8],
+) -> Option<&'a [u8]> {
+    let section = sections.iter().find(|s| &s.name == name)?;
+    let data_start: usize = section.pointer_to_raw_data.try_into().ok()?;
+    let data_size: usize = section.size_of_raw_data.try_into().ok()?;
+    data.get(data_start..data_start + data_size)
+}
+
 fn find_compat_entry_point_in_section(
     section: &[u8],
     target_machine_type: u16,
@@ -154,6 +161,29 @@ fn find_compat_entry_point_in_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find_section_data() {
+        let data = &[0xa, 0xb, 0xc, 0xd];
+        let sections = &[SectionTable {
+            name: *b"abcdefgh",
+            real_name: None,
+            virtual_size: 0,
+            virtual_address: 0,
+            size_of_raw_data: 2,
+            pointer_to_raw_data: 1,
+            pointer_to_relocations: 0,
+            pointer_to_linenumbers: 0,
+            number_of_relocations: 0,
+            number_of_linenumbers: 0,
+            characteristics: 0,
+        }];
+
+        assert_eq!(
+            find_section_data(data, sections, b"abcdefgh").unwrap(),
+            &[0xb, 0xc]
+        );
+    }
 
     #[test]
     fn test_compat_entry() {
