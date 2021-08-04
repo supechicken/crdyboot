@@ -237,7 +237,7 @@ fn run_check(opt: &Opt, conf: &Config) {
     run_rustfmt(opt)?;
     run_tests(opt)?;
     run_crdyboot_build(opt, conf)?;
-    run_clippy(opt)?;
+    run_clippy(opt, conf)?;
 }
 
 #[throws]
@@ -248,6 +248,13 @@ fn run_clean(opt: &Opt) {
         modify_cmd_for_path_prefix(&mut cmd, &project);
         cmd.set_dir(&project);
         cmd.run()?;
+    }
+}
+
+/// Add cargo features to a command. Does nothing if `features` is empty.
+fn add_cargo_features_args(cmd: &mut Command, features: &[&str]) {
+    if !features.is_empty() {
+        cmd.add_args(&["--features", &features.join(",")]);
     }
 }
 
@@ -269,9 +276,7 @@ fn run_uefi_build(
                 target,
             ],
         );
-        if !features.is_empty() {
-            cmd.add_args(&["--features", &features.join(",")]);
-        }
+        add_cargo_features_args(&mut cmd, features);
         cmd.add_args(build_mode.cargo_args());
         modify_cmd_for_path_prefix(&mut cmd, project_dir);
         cmd.set_dir(project_dir);
@@ -364,10 +369,13 @@ fn run_update_disk(opt: &Opt) {
 }
 
 #[throws]
-fn run_clippy(opt: &Opt) {
+fn run_clippy(opt: &Opt, conf: &Config) {
     for project in opt.project_paths() {
         println!("{}:", project);
         let mut cmd = Command::with_args("cargo", &["+nightly", "clippy"]);
+        if project.ends_with("crdyboot") {
+            add_cargo_features_args(&mut cmd, &conf.get_crdyboot_features());
+        }
         modify_cmd_for_path_prefix(&mut cmd, &project);
         cmd.set_dir(&project);
         cmd.run()?;
@@ -487,7 +495,7 @@ fn main() {
         Action::Clean(_) => run_clean(&opt),
         Action::Format(_) => run_rustfmt(&opt),
         Action::UpdateDisk(_) => run_update_disk(&opt),
-        Action::Lint(_) => run_clippy(&opt),
+        Action::Lint(_) => run_clippy(&opt, &conf),
         Action::PrepDisk(_) => run_prep_disk(&opt),
         Action::SecureBootSetup(action) => run_secure_boot_setup(&opt, action),
         Action::Test(_) => run_tests(&opt),
