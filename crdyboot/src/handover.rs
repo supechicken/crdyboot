@@ -13,6 +13,7 @@ use crate::result::{Error, Result};
 use alloc::vec;
 use core::convert::TryInto;
 use core::{mem, ptr};
+use log::info;
 use uefi::table::{Boot, SystemTable};
 use uefi::Handle;
 use vboot::{kernel_data_as_boot_params, BootParams, BootParamsError};
@@ -37,6 +38,8 @@ pub fn execute_linux_kernel_32(
     system_table: SystemTable<Boot>,
     cmdline: &str,
 ) -> Result<()> {
+    info!("booting with the EFI handover protocol");
+
     let image_params = match kernel_data_as_boot_params(kernel_data) {
         Ok(params) => params,
         Err(BootParamsError::InputTooSmall) => {

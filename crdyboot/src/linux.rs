@@ -211,7 +211,6 @@ pub fn execute_linux_kernel(
     } else if let Some(entry) = get_ia32_compat_entry_point(kernel_data, &pe) {
         execute_linux_efi_stub(system_table, entry)
     } else {
-        info!("using handover!");
         handover::execute_linux_kernel_32(
             kernel_data,
             crdyboot_image,
