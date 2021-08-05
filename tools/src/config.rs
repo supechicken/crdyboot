@@ -10,6 +10,7 @@ use fs_err as fs;
 pub struct Config {
     enable_verbose_logging: bool,
     use_test_key: bool,
+    disk_path: Utf8PathBuf,
     /// Absolute path of the crdyboot repo.
     repo: Utf8PathBuf,
 }
@@ -28,6 +29,7 @@ impl Config {
 
     #[throws]
     fn parse(ini: &str, repo: &Utf8Path) -> Config {
+        let mut disk_path = Utf8PathBuf::from("workspace/disk.bin");
         let mut enable_verbose_logging = true;
         let mut use_test_key = false;
 
@@ -60,7 +62,10 @@ impl Config {
                 })
             };
 
+            let parse_path = || -> Utf8PathBuf { repo.join(val) };
+
             match key {
+                "disk_path" => disk_path = parse_path(),
                 "enable_verbose_logging" => {
                     enable_verbose_logging = parse_bool()?
                 }
@@ -72,6 +77,7 @@ impl Config {
         Config {
             enable_verbose_logging,
             use_test_key,
+            disk_path,
             repo: repo.to_path_buf(),
         }
     }
@@ -129,8 +135,8 @@ impl Config {
         self.vboot_reference_path().join("build/futility/futility")
     }
 
-    pub fn disk_path(&self) -> Utf8PathBuf {
-        self.workspace_path().join("disk.bin")
+    pub fn disk_path(&self) -> &Utf8Path {
+        &self.disk_path
     }
 
     pub fn enroller_disk_path(&self) -> Utf8PathBuf {

@@ -147,7 +147,7 @@ pub fn gen_vboot_test_disk(conf: &Config) {
     })?;
 
     let vboot_disk_lo_dev = LoopbackDevice::new(&disk.path)?;
-    let cloudready_lo_dev = LoopbackDevice::new(&conf.disk_path())?;
+    let cloudready_lo_dev = LoopbackDevice::new(conf.disk_path())?;
 
     // Copy a kernel partition from the cloudready disk to the new disk.
     Command::with_args(
