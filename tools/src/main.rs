@@ -49,6 +49,7 @@ enum Action {
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     BuildVbootTestDisk(BuildVbootTestDiskAction),
+    Writedisk(WritediskAction),
 }
 
 /// Build crdyboot.
@@ -127,6 +128,11 @@ struct QemuAction {
     #[argh(switch)]
     secure_boot: bool,
 }
+
+/// Write the disk binary to a USB with `writedisk`.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "writedisk")]
+struct WritediskAction {}
 
 const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
 
@@ -376,6 +382,11 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 }
 
 #[throws]
+fn run_writedisk(conf: &Config) {
+    Command::with_args("writedisk", &[conf.disk_path()]).run()?;
+}
+
+#[throws]
 fn initial_setup(conf: &Config) {
     Command::with_args(
         "git",
@@ -421,5 +432,6 @@ fn main() {
         Action::SecureBootSetup(action) => run_secure_boot_setup(&conf, action),
         Action::Test(_) => run_tests(&conf),
         Action::Qemu(action) => run_qemu(&conf, action),
+        Action::Writedisk(_) => run_writedisk(&conf),
     }?;
 }
