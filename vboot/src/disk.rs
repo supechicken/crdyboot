@@ -4,7 +4,6 @@ use core::convert::TryInto;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::{ptr, slice};
-use log::error;
 
 /// Interface for random-access disk IO.
 pub trait DiskIo {
@@ -16,6 +15,9 @@ pub trait DiskIo {
 
     /// Read LBA sectors starting at `lba_start` from the device into `buffer`.
     fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode;
+
+    /// Write LBA sectors from `buffer` to the device starting at `lba_start`.
+    fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode;
 }
 
 pub struct DiskInfo<'a> {
@@ -32,11 +34,11 @@ impl<'a> DiskInfo<'a> {
 /// Wrap `DiskIo` into a new struct so that we can convert it to a thin pointer
 /// and cast that to a `VbExDiskHandle_t`.
 pub struct Disk<'a> {
-    io: &'a dyn DiskIo,
+    io: &'a mut dyn DiskIo,
 }
 
 impl<'a> Disk<'a> {
-    pub fn new(io: &'a dyn DiskIo) -> Disk<'a> {
+    pub fn new(io: &'a mut dyn DiskIo) -> Disk<'a> {
         Disk { io }
     }
 
@@ -75,6 +77,10 @@ impl<'a> DiskIo for Disk<'a> {
     fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
         self.io.read(lba_start, buffer)
     }
+
+    fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
+        self.io.write(lba_start, buffer)
+    }
 }
 
 #[no_mangle]
@@ -96,12 +102,19 @@ unsafe extern "C" fn VbExDiskRead(
 }
 
 #[no_mangle]
-extern "C" fn VbExDiskWrite(
-    _handle: VbExDiskHandle_t,
-    _lba_start: u64,
-    _lba_count: u64,
-    _buffer: *const u8,
+unsafe extern "C" fn VbExDiskWrite(
+    handle: VbExDiskHandle_t,
+    lba_start: u64,
+    lba_count: u64,
+    buffer: *const u8,
 ) -> ReturnCode {
-    error!("VbExDiskWrite not implemented");
-    ReturnCode::VB2_ERROR_EX_UNIMPLEMENTED
+    let disk = Disk::from_handle(handle);
+
+    let buffer_len = (disk.bytes_per_lba() * lba_count)
+        .try_into()
+        .expect("invalid write size");
+
+    let buffer = slice::from_raw_parts(buffer, buffer_len);
+
+    disk.write(lba_start, buffer)
 }

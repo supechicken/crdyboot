@@ -83,7 +83,7 @@ fn find_parent_disk(
 pub fn find_disk_block_io(
     crdyboot_image: Handle,
     bt: &BootServices,
-) -> Result<&BlockIO> {
+) -> Result<&mut BlockIO> {
     // Get the LoadedImage protocol for the image handle. This provides a
     // device handle which should correspond to the disk that the image was
     // loaded from.
@@ -109,12 +109,12 @@ pub fn find_disk_block_io(
         .handle_protocol::<BlockIO>(disk_handle)
         .log_warning()
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
-    let disk_block_io = unsafe { &*disk_block_io.get() };
+    let disk_block_io = unsafe { &mut *disk_block_io.get() };
     Ok(disk_block_io)
 }
 
 pub struct GptDisk<'a> {
-    block_io: &'a BlockIO,
+    block_io: &'a mut BlockIO,
 }
 
 impl<'a> GptDisk<'a> {
@@ -146,6 +146,23 @@ impl<'a> DiskIo for GptDisk<'a> {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
+                       lba_start, buffer.len(), err);
+                // TODO: is there a more specific vb2 error code that would be
+                // better to return here?
+                ReturnCode::VB2_ERROR_UNKNOWN
+            }
+        }
+    }
+
+    fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
+        match self
+            .block_io
+            .write_blocks(self.block_io.media().media_id(), lba_start, buffer)
+            .log_warning()
+        {
+            Ok(()) => ReturnCode::VB2_SUCCESS,
+            Err(err) => {
+                error!("disk write failed: lba_start={}, size in bytes: {}, err: {:?}",
                        lba_start, buffer.len(), err);
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?

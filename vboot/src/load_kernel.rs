@@ -230,7 +230,7 @@ fn validate_kernel_buffer_size(
 /// have been verified against `packed_pubkey`.
 pub fn load_kernel(
     packed_pubkey: &[u8],
-    disk_io: &dyn DiskIo,
+    disk_io: &mut dyn DiskIo,
 ) -> Result<LoadedKernel, LoadKernelError> {
     // TODO: this could probably be smaller.
     let mut workbuf = vec![0u8; 4096 * 50];
@@ -317,6 +317,10 @@ mod tests {
             buffer.copy_from_slice(&self.data[start..end]);
             ReturnCode::VB2_SUCCESS
         }
+
+        fn write(&mut self, _lba_start: u64, _buffer: &[u8]) -> ReturnCode {
+            panic!("write called");
+        }
     }
 
     #[test]
@@ -355,11 +359,11 @@ mod tests {
         let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_secure drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 6082560 verity payload=PARTUUID=%U/PARTNROFF=1 hashtree=PARTUUID=%U/PARTNROFF=1 hashstart=6082560 alg=sha256 root_hexdigest=69185175957ada9cb25bf34621a4a52b03d568b44adf8dfb136ce89152be524a salt=4332c7477474e9131fa629af556314ccb49e872282d6fade4801876d54d56236\" noinitrd vt.global_cursor_default=0 kern_guid=%U add_efi_memmap boot=local noresume noswap i915.modeset=1 ";
         let expected_command_line = "console= loglevel=7 init=/sbin/init cros_secure drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 6082560 verity payload=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashtree=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashstart=6082560 alg=sha256 root_hexdigest=69185175957ada9cb25bf34621a4a52b03d568b44adf8dfb136ce89152be524a salt=4332c7477474e9131fa629af556314ccb49e872282d6fade4801876d54d56236\" noinitrd vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap boot=local noresume noswap i915.modeset=1 ";
 
-        let disk = MemDisk {
+        let mut disk = MemDisk {
             data: include_bytes!("../test_data/disk.bin"),
         };
 
-        match load_kernel(test_key_vbpubk, &disk) {
+        match load_kernel(test_key_vbpubk, &mut disk) {
             Ok(loaded_kernel) => {
                 assert_eq!(
                     guid_string(loaded_kernel.unique_partition_guid),
