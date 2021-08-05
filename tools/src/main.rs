@@ -260,7 +260,7 @@ fn run_rustfmt(conf: &Config) {
 fn run_prep_disk(conf: &Config) {
     let disk = conf.disk_path();
 
-    let lo_dev = LoopbackDevice::new(&disk)?;
+    let lo_dev = LoopbackDevice::new(disk)?;
     let partitions = lo_dev.partition_paths();
 
     shim::update_shim(conf, &partitions)?;
@@ -274,7 +274,7 @@ fn run_prep_disk(conf: &Config) {
 fn run_update_disk(conf: &Config) {
     let disk = conf.disk_path();
 
-    let lo_dev = LoopbackDevice::new(&disk)?;
+    let lo_dev = LoopbackDevice::new(disk)?;
     let partitions = lo_dev.partition_paths();
 
     gen_disk::copy_in_crdyboot(conf, &partitions)?;
@@ -372,7 +372,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = action.secure_boot;
-    qemu.run_disk_image(&disk)?;
+    qemu.run_disk_image(disk)?;
 }
 
 #[throws]
