@@ -10,6 +10,7 @@ will handle loading, verifying, and running the Linux kernel.
 
 Goals:
 
+* Well documented and as simple as possible.
 * Ensure that when secure boot is enabled, dm-verity is enabled for
   the rootfs. (Note that this can only be fully verified if using
   custom Secure Boot keys, otherwise a different OS signed with the
