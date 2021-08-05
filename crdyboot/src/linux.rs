@@ -1,6 +1,6 @@
 use crate::handover;
 use crate::result::{Error, Result};
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
@@ -78,20 +78,23 @@ fn modify_loaded_image(
         .log_warning()
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let li: &mut LoadedImage = unsafe { &mut *li.get() };
+
+    // Set kernel command line.
+    let load_options_size = 2 * cmdline_ucs2.len();
+    let load_options_size = u32::try_from(load_options_size)
+        .map_err(|_| Error::CommandLineTooBig(load_options_size))?;
+    unsafe {
+        li.set_load_options(cmdline_ucs2.as_ptr(), load_options_size);
+    }
+
+    // Set kernel data.
     let li: &mut MyLoadedImage =
         unsafe { &mut *((li as *mut LoadedImage).cast::<MyLoadedImage>()) };
-
     li.image_base = kernel_data.as_ptr().cast::<c_void>();
     li.image_size = kernel_data
         .len()
         .try_into()
         .map_err(|_| Error::KernelDataTooBig(kernel_data.len()))?;
-
-    li.load_options = cmdline_ucs2.as_ptr();
-    let load_options_size = 2 * cmdline_ucs2.len();
-    li.load_options_size = load_options_size
-        .try_into()
-        .map_err(|_| Error::CommandLineTooBig(load_options_size))?;
 
     Ok(())
 }
