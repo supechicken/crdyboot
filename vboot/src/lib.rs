@@ -33,10 +33,11 @@ mod malloc;
 /// Bindgen wrappers for parts of vboot_reference.
 #[allow(clippy::missing_safety_doc)]
 #[allow(clippy::ptr_as_ptr)]
+#[allow(dead_code)]
 #[allow(missing_docs)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
-pub mod vboot_sys {
+mod vboot_sys {
     // ctypes
     type c_char = i8;
     type c_void = core::ffi::c_void;
