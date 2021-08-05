@@ -1,9 +1,11 @@
 use crate::handover;
 use crate::result::{Error, Result};
+use alloc::vec::Vec;
 use core::convert::{TryFrom, TryInto};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
+use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
@@ -45,6 +47,25 @@ fn is_64bit() -> bool {
         4 => false,
         other => panic!("invalid size of usize: {}", other),
     }
+}
+
+fn str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
+    // Expect two bytes for each byte of the input, plus a null byte.
+    let mut output = Vec::with_capacity(input.len() + 1);
+
+    // Convert to UTF-16, then convert to UCS-2.
+    for c in input.encode_utf16() {
+        if let Ok(c) = Char16::try_from(c) {
+            output.push(c);
+        } else {
+            return Err(Error::CommandLineUcs2ConversionFailed);
+        }
+    }
+
+    // Add trailing nul.
+    output.push(NUL_16);
+
+    Ok(output)
 }
 
 fn entry_point_from_offset(
@@ -116,14 +137,17 @@ fn modify_loaded_image(
 /// would be an unnecessary verification.
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
-pub fn execute_linux_efi_stub(
+fn execute_linux_efi_stub(
     kernel_data: &[u8],
     entry_point: Entrypoint,
     crdyboot_image: Handle,
     system_table: SystemTable<Boot>,
-    cmdline_ucs2: &[Char16],
+    cmdline: &str,
 ) -> Result<()> {
     info!("booting the EFI stub");
+
+    // Convert the string to UCS-2.
+    let cmdline_ucs2 = str_to_uefi_str(cmdline)?;
 
     // Ideally we could create a new image here, but I'm not sure
     // there's any way to do that without calling LoadImage, which we
@@ -133,7 +157,7 @@ pub fn execute_linux_efi_stub(
         crdyboot_image,
         &system_table,
         kernel_data,
-        cmdline_ucs2,
+        &cmdline_ucs2,
     )?;
 
     unsafe {
@@ -148,7 +172,6 @@ pub fn execute_linux_kernel(
     crdyboot_image: Handle,
     system_table: SystemTable<Boot>,
     cmdline: &str,
-    cmdline_ucs2: &[Char16],
 ) -> Result<()> {
     let pe = PeExecutable::parse(kernel_data).map_err(Error::InvalidPe)?;
 
@@ -158,7 +181,7 @@ pub fn execute_linux_kernel(
             entry_point_from_offset(kernel_data, entry_point_offset),
             crdyboot_image,
             system_table,
-            cmdline_ucs2,
+            cmdline,
         )
     };
 

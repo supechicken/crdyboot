@@ -15,33 +15,10 @@ mod handover;
 mod linux;
 mod result;
 
-use alloc::vec::Vec;
-use core::convert::TryFrom;
 use log::{info, LevelFilter};
 use result::{Error, Result};
-use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
-use uefi::Char16;
 use vboot::LoadedKernel;
-
-fn ascii_str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
-    // Expect two bytes for each byte of the input, plus a null byte.
-    let mut output = Vec::with_capacity(input.len() + 1);
-
-    // Convert to UTF-16, then convert to UCS-2.
-    for c in input.encode_utf16() {
-        if let Ok(c) = Char16::try_from(c) {
-            output.push(c);
-        } else {
-            return Err(Error::CommandLineUcs2ConversionFailed);
-        }
-    }
-
-    // Add trailing nul.
-    output.push(NUL_16);
-
-    Ok(output)
-}
 
 fn run_kernel(
     crdyboot_image: Handle,
@@ -52,16 +29,12 @@ fn run_kernel(
         kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {}", load_options_utf8);
 
-    // Convert the string to UCS-2.
-    let load_options_ucs2 = ascii_str_to_uefi_str(&load_options_utf8)?;
-
     // Run the kernel.
     linux::execute_linux_kernel(
         kernel.data(),
         crdyboot_image,
         st,
         &load_options_utf8,
-        &load_options_ucs2,
     )?;
 
     Ok(())
