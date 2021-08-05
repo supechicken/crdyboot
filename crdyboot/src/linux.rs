@@ -11,7 +11,7 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::MemoryType;
 use uefi::table::{Boot, SystemTable};
 use uefi::{Char16, Handle, Status};
-use vboot::PeExecutable;
+use vboot::{LoadedKernel, PeExecutable};
 
 type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
 
@@ -168,20 +168,22 @@ fn execute_linux_efi_stub(
 }
 
 pub fn execute_linux_kernel(
-    kernel_data: &[u8],
+    kernel: &LoadedKernel,
     crdyboot_image: Handle,
     system_table: SystemTable<Boot>,
-    cmdline: &str,
 ) -> Result<()> {
-    let pe = PeExecutable::parse(kernel_data).map_err(Error::InvalidPe)?;
+    let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
+    info!("command line: {}", cmdline);
+
+    let pe = PeExecutable::parse(kernel.data()).map_err(Error::InvalidPe)?;
 
     let execute_linux_efi_stub = |system_table, entry_point_offset| {
         execute_linux_efi_stub(
-            kernel_data,
-            entry_point_from_offset(kernel_data, entry_point_offset),
+            kernel.data(),
+            entry_point_from_offset(kernel.data(), entry_point_offset),
             crdyboot_image,
             system_table,
-            cmdline,
+            &cmdline,
         )
     };
 
@@ -191,10 +193,10 @@ pub fn execute_linux_kernel(
         execute_linux_efi_stub(system_table, entry)
     } else {
         handover::execute_linux_kernel_32(
-            kernel_data,
+            kernel.data(),
             crdyboot_image,
             system_table,
-            cmdline,
+            &cmdline,
         )
     }
 }
