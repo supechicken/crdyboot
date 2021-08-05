@@ -45,6 +45,10 @@ targets.
 The `tools` subdirectory contains a single binary that is used by the
 various `x.py` commands shown below.
 
+The `enroller` subdirectory contains a small UEFI application that
+enrolls a test key in the `PK`, `KEK`, and `db` variables. This only
+works if the machine is in secure boot custom mode.
+
 ## Dependencies
 
 Install nightly Rust:
