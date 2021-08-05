@@ -104,8 +104,8 @@ fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     set_log_level();
 
     let kernel_verification_key = get_kernel_verification_key();
-    let gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())?;
-    let kernel = vboot::load_kernel(kernel_verification_key, &gpt_disk)
+    let mut gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())?;
+    let kernel = vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
         .map_err(Error::LoadKernelFailed)?;
 
     run_kernel(crdyboot_image, st, &kernel)?;
