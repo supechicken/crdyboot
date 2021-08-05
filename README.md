@@ -2,11 +2,8 @@
 
 Pronounced CUR-dee-boot.
 
-This is a work-in-progress UEFI bootloader for CloudReady. It is
-intended to be run either as a second-stage bootloader after
-[shim](https://github.com/rhboot/shim) when using the Microsoft keys,
-or as the first-stage bootloader when using custom keys. Then crdyboot
-will handle loading, verifying, and running the Linux kernel.
+This is a UEFI bootloader for CloudReady. Crdyboot handles loading,
+verifying, and running the Linux kernel.
 
 Goals:
 
