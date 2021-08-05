@@ -82,19 +82,16 @@ fn modify_loaded_image(
         unsafe { &mut *((li as *mut LoadedImage).cast::<MyLoadedImage>()) };
 
     li.image_base = kernel_data.as_ptr().cast::<c_void>();
-    li.image_size = if let Ok(size) = kernel_data.len().try_into() {
-        size
-    } else {
-        return Err(Error::KernelDataTooBig(kernel_data.len()));
-    };
+    li.image_size = kernel_data
+        .len()
+        .try_into()
+        .map_err(|_| Error::KernelDataTooBig(kernel_data.len()))?;
 
     li.load_options = cmdline_ucs2.as_ptr();
     let load_options_size = 2 * cmdline_ucs2.len();
-    li.load_options_size = if let Ok(size) = load_options_size.try_into() {
-        size
-    } else {
-        return Err(Error::CommandLineTooBig(load_options_size));
-    };
+    li.load_options_size = load_options_size
+        .try_into()
+        .map_err(|_| Error::CommandLineTooBig(load_options_size))?;
 
     Ok(())
 }
