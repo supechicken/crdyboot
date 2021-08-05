@@ -80,7 +80,7 @@ fn find_parent_disk(
     Err(Error::ParentDiskNotFound)
 }
 
-pub fn find_disk_block_io(
+fn find_disk_block_io(
     crdyboot_image: Handle,
     bt: &BootServices,
 ) -> Result<&mut BlockIO> {
