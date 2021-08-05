@@ -28,8 +28,8 @@ impl Config {
 
     #[throws]
     fn parse(ini: &str, repo: &Utf8Path) -> Config {
-        let mut enable_verbose_logging = None;
-        let mut use_test_key = None;
+        let mut enable_verbose_logging = true;
+        let mut use_test_key = false;
 
         for (index, line) in ini.lines().enumerate() {
             let line_no = index + 1;
@@ -51,15 +51,13 @@ impl Config {
             let key = parts[0].trim();
             let val = parts[1].trim();
 
-            let parse_bool = || -> Result<Option<bool>, Error> {
-                val.parse()
-                    .map_err(|_| {
-                        anyhow!(
-                            "invalid config: line {}: expected bool value",
-                            line_no
-                        )
-                    })
-                    .map(Some)
+            let parse_bool = || -> Result<bool, Error> {
+                val.parse().map_err(|_| {
+                    anyhow!(
+                        "invalid config: line {}: expected bool value",
+                        line_no
+                    )
+                })
             };
 
             match key {
@@ -72,8 +70,8 @@ impl Config {
         }
 
         Config {
-            enable_verbose_logging: enable_verbose_logging.unwrap_or(true),
-            use_test_key: use_test_key.unwrap_or(false),
+            enable_verbose_logging,
+            use_test_key,
             repo: repo.to_path_buf(),
         }
     }
