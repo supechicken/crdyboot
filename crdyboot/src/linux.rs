@@ -115,7 +115,7 @@ fn modify_loaded_image(
     li.image_size = kernel_data
         .len()
         .try_into()
-        .map_err(|_| Error::KernelDataTooBig(kernel_data.len()))?;
+        .expect("usize is larger than u64");
 
     Ok(())
 }
