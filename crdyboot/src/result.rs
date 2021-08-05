@@ -21,7 +21,6 @@ pub enum Error {
     InvalidPe(PeError),
     KernelTooSmall,
     InvalidBootParameters,
-    KernelDataTooBig(usize),
     CommandLineTooBig(usize),
 
     KernelDidNotTakeControl,
@@ -78,9 +77,6 @@ impl fmt::Display for Error {
             }
             InvalidBootParameters => {
                 write!(f, "invalid boot parameters")
-            }
-            KernelDataTooBig(size) => {
-                write!(f, "kernel data is too large: {}", size)
             }
             CommandLineTooBig(size) => {
                 write!(f, "kernel command line is too large: {}", size)
