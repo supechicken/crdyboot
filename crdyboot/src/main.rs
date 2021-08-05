@@ -15,30 +15,9 @@ mod handover;
 mod linux;
 mod result;
 
-use log::{info, LevelFilter};
+use log::LevelFilter;
 use result::{Error, Result};
 use uefi::prelude::*;
-use vboot::LoadedKernel;
-
-fn run_kernel(
-    crdyboot_image: Handle,
-    st: SystemTable<Boot>,
-    kernel: &LoadedKernel,
-) -> Result<()> {
-    let load_options_utf8 =
-        kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
-    info!("command line: {}", load_options_utf8);
-
-    // Run the kernel.
-    linux::execute_linux_kernel(
-        kernel.data(),
-        crdyboot_image,
-        st,
-        &load_options_utf8,
-    )?;
-
-    Ok(())
-}
 
 fn set_log_level() {
     #[cfg(feature = "verbose")]
@@ -81,7 +60,7 @@ fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     let kernel = vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
         .map_err(Error::LoadKernelFailed)?;
 
-    run_kernel(crdyboot_image, st, &kernel)?;
+    linux::execute_linux_kernel(&kernel, crdyboot_image, st)?;
 
     Err(Error::KernelDidNotTakeControl)
 }
