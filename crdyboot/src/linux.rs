@@ -1,45 +1,18 @@
 use crate::handover;
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryFrom;
 use core::ffi::c_void;
 use core::mem;
 use log::info;
 use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::MemoryType;
 use uefi::table::{Boot, SystemTable};
-use uefi::{Char16, Handle, Status};
+use uefi::{Char16, Handle};
 use vboot::{LoadedKernel, PeExecutable};
 
 type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
-
-// TODO, copied from uefi-rs so that we can set some of the non-public
-// options. Should just make them public...
-#[repr(C)]
-struct MyLoadedImage {
-    revision: u32,
-    parent_handle: Handle,
-    system_table: *const c_void,
-
-    // Source location of the image
-    device_handle: Handle,
-    _file_path: *const c_void,
-    _reserved: *const c_void,
-
-    // Image load options
-    load_options_size: u32,
-    load_options: *const Char16,
-
-    // Location where image was loaded
-    image_base: *const c_void,
-    image_size: u64,
-    image_code_type: MemoryType,
-    image_data_type: MemoryType,
-
-    unload: extern "efiapi" fn(image_handle: Handle) -> Status,
-}
 
 fn is_64bit() -> bool {
     match mem::size_of::<usize>() {
@@ -109,13 +82,11 @@ fn modify_loaded_image(
     }
 
     // Set kernel data.
-    let li: &mut MyLoadedImage =
-        unsafe { &mut *((li as *mut LoadedImage).cast::<MyLoadedImage>()) };
-    li.image_base = kernel_data.as_ptr().cast::<c_void>();
-    li.image_size = kernel_data
-        .len()
-        .try_into()
-        .expect("usize is larger than u64");
+    let image_size =
+        u64::try_from(kernel_data.len()).expect("usize is larger than u64");
+    unsafe {
+        li.set_image(kernel_data.as_ptr().cast::<c_void>(), image_size);
+    }
 
     Ok(())
 }
