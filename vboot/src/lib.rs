@@ -28,7 +28,9 @@ mod stubs;
 // The UEFI targets don't have the C library. This module provides
 // malloc/free wrappers that delegate to Rust's `alloc`.
 #[cfg(not(target_env = "gnu"))]
-mod malloc;
+mod malloc {
+    include!("../../third_party/malloc.rs");
+}
 
 /// Bindgen wrappers for parts of vboot_reference.
 #[allow(clippy::missing_safety_doc)]

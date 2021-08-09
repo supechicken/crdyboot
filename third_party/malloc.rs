@@ -1,7 +1,5 @@
-//! Implement `malloc` and `free` so that vboot_reference can call those
-//! functions in a UEFI environment with no standard C library.
-//!
-//! Code in this file was adapted from: https://shift.click/blog/on-dealloc/
+// Code in this file was adapted from https://shift.click/blog/on-dealloc,
+// which is tri-licensed under CC0/MIT/Apache (https://shift.click/about).
 
 use alloc::alloc::Layout;
 use core::mem;
