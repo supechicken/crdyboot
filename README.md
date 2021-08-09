@@ -26,7 +26,7 @@ Goals:
   
 ## License
 
-[Apache License Version 2.0]
+[BSD]
    
 ## Code layout
 
@@ -131,5 +131,5 @@ An older pure-Rust version can be found in the `pure-rust-20210729`
 branch. Since then we have switched to building the C vboot library and
 loading/verifying the kernel through that library.
 
-[Apache License Version 2.0]: http://www.apache.org/licenses/LICENSE-2.0.txt
+[BSD]: LICENSE
 [writedisk]: https://crates.io/crates/writedisk
