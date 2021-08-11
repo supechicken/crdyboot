@@ -70,5 +70,9 @@ fn main() {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out_path = out_dir.join("sbat.csv");
-    fs::write(&out_path, sbat.to_csv()).unwrap();
+    let csv = sbat.to_csv();
+    fs::write(&out_path, &csv).unwrap();
+
+    let out_path = out_dir.join("sbat.csv.len");
+    fs::write(out_path, csv.len().to_string()).unwrap();
 }

@@ -4,8 +4,7 @@ edition = "2018"
 resolver = "2"
 
 # These two fields are also used when generating sbat.csv.
-# TODO: update this once the repo is public.
-repository = "https://neverware-internal.git.corp.google.com/crdyboot"
+repository = "https://chromium.googlesource.com/crdyboot"
 version = "1.0.0"
 
 [dependencies]

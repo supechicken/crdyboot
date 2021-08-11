@@ -79,4 +79,5 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
 // this section is used for.
 #[no_mangle]
 #[link_section = ".sbat"]
-static SBAT: [u8; 165] = *include_bytes!(concat!(env!("OUT_DIR"), "/sbat.csv"));
+static SBAT: [u8; include!(concat!(env!("OUT_DIR"), "/sbat.csv.len"))] =
+    *include_bytes!(concat!(env!("OUT_DIR"), "/sbat.csv"));
