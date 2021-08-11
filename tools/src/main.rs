@@ -233,6 +233,8 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 
 #[throws]
 fn run_build_enroller(conf: &Config) {
+    generate_secure_boot_keys(conf)?;
+
     run_uefi_build(&conf.enroller_path(), conf.build_mode(), &[])?;
 
     gen_disk::gen_enroller_disk(conf)?;
@@ -264,6 +266,8 @@ fn run_rustfmt(conf: &Config) {
 
 #[throws]
 fn run_prep_disk(conf: &Config) {
+    generate_secure_boot_keys(conf)?;
+
     let disk = conf.disk_path();
 
     let lo_dev = LoopbackDevice::new(disk)?;
@@ -278,6 +282,8 @@ fn run_prep_disk(conf: &Config) {
 
 #[throws]
 fn run_update_disk(conf: &Config) {
+    generate_secure_boot_keys(conf)?;
+
     let disk = conf.disk_path();
 
     let lo_dev = LoopbackDevice::new(disk)?;
@@ -335,7 +341,7 @@ fn generate_secure_boot_keys(conf: &Config) {
     sign::generate_signed_vars(&root_key_paths, "PK")?;
     sign::generate_signed_vars(&root_key_paths, "db")?;
 
-    // Generate the oemstr for use wit the VM enroller.
+    // Generate the oemstr for use with the VM enroller.
 
     let der = fs::read(root_key_paths.pub_der())?;
 
@@ -349,6 +355,8 @@ fn generate_secure_boot_keys(conf: &Config) {
 
 #[throws]
 fn run_secure_boot_setup(conf: &Config, action: &SecureBootSetupAction) {
+    generate_secure_boot_keys(conf)?;
+
     let po = if action.verbose {
         qemu::PrintOutput::Yes
     } else {
@@ -368,6 +376,8 @@ fn run_secure_boot_setup(conf: &Config, action: &SecureBootSetupAction) {
 
 #[throws]
 fn run_qemu(conf: &Config, action: &QemuAction) {
+    generate_secure_boot_keys(conf)?;
+
     let disk = conf.disk_path();
 
     let ovmf = if action.ia32 {
@@ -399,8 +409,6 @@ fn initial_setup(conf: &Config) {
         ],
     )
     .run()?;
-
-    generate_secure_boot_keys(conf)?;
 }
 
 #[throws]
