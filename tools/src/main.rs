@@ -72,7 +72,7 @@ struct BuildOvmfAction {}
 #[argh(subcommand, name = "build-vboot-test-disk")]
 struct BuildVbootTestDiskAction {}
 
-/// Format, lint, test, and build.
+/// Check formating, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
 struct CheckAction {}
@@ -85,7 +85,11 @@ struct CleanAction {}
 /// Run "cargo fmt" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "fmt")]
-struct FormatAction {}
+struct FormatAction {
+    /// don't format the code, just check if it's already formatted
+    #[argh(switch)]
+    check: bool,
+}
 
 /// Modify an existing CloudReady build to insert crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -152,7 +156,7 @@ fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
 
 #[throws]
 fn run_check(conf: &Config) {
-    run_rustfmt(conf)?;
+    run_rustfmt(conf, &FormatAction { check: true })?;
     run_tests(conf)?;
     run_crdyboot_build(conf)?;
     run_clippy(conf)?;
@@ -253,14 +257,17 @@ where
 }
 
 #[throws]
-fn run_rustfmt(conf: &Config) {
+fn run_rustfmt(conf: &Config, action: &FormatAction) {
     for project in conf.project_paths() {
         let cargo_path = project.join("Cargo.toml");
-        Command::with_args(
+        let mut cmd = Command::with_args(
             "cargo",
             &["fmt", "--manifest-path", cargo_path.as_str()],
-        )
-        .run()?;
+        );
+        if action.check {
+            cmd.add_args(&["--", "--check"]);
+        }
+        cmd.run()?;
     }
 }
 
@@ -433,7 +440,7 @@ fn main() {
         Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Clean(_) => run_clean(&conf),
-        Action::Format(_) => run_rustfmt(&conf),
+        Action::Format(action) => run_rustfmt(&conf, action),
         Action::UpdateDisk(_) => run_update_disk(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
