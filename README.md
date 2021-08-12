@@ -68,7 +68,7 @@ Other tools used for image signing and running in a VM:
 
 ## Building and testing
 
-To format, lint, test, and build both vboot and crdyboot:
+To check formatting, lint, test, and build both vboot and crdyboot:
 
     ./x.py check
     
