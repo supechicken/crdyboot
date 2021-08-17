@@ -16,6 +16,24 @@
       "message": "I get including vboot_reference_path (thirdparty/vboot_reference) but why do you need the futility_executable_path in there as well? (Which I assume looks like third_party/vboot_reference/build/futility/futility)",
       "revId": "2d56450611a84be0bfdd79249968c4481ffe06dd",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "769809c0_211ff7cc",
+        "filename": "tools/src/gen_disk.rs",
+        "patchSetId": 1
+      },
+      "lineNbr": 246,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-08-17T19:59:00Z",
+      "side": 1,
+      "message": "That is passed in as a make target so that it only builds that one file (and all of its dependencies). It\u0027s not strictly required, but it avoids building stuff we don\u0027t need.",
+      "parentUuid": "4ca46d48_51fa25e2",
+      "revId": "2d56450611a84be0bfdd79249968c4481ffe06dd",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
