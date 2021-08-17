@@ -16,12 +16,9 @@ pub enum Error {
 
     LoadKernelFailed(LoadKernelError),
 
-    BadNumericConversion(&'static str),
-
     InvalidPe(PeError),
-    KernelTooSmall,
-    InvalidBootParameters,
     CommandLineTooBig(usize),
+    KernelTooOld,
 
     KernelDidNotTakeControl,
 }
@@ -65,21 +62,14 @@ impl fmt::Display for Error {
                 write!(f, "failed to load kernel: {}", err)
             }
 
-            BadNumericConversion(info) => {
-                write!(f, "failed to convert numeric type: {}", info)
-            }
-
             InvalidPe(err) => {
                 write!(f, "invalid PE: {}", err)
             }
-            KernelTooSmall => {
-                write!(f, "kernel data is too small to contain boot parameters")
-            }
-            InvalidBootParameters => {
-                write!(f, "invalid boot parameters")
-            }
             CommandLineTooBig(size) => {
                 write!(f, "kernel command line is too large: {}", size)
+            }
+            KernelTooOld => {
+                write!(f, "firmware is 32-bit but kernel doesn't have compatible entry point")
             }
 
             KernelDidNotTakeControl => {
