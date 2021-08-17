@@ -237,6 +237,19 @@ pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
 }
 
 #[throws]
+pub fn build_futility(conf: &Config) {
+    Command::with_args(
+        "make",
+        &[
+            "-C",
+            conf.vboot_reference_path().as_str(),
+            conf.futility_executable_path().as_str(),
+        ],
+    )
+    .run()?;
+}
+
+#[throws]
 pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
@@ -271,6 +284,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
         ],
     )
     .run()?;
+
+    build_futility(conf)?;
 
     // Get the kernel command line and write it to a file.
     let output = Command::with_args(
