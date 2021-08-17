@@ -11,7 +11,6 @@
 extern crate alloc;
 
 mod disk;
-mod handover;
 mod linux;
 mod result;
 

@@ -1,4 +1,3 @@
-use crate::handover;
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
 use core::convert::TryFrom;
@@ -163,11 +162,6 @@ pub fn execute_linux_kernel(
     } else if let Some(entry) = pe.get_ia32_compat_entry_point() {
         execute_linux_efi_stub(system_table, entry)
     } else {
-        handover::execute_linux_kernel_32(
-            kernel.data(),
-            crdyboot_image,
-            system_table,
-            &cmdline,
-        )
+        Err(Error::KernelTooOld)
     }
 }
