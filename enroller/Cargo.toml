@@ -6,12 +6,5 @@ resolver = "2"
 
 [dependencies]
 log = "0.4"
-
-# TODO: once a new release comes out that includes 48e958d89 switch these two
-# deps to crates.io.
-uefi = { git = "https://github.com/rust-osdev/uefi-rs.git", features = ["exts", "ignore-logger-errors"] }
-uefi-services = { git = "https://github.com/rust-osdev/uefi-rs.git" }
-
-[patch.crates-io]
-# This is needed to fix uefi-services' dep on uefi
-uefi = { git = "https://github.com/rust-osdev/uefi-rs.git" }
+uefi = { version = "0.12", features = ["exts", "ignore-logger-errors"] }
+uefi-services = "0.9"
