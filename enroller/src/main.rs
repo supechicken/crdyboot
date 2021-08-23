@@ -11,6 +11,8 @@ use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, GLOBAL_VARIABLE};
 use uefi::{CStr16, Guid};
 
+// TODO: once a version of uefi-rs with 58ae6a401 is released, drop this
+// struct and use the upstream version.
 struct CString16(Vec<u16>);
 
 impl CString16 {
@@ -47,7 +49,8 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     let rt = st.runtime_services();
 
-    // TODO: add this to uefi-rs
+    // TODO: this was added to uefi-rs in 4811caba3, once that's in a
+    // release can drop this and use the upstream version.
     let image_security_database_guid = Guid::from_values(
         0xd719b2cb,
         0x3d3a,
