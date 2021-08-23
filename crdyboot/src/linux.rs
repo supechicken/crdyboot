@@ -20,7 +20,8 @@ fn is_64bit() -> bool {
         other => panic!("invalid size of usize: {}", other),
     }
 }
-
+// TODO: once a version of uefi-rs with 58ae6a401 is released, drop this
+// function and use CString16.
 fn str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
     // Expect two bytes for each byte of the input, plus a null byte.
     let mut output = Vec::with_capacity(input.len() + 1);
