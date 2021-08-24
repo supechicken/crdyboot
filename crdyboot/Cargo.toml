@@ -1,7 +1,6 @@
 [package]
 name = "crdyboot"
 edition = "2018"
-resolver = "2"
 
 # These two fields are also used when generating sbat.csv.
 repository = "https://chromium.googlesource.com/crdyboot"
@@ -23,6 +22,3 @@ use_test_key = []
 # If enabled, the max log level is set to Debug. If disabled (the default),
 # the max log level is set to Warn.
 verbose = []
-
-[profile.release]
-overflow-checks = true

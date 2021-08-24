@@ -2,7 +2,6 @@
 name = "vboot"
 version = "0.1.0"
 edition = "2018"
-resolver = "2"
 
 [dependencies]
 goblin = { version = "0.4", default-features = false, features = ["pe32", "pe64"] }
