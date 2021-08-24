@@ -5,6 +5,7 @@ mod gen_disk;
 mod loopback;
 mod mount;
 mod ovmf;
+mod package;
 mod qemu;
 mod shim;
 mod sign;
@@ -19,6 +20,7 @@ use config::Config;
 use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
+use package::Package;
 use qemu::Qemu;
 
 /// Tools for crdyboot.
@@ -37,7 +39,6 @@ pub struct Opt {
 #[argh(subcommand)]
 enum Action {
     Check(CheckAction),
-    Clean(CleanAction),
     Format(FormatAction),
     Lint(LintAction),
     Test(TestAction),
@@ -76,11 +77,6 @@ struct BuildVbootTestDiskAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
 struct CheckAction {}
-
-/// Clean out all the target directories.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "clean")]
-struct CleanAction {}
 
 /// Run "cargo fmt" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -138,39 +134,12 @@ struct QemuAction {
 #[argh(subcommand, name = "writedisk")]
 struct WritediskAction {}
 
-const RUSTFLAGS_ENV_VAR: &str = "RUSTFLAGS";
-
-fn update_rustflags_path_prefix(project_dir: &Utf8Path) -> String {
-    // TODO: update the variable rather than overwriting it. It's important
-    // to avoid having multiple remap-path-prefixes though, that can cause
-    // unwanted rebuilds of the tools project.
-    format!("--remap-path-prefix=src={}/src", project_dir)
-}
-
-fn modify_cmd_for_path_prefix(cmd: &mut Command, project_dir: &Utf8Path) {
-    cmd.env.insert(
-        RUSTFLAGS_ENV_VAR.into(),
-        update_rustflags_path_prefix(project_dir).into(),
-    );
-}
-
 #[throws]
 fn run_check(conf: &Config) {
-    run_rustfmt(conf, &FormatAction { check: true })?;
-    run_tests(conf)?;
+    run_rustfmt(&FormatAction { check: true })?;
+    run_tests()?;
     run_crdyboot_build(conf)?;
     run_clippy(conf)?;
-}
-
-#[throws]
-fn run_clean(conf: &Config) {
-    for project in conf.project_paths() {
-        println!("{}:", project);
-        let mut cmd = Command::with_args("cargo", &["clean"]);
-        modify_cmd_for_path_prefix(&mut cmd, &project);
-        cmd.set_dir(&project);
-        cmd.run()?;
-    }
 }
 
 /// Add cargo features to a command. Does nothing if `features` is empty.
@@ -181,17 +150,15 @@ fn add_cargo_features_args(cmd: &mut Command, features: &[&str]) {
 }
 
 #[throws]
-fn run_uefi_build(
-    project_dir: &Utf8Path,
-    build_mode: BuildMode,
-    features: &[&str],
-) {
+fn run_uefi_build(package: Package, build_mode: BuildMode, features: &[&str]) {
     for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
             &[
                 "+nightly",
                 "build",
+                "--package",
+                package.name(),
                 "-Zbuild-std=core,compiler_builtins,alloc",
                 "-Zbuild-std-features=compiler-builtins-mem",
                 "--target",
@@ -200,8 +167,6 @@ fn run_uefi_build(
         );
         add_cargo_features_args(&mut cmd, features);
         cmd.add_args(build_mode.cargo_args());
-        modify_cmd_for_path_prefix(&mut cmd, project_dir);
-        cmd.set_dir(project_dir);
         cmd.run()?;
     }
 }
@@ -209,7 +174,7 @@ fn run_uefi_build(
 #[throws]
 fn run_crdyboot_build(conf: &Config) {
     run_uefi_build(
-        &conf.crdyboot_path(),
+        Package::Crdyboot,
         conf.build_mode(),
         &conf.get_crdyboot_features(),
     )?;
@@ -239,7 +204,7 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 fn run_build_enroller(conf: &Config) {
     generate_secure_boot_keys(conf)?;
 
-    run_uefi_build(&conf.enroller_path(), conf.build_mode(), &[])?;
+    run_uefi_build(Package::Enroller, conf.build_mode(), &[])?;
 
     gen_disk::gen_enroller_disk(conf)?;
 }
@@ -257,18 +222,12 @@ where
 }
 
 #[throws]
-fn run_rustfmt(conf: &Config, action: &FormatAction) {
-    for project in conf.project_paths() {
-        let cargo_path = project.join("Cargo.toml");
-        let mut cmd = Command::with_args(
-            "cargo",
-            &["fmt", "--manifest-path", cargo_path.as_str()],
-        );
-        if action.check {
-            cmd.add_args(&["--", "--check"]);
-        }
-        cmd.run()?;
+fn run_rustfmt(action: &FormatAction) {
+    let mut cmd = Command::with_args("cargo", &["fmt", "--all"]);
+    if action.check {
+        cmd.add_args(&["--", "--check"]);
     }
+    cmd.run()?;
 }
 
 #[throws]
@@ -301,34 +260,32 @@ fn run_update_disk(conf: &Config) {
 
 #[throws]
 fn run_clippy(conf: &Config) {
-    for project in conf.project_paths() {
-        println!("{}:", project);
-        let mut cmd = Command::with_args("cargo", &["+nightly", "clippy"]);
-        if project.ends_with("crdyboot") {
+    for package in Package::all() {
+        let mut cmd = Command::with_args(
+            "cargo",
+            &["+nightly", "clippy", "--package", package.name()],
+        );
+        if package == Package::Crdyboot {
             add_cargo_features_args(&mut cmd, &conf.get_crdyboot_features());
         }
-        modify_cmd_for_path_prefix(&mut cmd, &project);
-        cmd.set_dir(&project);
         cmd.run()?;
     }
 }
 
 #[throws]
-fn run_tests_in_dir(dir: &Utf8Path, nightly: bool) {
+fn run_tests_for_package(package: Package, nightly: bool) {
     let mut cmd = Command::new("cargo");
     if nightly {
         cmd.add_arg("+nightly");
     }
-    cmd.add_arg("test");
-    modify_cmd_for_path_prefix(&mut cmd, dir);
-    cmd.set_dir(dir);
+    cmd.add_args(&["test", "--package", package.name()]);
     cmd.run()?;
 }
 
 #[throws]
-fn run_tests(conf: &Config) {
-    run_tests_in_dir(&conf.tools_path(), /* nightly=*/ false)?;
-    run_tests_in_dir(&conf.vboot_path(), /* nightly=*/ true)?;
+fn run_tests() {
+    run_tests_for_package(Package::Tools, /* nightly=*/ false)?;
+    run_tests_for_package(Package::Vboot, /* nightly=*/ true)?;
 }
 
 #[throws]
@@ -439,13 +396,12 @@ fn main() {
         Action::BuildOvmf(_) => ovmf::run_build_ovmf(&conf),
         Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&conf),
         Action::Check(_) => run_check(&conf),
-        Action::Clean(_) => run_clean(&conf),
-        Action::Format(action) => run_rustfmt(&conf, action),
+        Action::Format(action) => run_rustfmt(action),
         Action::UpdateDisk(_) => run_update_disk(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::SecureBootSetup(action) => run_secure_boot_setup(&conf, action),
-        Action::Test(_) => run_tests(&conf),
+        Action::Test(_) => run_tests(),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
     }?;

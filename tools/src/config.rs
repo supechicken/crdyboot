@@ -98,33 +98,17 @@ impl Config {
         &self.repo
     }
 
-    pub fn crdyboot_path(&self) -> Utf8PathBuf {
-        self.repo.join("crdyboot")
-    }
-
-    pub fn enroller_path(&self) -> Utf8PathBuf {
-        self.repo.join("enroller")
+    /// Get the build output directory.
+    pub fn target_path(&self) -> Utf8PathBuf {
+        self.repo.join("target")
     }
 
     pub fn workspace_path(&self) -> Utf8PathBuf {
         self.repo.join("workspace")
     }
 
-    pub fn tools_path(&self) -> Utf8PathBuf {
-        self.repo.join("tools")
-    }
-
     pub fn vboot_path(&self) -> Utf8PathBuf {
         self.repo.join("vboot")
-    }
-
-    pub fn project_paths(&self) -> Vec<Utf8PathBuf> {
-        vec![
-            self.crdyboot_path(),
-            self.enroller_path(),
-            self.tools_path(),
-            self.vboot_path(),
-        ]
     }
 
     pub fn vboot_reference_path(&self) -> Utf8PathBuf {

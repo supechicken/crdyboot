@@ -2,7 +2,6 @@
 name = "crdyboot_tools"
 version = "0.1.0"
 edition = "2018"
-resolver = "2"
 
 [dependencies]
 anyhow = "1.0"

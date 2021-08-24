@@ -195,8 +195,7 @@ pub fn gen_enroller_disk(conf: &Config) {
     // Copy in the two enroller executables.
     for arch in Arch::all() {
         let src = conf
-            .enroller_path()
-            .join("target")
+            .target_path()
             .join(arch.uefi_target())
             .join(conf.build_mode().dir_name())
             .join("enroller.efi");
@@ -216,8 +215,7 @@ pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
 
     for arch in Arch::all() {
         let src = conf
-            .crdyboot_path()
-            .join("target")
+            .target_path()
             .join(arch.uefi_target())
             .join(conf.build_mode().dir_name())
             .join("crdyboot.efi");
