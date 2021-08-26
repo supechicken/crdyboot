@@ -40,7 +40,7 @@ only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
 targets.
 
 The `tools` subdirectory contains a single binary that is used by the
-various `x.py` commands shown below.
+various `xtask` commands shown below.
 
 The `enroller` subdirectory contains a small UEFI application that
 enrolls a test key in the `PK`, `KEK`, and `db` variables. This only
@@ -70,19 +70,19 @@ Other tools used for image signing and running in a VM:
 
 To check formatting, lint, test, and build both vboot and crdyboot:
 
-    ./x.py check
+    cargo xtask check
     
 To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
-    ./x.py build
+    cargo xtask build
     
 One-time step to build OVMF:
 
-    ./x.py build-ovmf
+    cargo xtask build-ovmf
     
 One-time step to enroll custom secure-boot keys:
 
-    ./x.py secure-boot-setup
+    cargo xtask secure-boot-setup
 
 One-time step to copy in an existing cloudready image:
 
@@ -90,15 +90,15 @@ One-time step to copy in an existing cloudready image:
     
 One-time step to prepare the image:
 
-    ./x.py prep-disk
+    cargo xtask prep-disk
     
 To copy the latest crdyboot build to the image:
 
-    ./x.py update-disk
+    cargo xtask update-disk
     
 Then run it in QEMU:
 
-    ./x.py qemu [--ia32] [--secure-boot]
+    cargo xtask qemu [--ia32] [--secure-boot]
     
 Some additional build options can be set in `crdyboot.conf` (in the root of
 the repo). This file will be created automatically if it doesn't already
@@ -111,7 +111,7 @@ turned off.
 To test secure boot with real hardware you will need to enroll custom
 keys. First build the enroller image (`workspace/enroller.bin`):
 
-    ./x.py build-enroller
+    cargo xtask build-enroller
 
 Write `workspace/enroller.bin` to a USB, and write `workspace/disk.bin` to a
 second USB, e.g. using [writedisk][writedisk].
