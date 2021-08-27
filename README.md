@@ -39,7 +39,7 @@ The `crdyboot` subdirectory contains the actual bootloader. It can
 only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
 targets.
 
-The `tools` subdirectory contains a single binary that is used by the
+The `xtask` subdirectory contains a single binary that is used by the
 various `xtask` commands shown below.
 
 The `enroller` subdirectory contains a small UEFI application that
@@ -102,7 +102,7 @@ Then run it in QEMU:
 
 Some additional build options can be set in `crdyboot.conf` (in the root of
 the repo). This file will be created automatically if it doesn't already
-exist by copying `tools/default.conf`. The defaults are appropriate for
+exist by copying `xtask/default.conf`. The defaults are appropriate for
 development. In a release build, verbose logging and the test key should be
 turned off.
 
