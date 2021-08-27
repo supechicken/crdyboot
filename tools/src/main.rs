@@ -10,7 +10,7 @@ mod qemu;
 mod shim;
 mod sign;
 
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use arch::Arch;
 use argh::FromArgs;
 use build_mode::BuildMode;
@@ -22,14 +22,11 @@ use fs_err as fs;
 use loopback::LoopbackDevice;
 use package::Package;
 use qemu::Qemu;
+use std::env;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 pub struct Opt {
-    /// absolute path of the crdyboot repo
-    #[argh(option)]
-    repo: Utf8PathBuf,
-
     /// action to run
     #[argh(subcommand)]
     action: Action,
@@ -375,18 +372,35 @@ fn initial_setup(conf: &Config) {
     .run()?;
 }
 
+/// Get the repo root path. This assumes this executable is located at
+/// <repo>/target/<buildmode>/<exe>.
+#[throws]
+fn get_repo_path() -> Utf8PathBuf {
+    let exe_path = env::current_exe()?;
+    let repo_path = exe_path
+        .parent()
+        .map(|path| path.parent())
+        .flatten()
+        .map(|path| path.parent())
+        .flatten()
+        .ok_or_else(|| anyhow!("repo path: not enough parents"))?;
+    Utf8Path::from_path(repo_path)
+        .ok_or_else(|| anyhow!("repo path: not utf-8"))?
+        .to_path_buf()
+}
+
 #[throws]
 fn main() {
     let opt: Opt = argh::from_env();
-    let repo_root = &opt.repo;
+    let repo_root = get_repo_path()?;
 
     // Create the config file from the default if it doesn't already exist.
-    let conf_path = config::config_path(repo_root);
+    let conf_path = config::config_path(&repo_root);
     let default_conf_path = repo_root.join("tools/default.conf");
     if !conf_path.exists() {
         copy_file(&default_conf_path, &conf_path)?;
     }
-    let conf = Config::load(repo_root)?;
+    let conf = Config::load(&repo_root)?;
 
     initial_setup(&conf)?;
 
