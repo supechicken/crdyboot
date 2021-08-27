@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 # pylint: disable=missing-docstring
 
-import os
 import subprocess
 import sys
 
 
 def main():
-    repo_dir = os.path.dirname(os.path.realpath(__file__))
-
     cmd = ['cargo', 'run', '--quiet', '--package', 'crdyboot_tools', '--']
-    cmd += ['--repo', repo_dir]
     cmd += sys.argv[1:]
 
     res = subprocess.run(cmd, check=False)
