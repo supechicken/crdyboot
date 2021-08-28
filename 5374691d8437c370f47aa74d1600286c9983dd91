@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1d42aab9_cdedf933",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-08-28T03:04:20Z",
+      "side": 1,
+      "message": "I just see that xtask leaves out \"--quiet\"---I assume that\u0027s intentional? Otherwise lgtm",
+      "revId": "5374691d8437c370f47aa74d1600286c9983dd91",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
