@@ -16,6 +16,24 @@
       "message": "I just see that xtask leaves out \"--quiet\"---I assume that\u0027s intentional? Otherwise lgtm",
       "revId": "5374691d8437c370f47aa74d1600286c9983dd91",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b149a646_729278bd",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-08-30T15:09:17Z",
+      "side": 1,
+      "message": "Yep that\u0027s intentional. I dithered over whether to have the quiet option in the Python version -- it\u0027s nice when there is no rebuilding of the tools executable, but when it does need to rebuild there\u0027s a pause where nothing is happening. So overall I think I like it better without quiet.",
+      "parentUuid": "1d42aab9_cdedf933",
+      "revId": "5374691d8437c370f47aa74d1600286c9983dd91",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
