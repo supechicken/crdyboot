@@ -117,7 +117,6 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
 struct AstNode {
     kind: String,
     name: Option<String>,
-    value: Option<String>,
     #[serde(default)]
     inner: Vec<AstNode>,
 }
