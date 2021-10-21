@@ -3,15 +3,16 @@
 pub enum Package {
     Crdyboot,
     Enroller,
+    SbatGen,
     Tools,
     Vboot,
 }
 
 impl Package {
     /// Get all packages.
-    pub fn all() -> [Package; 4] {
+    pub fn all() -> [Package; 5] {
         use Package::*;
-        [Crdyboot, Enroller, Tools, Vboot]
+        [Crdyboot, Enroller, SbatGen, Tools, Vboot]
     }
 
     /// Get the package's crate name.
@@ -20,6 +21,7 @@ impl Package {
         match self {
             Crdyboot => "crdyboot",
             Enroller => "enroller",
+            SbatGen => "sbat_gen",
             Tools => "crdyboot_tools",
             Vboot => "vboot",
         }
