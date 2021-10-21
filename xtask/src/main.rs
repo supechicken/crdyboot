@@ -147,7 +147,8 @@ fn add_cargo_features_args(cmd: &mut Command, features: &[&str]) {
 }
 
 #[throws]
-fn run_uefi_build(package: Package, build_mode: BuildMode, features: &[&str]) {
+fn run_uefi_build(conf: &Config, package: Package, build_mode: BuildMode) {
+    let features = conf.get_package_features(package);
     for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
@@ -162,7 +163,7 @@ fn run_uefi_build(package: Package, build_mode: BuildMode, features: &[&str]) {
                 target,
             ],
         );
-        add_cargo_features_args(&mut cmd, features);
+        add_cargo_features_args(&mut cmd, &features);
         cmd.add_args(build_mode.cargo_args());
         cmd.run()?;
     }
@@ -170,11 +171,7 @@ fn run_uefi_build(package: Package, build_mode: BuildMode, features: &[&str]) {
 
 #[throws]
 fn run_crdyboot_build(conf: &Config) {
-    run_uefi_build(
-        Package::Crdyboot,
-        conf.build_mode(),
-        &conf.get_crdyboot_features(),
-    )?;
+    run_uefi_build(conf, Package::Crdyboot, conf.build_mode())?;
 }
 
 #[throws]
@@ -201,7 +198,7 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
 fn run_build_enroller(conf: &Config) {
     generate_secure_boot_keys(conf)?;
 
-    run_uefi_build(Package::Enroller, conf.build_mode(), &[])?;
+    run_uefi_build(conf, Package::Enroller, conf.build_mode())?;
 
     gen_disk::gen_enroller_disk(conf)?;
 }
@@ -262,9 +259,7 @@ fn run_clippy(conf: &Config) {
             "cargo",
             &["+nightly", "clippy", "--package", package.name()],
         );
-        if package == Package::Crdyboot {
-            add_cargo_features_args(&mut cmd, &conf.get_crdyboot_features());
-        }
+        add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
         cmd.run()?;
     }
 }

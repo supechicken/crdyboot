@@ -1,5 +1,6 @@
 use crate::arch::Arch;
 use crate::build_mode::BuildMode;
+use crate::package::Package;
 use crate::qemu::OvmfPaths;
 use crate::sign::KeyPaths;
 use anyhow::{anyhow, bail, Error};
@@ -82,15 +83,24 @@ impl Config {
         }
     }
 
-    /// Get all cargo features to enable while building crdyboot.
-    pub fn get_crdyboot_features(&self) -> Vec<&'static str> {
+    /// Get all cargo features to enable while building a package.
+    pub fn get_package_features(&self, package: Package) -> Vec<&'static str> {
+        use Package::*;
+
         let mut features = Vec::new();
-        if self.enable_verbose_logging {
-            features.push("verbose");
+
+        match package {
+            Crdyboot => {
+                if self.enable_verbose_logging {
+                    features.push("verbose");
+                }
+                if self.use_test_key {
+                    features.push("use_test_key");
+                }
+            }
+            Enroller | Tools | Vboot => {}
         }
-        if self.use_test_key {
-            features.push("use_test_key");
-        }
+
         features
     }
 
