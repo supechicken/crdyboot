@@ -173,7 +173,7 @@ fn run_crdyboot_build(conf: &Config) {
     run_uefi_build(
         Package::Crdyboot,
         conf.build_mode(),
-        &conf.get_crdyboot_features(),
+        &conf.get_package_features(Package::Crdyboot),
     )?;
 }
 
@@ -262,9 +262,7 @@ fn run_clippy(conf: &Config) {
             "cargo",
             &["+nightly", "clippy", "--package", package.name()],
         );
-        if package == Package::Crdyboot {
-            add_cargo_features_args(&mut cmd, &conf.get_crdyboot_features());
-        }
+        add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
         cmd.run()?;
     }
 }
