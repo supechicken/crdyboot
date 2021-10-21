@@ -98,7 +98,7 @@ impl Config {
                     features.push("use_test_key");
                 }
             }
-            Enroller | Tools | Vboot => {}
+            Enroller | Sbat | Tools | Vboot => {}
         }
 
         features
