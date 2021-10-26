@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1da04dae_d9aa24e8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-10-26T23:30:13Z",
+      "side": 1,
+      "message": "My main comment so far has to do with clarity and documentation. I think having a README with the following information would make a it a lot faster to get up to speed for this package:\n- definitions of Revocations and Metadata, and descriptions of the roles of the csv and lib files.\n- An example sbat file presented on the whole, and then separate out the components of it into the data structures that contain them.\n\nJust by reading through the names of the different structures, I\u0027m not entirely sure why it\u0027s necessary to have both an Entry and a Component. Also I\u0027m not sure what exact info is stored in CSV, and why is it organized like that? It feels like parsing and reading happens in multiple files and I\u0027d have to go line by line in the code to figure out what exactly is being parsed. I think having the information I requested in a README would make it a lot easier to figure out how everything is structured.",
+      "revId": "1b4e7eeabe301fb809c79bb3011136a8f2d78016",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
