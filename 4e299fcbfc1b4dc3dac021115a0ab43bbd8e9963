@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "acaeadbc_796a59a9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-10-28T19:12:58Z",
+      "side": 1,
+      "message": "Could you add a README for this packages that explains the following points, derived from our conversation in chat:\n\nThe reasoning behind why generating sbat.csv is necessary as opposed to manually creating the file. (Avoids both needing a cargo.toml and sbat.csv, that have to be maintained and also guarantees no typos.)\n\nAlso explaining what differentiates this from the regular sbat package. Something along the lines that sbat_gen/sbat.csv is the sort of thing expected on all boot-related packages, and that sbat is the package that is the consumer of all the sbat.csv\u0027s from everywhere else.",
+      "revId": "4e299fcbfc1b4dc3dac021115a0ab43bbd8e9963",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
