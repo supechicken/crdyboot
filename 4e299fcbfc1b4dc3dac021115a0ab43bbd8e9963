@@ -16,6 +16,40 @@
       "message": "Could you add a README for this packages that explains the following points, derived from our conversation in chat:\n\nThe reasoning behind why generating sbat.csv is necessary as opposed to manually creating the file. (Avoids both needing a cargo.toml and sbat.csv, that have to be maintained and also guarantees no typos.)\n\nAlso explaining what differentiates this from the regular sbat package. Something along the lines that sbat_gen/sbat.csv is the sort of thing expected on all boot-related packages, and that sbat is the package that is the consumer of all the sbat.csv\u0027s from everywhere else.",
       "revId": "4e299fcbfc1b4dc3dac021115a0ab43bbd8e9963",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "1806497c_507b451b",
+        "filename": "crdyboot/build.rs",
+        "patchSetId": 1
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-10-29T02:04:51Z",
+      "side": 1,
+      "message": "Nit: Why is \"Google\" listed manually while crdyboot_name is defined above? That doesn\u0027t feel consistent to me.",
+      "revId": "4e299fcbfc1b4dc3dac021115a0ab43bbd8e9963",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "873506e2_e16eb19f",
+        "filename": "sbat_gen/Cargo.toml",
+        "patchSetId": 1
+      },
+      "lineNbr": 4,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-10-29T02:04:51Z",
+      "side": 1,
+      "message": "question---where did you get 2018 from? Why is it not 2021?",
+      "revId": "4e299fcbfc1b4dc3dac021115a0ab43bbd8e9963",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
