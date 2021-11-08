@@ -16,6 +16,24 @@
       "message": "My main comment so far has to do with clarity and documentation. I think having a README with the following information would make a it a lot faster to get up to speed for this package:\n- definitions of Revocations and Metadata, and descriptions of the roles of the csv and lib files.\n- An example sbat file presented on the whole, and then separate out the components of it into the data structures that contain them.\n\nJust by reading through the names of the different structures, I\u0027m not entirely sure why it\u0027s necessary to have both an Entry and a Component. Also I\u0027m not sure what exact info is stored in CSV, and why is it organized like that? It feels like parsing and reading happens in multiple files and I\u0027d have to go line by line in the code to figure out what exactly is being parsed. I think having the information I requested in a README would make it a lot easier to figure out how everything is structured.",
       "revId": "1b4e7eeabe301fb809c79bb3011136a8f2d78016",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4793d576_933f7c76",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-11-08T17:51:47Z",
+      "side": 1,
+      "message": "New version pushed. I ended up reworking quite a lot of things to hopefully make the design better, so it\u0027s not just doc updates in the latest patch.\n\nThe biggest API changes are:\n1. I dropped the csv-core dep and implemented a much simpler CSV parser in csv.rs. This makes the design simpler because it can directly reference the input data rather than copying into a new buffer. Reason being that csv-core supports escape expansion, so e.g. `\\\"` gets changed to `\"`. We don\u0027t need to support that kind of complexity for SBAT data, since I think we can reasonably assume that approved data won\u0027t contain such things. The new parser makes that assumption, and throws an error if the assumption is violated.\n2. The library is no no-alloc by default. I added a new Veclike trait that allows the library to be used either with a fixed-size slice or a dynamic array like Vec (if the alloc feature is enabled).\n\nFor documentation, I added a README that mostly just describes how SBAT stuff works, but for the API documentation I added a bunch directly to the code, which can be viewed in the browser with \"cargo doc -p sbat --all-features --open\". There is now a fairly minimal but complete example at the top level of the crate doc.",
+      "parentUuid": "1da04dae_d9aa24e8",
+      "revId": "1b4e7eeabe301fb809c79bb3011136a8f2d78016",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
