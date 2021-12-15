@@ -89,6 +89,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "4c512eaa_c3e0f248",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-12-15T19:05:44Z",
+      "side": 1,
+      "message": "That\u0027s correct yeah. Arguably it could be changed to get_field_as_u32, and convert it to a Generation at a higher level, but would cause a tiny amount of extra code duplication.",
+      "parentUuid": "cf3b83a1_8a62197e",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "9ba7ec42_95b5d37a",
