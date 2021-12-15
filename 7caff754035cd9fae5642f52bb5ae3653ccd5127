@@ -71,6 +71,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "cf3b83a1_8a62197e",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T19:01:03Z",
+      "side": 1,
+      "message": "The definition helps! I think I was confused about the use of the word \"generation\" on the csv level, because I don\u0027t think generation is part of csv-terminology like \"record\" is?",
+      "parentUuid": "5e54abb4_03101854",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "9ba7ec42_95b5d37a",
@@ -172,6 +190,24 @@
       "side": 1,
       "message": "1 and 2: done\n3. Added a sentence to both parse functions indicating that records are parsed as component|entry\n4 and 5: I\u0027d rather rely on the example at the root of the crate documentation for this, as there\u0027s a bit of boiler plate involved with setting up the storage and all. Both the revocations and metadata structs link to that usage example. Do you think that\u0027s sufficient? I think there comes a point where adding too many fine-grained examples just muddies things, since the user of the API would almost certainly be doing something more similar to the top-level example that uses the whole API.",
       "parentUuid": "ada216c7_cc337cef",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "615e49cc_b10197d9",
+        "filename": "sbat/src/revocations.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T19:01:03Z",
+      "side": 1,
+      "message": "Regarding 4-5, Thats fair, in regards to the user\u0027s perspective!",
+      "parentUuid": "6aab377a_e5e5dd42",
       "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
