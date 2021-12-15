@@ -18,6 +18,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "37d562c6_39cfddc4",
+        "filename": "sbat/README.md",
+        "patchSetId": 5
+      },
+      "lineNbr": 70,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-12-15T17:26:07Z",
+      "side": 1,
+      "message": "Changed it to: \"`pizza.somecorp` component is not in the revocation list at all, so any generation of that component is allowed.\", and added some examples.\n\nI also added a new paragraph at the end of the previous section to clarify that as far as SBAT is concerned there is no connection between pizza and pizza.somecorp. It\u0027s common for SBAT data to have forked components by that, but SBAT isn\u0027t \"aware\" of that connection.",
+      "parentUuid": "ef49698f_94f07025",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "fa5c8117_0393ae53",
@@ -31,6 +49,24 @@
       "writtenOn": "2021-12-15T02:26:16Z",
       "side": 1,
       "message": "Can you define a record here as \"A single line from a csv that has multiple, comma separated fields\" and perhaps provide an example? Perhaps since this isn\u0027t a generic csv parser, you might also want to clarify that this is not just your every-day implementation of a record, but rather one that describes an SBAT component.",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5e54abb4_03101854",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-12-15T17:26:07Z",
+      "side": 1,
+      "message": "Added a small docstring here, and a longer one at the top of the csv module. The parser actually is supposed to be a somewhat generic CSV parser (with some limitations), because it\u0027s easier to reason about that in isolation, then layer on more specific semantics at the higher levels (the Revocations and Metadata structs).\n\nThis is why the get_field_as_generation method takes an index -- the policy that only the first field is a generation is encoded at a higher level.\n\nAlso renamed F -\u003e NUM_FIELDS to make that param clearer.",
+      "parentUuid": "fa5c8117_0393ae53",
       "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
@@ -52,6 +88,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "f4be6096_d67f12d1",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 86,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-12-15T17:26:07Z",
+      "side": 1,
+      "message": "(Answered this above)",
+      "parentUuid": "9ba7ec42_95b5d37a",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "c9240c30_3bf6efd4",
@@ -65,6 +119,24 @@
       "writtenOn": "2021-12-15T02:26:16Z",
       "side": 1,
       "message": "I\u0027m not sure what you are referring to by \"API\"",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1e964219_683c13a5",
+        "filename": "sbat/src/lib.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2021-12-15T17:26:07Z",
+      "side": 1,
+      "message": "I meant to indicate what the high level interface (https://en.wikipedia.org/wiki/API) looks like -- so not a complete description of how to call the functions in the library, but a general description of what it can do, what the input and output looks like. And the fact that it\u0027s no_std is relevant here, since that means the library can be used in a wider range of environments (e.g. it doesn\u0027t require a filesystem or dynamic allocation).",
+      "parentUuid": "c9240c30_3bf6efd4",
       "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
