@@ -1,0 +1,123 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ef49698f_94f07025",
+        "filename": "sbat/README.md",
+        "patchSetId": 5
+      },
+      "lineNbr": 70,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "So this means that something like (sbat,1; pizza, 2; pizza.somecorp 1) would be allowed while (sbat, 1; pizza, 1; pizza.somecorp, 2) would be blocked?\nIn that case,\nI\u0027d suggest maybe rephrasing to something like-----\nThe `pizza.somecorp component is not in the revocation list at all, so any generation is allowed, as long as pizza is gen 2 or higher\"\n-----to make it clearer how both pizza.somecorp and pizza are linked. \n\nAnother approach could be to insert the examples above and state which would be accepted vs disallowed.",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "fa5c8117_0393ae53",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "Can you define a record here as \"A single line from a csv that has multiple, comma separated fields\" and perhaps provide an example? Perhaps since this isn\u0027t a generic csv parser, you might also want to clarify that this is not just your every-day implementation of a record, but rather one that describes an SBAT component.",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9ba7ec42_95b5d37a",
+        "filename": "sbat/src/csv.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 86,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "Why do you need to pass in an index when the generation index will always be 1?",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c9240c30_3bf6efd4",
+        "filename": "sbat/src/lib.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 24,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "I\u0027m not sure what you are referring to by \"API\"",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ada216c7_cc337cef",
+        "filename": "sbat/src/revocations.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "1) There should be 3 \"/\"s\n2) Add this line: \"Any existing data is cleared before parsing.\" (Like you did for the metadata parser)\n\n*comments below this apply to both parsers *\n3) I think it would also be a good idea to specify the difference of the parse function of revocations and metadata in their respective function comments:\n- Revocations parser handles just the component \n- Metadata parser handles both the component and the vendor.\n4) In both function comments, specify what kind of raw CSV the parsers expect.\n5) Lastly, you might not agree with this, but I always appreciate having examples of inputs and outputs in front of parsing functions. Makes it easier to understand what they are doing.",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "a3cd31d4_4571b166",
+        "filename": "sbat/src/revocations.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "maybe also specify that this metadata only comes with the first SBAT entry?",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "cd5f21dc_62408d07",
+        "filename": "sbat/src/vec.rs",
+        "patchSetId": 5
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2021-12-15T02:26:16Z",
+      "side": 1,
+      "message": "Maybe also clarify that the regular vec does not have this feature?",
+      "revId": "7caff754035cd9fae5642f52bb5ae3653ccd5127",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
