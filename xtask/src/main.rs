@@ -376,10 +376,8 @@ fn get_repo_path() -> Utf8PathBuf {
     let exe_path = env::current_exe()?;
     let repo_path = exe_path
         .parent()
-        .map(|path| path.parent())
-        .flatten()
-        .map(|path| path.parent())
-        .flatten()
+        .and_then(|path| path.parent())
+        .and_then(|path| path.parent())
         .ok_or_else(|| anyhow!("repo path: not enough parents"))?;
     Utf8Path::from_path(repo_path)
         .ok_or_else(|| anyhow!("repo path: not utf-8"))?

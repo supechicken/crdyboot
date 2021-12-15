@@ -152,9 +152,8 @@ fn validate_packed_pubkey_size(
     use vboot_sys::vb2_packed_key;
 
     let packed_pubkey_struct: &vb2_packed_key = unsafe {
-        crate::struct_from_bytes(packed_pubkey).ok_or_else(|| {
-            LoadKernelError::PubkeyTooSmall(packed_pubkey.len())
-        })?
+        crate::struct_from_bytes(packed_pubkey)
+            .ok_or(LoadKernelError::PubkeyTooSmall(packed_pubkey.len()))?
     };
 
     let key_size = u32_to_usize(packed_pubkey_struct.key_size);
