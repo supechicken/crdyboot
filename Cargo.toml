@@ -1,5 +1,5 @@
 [workspace]
-members = ["vboot", "crdyboot", "enroller", "xtask", "sbat"]
+members = ["vboot", "crdyboot", "enroller", "xtask", "sbat", "sbat_gen"]
 resolver = "2"
 
 [profile.release]

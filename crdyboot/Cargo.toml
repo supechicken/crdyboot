@@ -22,3 +22,6 @@ use_test_key = []
 # If enabled, the max log level is set to Debug. If disabled (the default),
 # the max log level is set to Warn.
 verbose = []
+
+[build-dependencies]
+sbat_gen = { path = "../sbat_gen" }
