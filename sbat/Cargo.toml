@@ -1,0 +1,13 @@
+[package]
+name = "sbat"
+version = "0.1.0"
+edition = "2018"
+repository = "https://chromium.googlesource.com/crdyboot"
+
+[dependencies]
+arrayvec = { version = "0.7.0", default-features = false }
+ascii = { version = "1.0.0", default-features = false }
+log = { version = "0.4.14", default-features = false }
+
+[features]
+alloc = []
