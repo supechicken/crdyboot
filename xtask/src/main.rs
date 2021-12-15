@@ -277,6 +277,7 @@ fn run_tests_for_package(package: Package, nightly: bool) {
 
 #[throws]
 fn run_tests() {
+    run_tests_for_package(Package::Sbat, /* nightly=*/ false)?;
     run_tests_for_package(Package::Tools, /* nightly=*/ false)?;
     run_tests_for_package(Package::Vboot, /* nightly=*/ true)?;
 }
