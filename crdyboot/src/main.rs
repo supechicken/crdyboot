@@ -74,9 +74,8 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
     }
 }
 
+// Add `.sbat` section to the binary.
+//
 // See https://github.com/rhboot/shim/blob/main/SBAT.md for details of what
 // this section is used for.
-#[no_mangle]
-#[link_section = ".sbat"]
-static SBAT: [u8; include!(concat!(env!("OUT_DIR"), "/sbat.csv.len"))] =
-    *include_bytes!(concat!(env!("OUT_DIR"), "/sbat.csv"));
+include!(concat!(env!("OUT_DIR"), "/sbat_section.rs"));
