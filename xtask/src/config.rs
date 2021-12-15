@@ -99,7 +99,7 @@ impl Config {
                 }
             }
             Sbat => features.push("alloc"),
-            Enroller | Tools | Vboot => {}
+            Enroller | SbatGen | Tools | Vboot => {}
         }
 
         features
