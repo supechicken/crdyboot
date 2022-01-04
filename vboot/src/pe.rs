@@ -11,7 +11,6 @@
 //!
 //!    efi/x86: Implement mixed mode boot without the handover protocol
 
-use core::convert::TryInto;
 pub use goblin::error::Error as PeError;
 use goblin::pe::section_table::SectionTable;
 use goblin::pe::PE;

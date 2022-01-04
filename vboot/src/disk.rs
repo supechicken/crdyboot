@@ -1,6 +1,5 @@
 use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
 use crate::ReturnCode;
-use core::convert::TryInto;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::{ptr, slice};

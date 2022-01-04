@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 pub enum Arch {
     Ia32,
     X64,
