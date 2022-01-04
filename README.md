@@ -50,8 +50,7 @@ works if the machine is in secure boot custom mode.
 
 Install nightly Rust:
 
-    rustup install nightly
-    rustup component add rust-src --toolchain nightly
+    cargo xtask install-toolchain
 
 Provides headers needed for compiling C code compatible with the
 Rust UEFI targets.

@@ -23,6 +23,14 @@ use package::Package;
 use qemu::Qemu;
 use std::env;
 
+const NIGHTLY_TC: &str = "nightly-2021-12-12";
+
+/// Get a toolchain arg for compiling with nightly Rust. This just
+/// prepends a `+` to `NIGHTLY_TC`.
+fn nightly_tc_arg() -> String {
+    format!("+{}", NIGHTLY_TC)
+}
+
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 pub struct Opt {
@@ -47,6 +55,7 @@ enum Action {
     BuildEnroller(BuildEnrollerAction),
     BuildVbootTestDisk(BuildVbootTestDiskAction),
     Writedisk(WritediskAction),
+    InstallToolchain(InstallToolchainAction),
 }
 
 /// Build crdyboot.
@@ -130,6 +139,11 @@ struct QemuAction {
 #[argh(subcommand, name = "writedisk")]
 struct WritediskAction {}
 
+/// Install the appropriate Rust nightly toolchain.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "install-toolchain")]
+struct InstallToolchainAction {}
+
 #[throws]
 fn run_check(conf: &Config) {
     run_rustfmt(&FormatAction { check: true })?;
@@ -154,7 +168,7 @@ fn run_uefi_build(conf: &Config, package: Package) {
         let mut cmd = Command::with_args(
             "cargo",
             &[
-                "+nightly",
+                &nightly_tc_arg(),
                 "build",
                 "--package",
                 package.name(),
@@ -258,7 +272,7 @@ fn run_clippy(conf: &Config) {
     for package in Package::all() {
         let mut cmd = Command::with_args(
             "cargo",
-            &["+nightly", "clippy", "--package", package.name()],
+            &[&nightly_tc_arg(), "clippy", "--package", package.name()],
         );
         add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
         cmd.run()?;
@@ -269,7 +283,7 @@ fn run_clippy(conf: &Config) {
 fn run_tests_for_package(package: Package, nightly: bool) {
     let mut cmd = Command::new("cargo");
     if nightly {
-        cmd.add_arg("+nightly");
+        cmd.add_arg(&nightly_tc_arg());
     }
     cmd.add_args(&["test", "--package", package.name()]);
     cmd.run()?;
@@ -356,6 +370,16 @@ fn run_writedisk(conf: &Config) {
 }
 
 #[throws]
+fn run_install_toolchain() {
+    Command::with_args("rustup", &["install", NIGHTLY_TC]).run()?;
+    Command::with_args(
+        "rustup",
+        &["component", "add", "rust-src", "--toolchain", NIGHTLY_TC],
+    )
+    .run()?;
+}
+
+#[throws]
 fn initial_setup(conf: &Config) {
     Command::with_args(
         "git",
@@ -414,5 +438,6 @@ fn main() {
         Action::Test(_) => run_tests(),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
+        Action::InstallToolchain(_) => run_install_toolchain(),
     }?;
 }
