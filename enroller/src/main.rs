@@ -4,31 +4,11 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use core::mem;
 use log::info;
 use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
-use uefi::CStr16;
-
-// TODO: once a version of uefi-rs with 58ae6a401 is released, drop this
-// struct and use the upstream version.
-struct CString16(Vec<u16>);
-
-impl CString16 {
-    fn from_str(input: &str) -> CString16 {
-        let mut v: Vec<u16> = input.encode_utf16().collect();
-        v.push(0);
-        CString16(v)
-    }
-
-    fn as_cstr16(&self) -> &CStr16 {
-        match CStr16::from_u16_with_nul(&self.0) {
-            Ok(s) => s,
-            Err(_) => panic!("invalid string"),
-        }
-    }
-}
+use uefi::CString16;
 
 #[entry]
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
@@ -56,7 +36,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing db var");
     rt.set_variable(
-        CString16::from_str("db").as_cstr16(),
+        &CString16::try_from("db").unwrap(),
         &VariableVendor::IMAGE_SECURITY_DATABASE,
         attrs,
         db_var,
@@ -65,7 +45,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing KEK var");
     rt.set_variable(
-        CString16::from_str("KEK").as_cstr16(),
+        &CString16::try_from("KEK").unwrap(),
         &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,
@@ -74,7 +54,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing PK var");
     rt.set_variable(
-        CString16::from_str("PK").as_cstr16(),
+        &CString16::try_from("PK").unwrap(),
         &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,

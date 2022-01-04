@@ -1,13 +1,11 @@
 use crate::result::{Error, Result};
-use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::mem;
 use log::info;
-use uefi::data_types::chars::NUL_16;
 use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::{Boot, SystemTable};
-use uefi::{Char16, Handle};
+use uefi::{CStr16, CString16, Handle};
 use vboot::{LoadedKernel, PeExecutable};
 
 type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
@@ -18,26 +16,6 @@ fn is_64bit() -> bool {
         4 => false,
         other => panic!("invalid size of usize: {}", other),
     }
-}
-// TODO: once a version of uefi-rs with 58ae6a401 is released, drop this
-// function and use CString16.
-fn str_to_uefi_str(input: &str) -> Result<Vec<Char16>> {
-    // Expect two bytes for each byte of the input, plus a null byte.
-    let mut output = Vec::with_capacity(input.len() + 1);
-
-    // Convert to UTF-16, then convert to UCS-2.
-    for c in input.encode_utf16() {
-        if let Ok(c) = Char16::try_from(c) {
-            output.push(c);
-        } else {
-            return Err(Error::CommandLineUcs2ConversionFailed);
-        }
-    }
-
-    // Add trailing nul.
-    output.push(NUL_16);
-
-    Ok(output)
 }
 
 fn entry_point_from_offset(
@@ -62,7 +40,7 @@ fn modify_loaded_image(
     image: Handle,
     system_table: &SystemTable<Boot>,
     kernel_data: &[u8],
-    cmdline_ucs2: &[Char16],
+    cmdline_ucs2: &CStr16,
 ) -> Result<()> {
     let bt = system_table.boot_services();
 
@@ -73,7 +51,7 @@ fn modify_loaded_image(
     let li: &mut LoadedImage = unsafe { &mut *li.get() };
 
     // Set kernel command line.
-    let load_options_size = 2 * cmdline_ucs2.len();
+    let load_options_size = cmdline_ucs2.num_bytes();
     let load_options_size = u32::try_from(load_options_size)
         .map_err(|_| Error::CommandLineTooBig(load_options_size))?;
     unsafe {
@@ -117,7 +95,8 @@ fn execute_linux_efi_stub(
     info!("booting the EFI stub");
 
     // Convert the string to UCS-2.
-    let cmdline_ucs2 = str_to_uefi_str(cmdline)?;
+    let cmdline_ucs2 = CString16::try_from(cmdline)
+        .map_err(|_| Error::CommandLineUcs2ConversionFailed)?;
 
     // Ideally we could create a new image here, but I'm not sure
     // there's any way to do that without calling LoadImage, which we
