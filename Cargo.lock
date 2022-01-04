@@ -439,18 +439,18 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.28"
+version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7ed8b8c7b886ea3ed7dde405212185f423ab44682667c8c6dd14aa1d9f6612"
+checksum = "c7342d5883fbccae1cc37a2353b09c87c9b0f3afd73f5fb9bba687a1f733b029"
 dependencies = [
  "unicode-xid",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.9"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d0b9745dc2debf507c8422de05d7226cc1f0644216dfdfead988f9b1ab32a7"
+checksum = "47aa80447ce4daf1717500037052af176af5d38cc3e571d9ec1c7353fc10c87d"
 dependencies = [
  "proc-macro2",
 ]
@@ -623,9 +623,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "syn"
-version = "1.0.75"
+version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f58f7e8eaa0009c5fec437aabf511bd9933e4b2d7407bd05273c01a8906ea7"
+checksum = "ecb2e6da8ee5eb9a61068762a32fa9619cc591ceb055b3687f4cd4051ec2e06b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -675,9 +675,9 @@ dependencies = [
 
 [[package]]
 name = "uefi"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f8451cf8ee8c9c6219a0eb57e4045f6212976888e5295ebca1afccbf65ae9f4"
+checksum = "cd7363ecc1a80d6a7467b322bfb16e95ac5e19f0b71ba2af3e6592f101820113"
 dependencies = [
  "bitflags",
  "log",
@@ -687,9 +687,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-macros"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e012a5bc55f3fd92ba8f3444b97fdc4a73afb8bd9edd0ac5a9c3d5d6182090ea"
+checksum = "7006b85ae8acaf2b448c5f1630a434caaacaedcc0907f12404e4e31c9dafcdb3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -698,9 +698,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-services"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27a0cbced83770da404e6f42995c991796d217f8a6f2f7a79fd401630b65f832"
+checksum = "e202ebb7f78e10839775b768ebe99a43a398ce508e2431de66bae0ca97ce7a62"
 dependencies = [
  "cfg-if",
  "log",
