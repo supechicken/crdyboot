@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
-uefi = { version = "0.12", features = ["exts", "ignore-logger-errors"] }
-uefi-services = "0.9"
+uefi = { version = "0.13", features = ["exts", "ignore-logger-errors"] }
+uefi-services = "0.10"

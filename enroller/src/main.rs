@@ -8,8 +8,8 @@ use alloc::vec::Vec;
 use core::mem;
 use log::info;
 use uefi::prelude::*;
-use uefi::table::runtime::{ResetType, VariableAttributes, GLOBAL_VARIABLE};
-use uefi::{CStr16, Guid};
+use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
+use uefi::CStr16;
 
 // TODO: once a version of uefi-rs with 58ae6a401 is released, drop this
 // struct and use the upstream version.
@@ -49,16 +49,6 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     let rt = st.runtime_services();
 
-    // TODO: this was added to uefi-rs in 4811caba3, once that's in a
-    // release can drop this and use the upstream version.
-    let image_security_database_guid = Guid::from_values(
-        0xd719b2cb,
-        0x3d3a,
-        0x4596,
-        0xa3bc,
-        [0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f],
-    );
-
     let attrs = VariableAttributes::NON_VOLATILE
         | VariableAttributes::BOOTSERVICE_ACCESS
         | VariableAttributes::RUNTIME_ACCESS
@@ -67,7 +57,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     info!("writing db var");
     rt.set_variable(
         CString16::from_str("db").as_cstr16(),
-        &image_security_database_guid,
+        &VariableVendor::IMAGE_SECURITY_DATABASE,
         attrs,
         db_var,
     )
@@ -76,7 +66,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     info!("writing KEK var");
     rt.set_variable(
         CString16::from_str("KEK").as_cstr16(),
-        &GLOBAL_VARIABLE,
+        &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,
     )
@@ -85,7 +75,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     info!("writing PK var");
     rt.set_variable(
         CString16::from_str("PK").as_cstr16(),
-        &GLOBAL_VARIABLE,
+        &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,
     )
