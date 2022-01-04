@@ -16,6 +16,24 @@
       "message": "Question---would nightly_tc_arg need to be added to all the places where cargo is run? I see you didn\u0027t add it here.",
       "revId": "feaa1ff00115016f354a4f03f074ccc250e643c5",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d2367152_c654c6a8",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 1
+      },
+      "lineNbr": 235,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-01-04T21:04:14Z",
+      "side": 1,
+      "message": "The arg is only needed when building code for the UEFI arch. Code formatting, running tests on the host, and building docs are all operations that can be done using the stable toolchain, they don\u0027t need nightly.",
+      "parentUuid": "4122292d_b4302e95",
+      "revId": "feaa1ff00115016f354a4f03f074ccc250e643c5",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
