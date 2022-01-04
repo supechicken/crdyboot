@@ -1,6 +1,6 @@
 [package]
 name = "crdyboot"
-edition = "2018"
+edition = "2021"
 
 # These two fields are also used when generating sbat.csv.
 repository = "https://chromium.googlesource.com/crdyboot"

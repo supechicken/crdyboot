@@ -1,6 +1,5 @@
 use crate::result::{Error, Result};
 use alloc::vec::Vec;
-use core::convert::TryFrom;
 use core::ffi::c_void;
 use core::mem;
 use log::info;

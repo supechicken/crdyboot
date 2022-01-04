@@ -6,7 +6,6 @@ use crate::{
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
-use core::convert::TryInto;
 use core::ffi::c_void;
 use core::{fmt, mem, ptr, str};
 use log::{error, info};
