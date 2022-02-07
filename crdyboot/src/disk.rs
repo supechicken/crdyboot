@@ -4,19 +4,30 @@ use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
+use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams};
 use vboot::DiskIo;
 use vboot::ReturnCode;
 
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
+    crdyboot_image: Handle,
     handle: Handle,
     bt: &BootServices,
 ) -> Result<&DevicePath> {
     let device_path = bt
-        .handle_protocol::<DevicePath>(handle)
+        .open_protocol::<DevicePath>(
+            OpenProtocolParams {
+                handle,
+                agent: crdyboot_image,
+                controller: None,
+            },
+            // TODO: Figure out why using `Exclusive` here fails with
+            // `InvalidParameter`.
+            OpenProtocolAttributes::GetProtocol,
+        )
         .log_warning()
         .map_err(|err| Error::DevicePathProtocolMissing(err.status()))?;
-    let device_path = unsafe { &*device_path.get() };
+    let device_path = unsafe { &*device_path.interface.get() };
     Ok(device_path)
 }
 
@@ -27,14 +38,15 @@ fn device_paths_for_handle(
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
 fn is_parent_disk(
+    crdyboot_image: Handle,
     potential_parent: Handle,
     partition: Handle,
     bt: &BootServices,
 ) -> Result<bool> {
     let potential_parent_paths_iter =
-        device_paths_for_handle(potential_parent, bt)?.iter();
+        device_paths_for_handle(crdyboot_image, potential_parent, bt)?.iter();
     let mut partition_paths_iter =
-        device_paths_for_handle(partition, bt)?.iter();
+        device_paths_for_handle(crdyboot_image, partition, bt)?.iter();
 
     for (parent_path, partition_path) in
         potential_parent_paths_iter.zip(&mut partition_paths_iter)
@@ -67,12 +79,13 @@ fn is_parent_disk(
 /// Search `block_io_handles` for the device that is a parent of
 /// `partition_handle`. See `is_parent_disk` for details.
 fn find_parent_disk(
+    crdyboot_image: Handle,
     block_io_handles: &[Handle],
     partition_handle: Handle,
     bt: &BootServices,
 ) -> Result<Handle> {
     for handle in block_io_handles {
-        if is_parent_disk(*handle, partition_handle, bt)? {
+        if is_parent_disk(crdyboot_image, *handle, partition_handle, bt)? {
             return Ok(*handle);
         }
     }
@@ -88,10 +101,17 @@ fn find_disk_block_io(
     // device handle which should correspond to the disk that the image was
     // loaded from.
     let loaded_image = bt
-        .handle_protocol::<LoadedImage>(crdyboot_image)
+        .open_protocol::<LoadedImage>(
+            OpenProtocolParams {
+                handle: crdyboot_image,
+                agent: crdyboot_image,
+                controller: None,
+            },
+            OpenProtocolAttributes::Exclusive,
+        )
         .log_warning()
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
-    let loaded_image = unsafe { &*loaded_image.get() };
+    let loaded_image = unsafe { &*loaded_image.interface.get() };
     let partition_handle = loaded_image.device();
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -102,14 +122,25 @@ fn find_disk_block_io(
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle =
-        find_parent_disk(&block_io_handles, partition_handle, bt)?;
+    let disk_handle = find_parent_disk(
+        crdyboot_image,
+        &block_io_handles,
+        partition_handle,
+        bt,
+    )?;
 
     let disk_block_io = bt
-        .handle_protocol::<BlockIO>(disk_handle)
+        .open_protocol::<BlockIO>(
+            OpenProtocolParams {
+                handle: disk_handle,
+                agent: crdyboot_image,
+                controller: None,
+            },
+            OpenProtocolAttributes::Exclusive,
+        )
         .log_warning()
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
-    let disk_block_io = unsafe { &mut *disk_block_io.get() };
+    let disk_block_io = unsafe { &mut *disk_block_io.interface.get() };
     Ok(disk_block_io)
 }
 
