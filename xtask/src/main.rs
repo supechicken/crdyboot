@@ -23,7 +23,7 @@ use package::Package;
 use qemu::Qemu;
 use std::env;
 
-const NIGHTLY_TC: &str = "nightly-2021-12-12";
+const NIGHTLY_TC: &str = "nightly-2022-02-06";
 
 /// Get a toolchain arg for compiling with nightly Rust. This just
 /// prepends a `+` to `NIGHTLY_TC`.
