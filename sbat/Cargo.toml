@@ -5,7 +5,7 @@ edition = "2021"
 repository = "https://chromium.googlesource.com/crdyboot"
 
 [dependencies]
-arrayvec = { version = "0.7.0", default-features = false }
+arrayvec = { version = "0.7.2", default-features = false }
 ascii = { version = "1.0.0", default-features = false }
 log = { version = "0.4.14", default-features = false }
 
