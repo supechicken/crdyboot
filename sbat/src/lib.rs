@@ -40,9 +40,6 @@
 //!
 //! ```
 #![doc = include_str!("../tests/example.rs")]
-//! # // The closing brace here works around a rustdoc bug:
-//! # // github.com/rust-lang/rust/issues/90618
-//! }
 //! ```
 //!
 //! [SBAT.md]: https://github.com/rhboot/shim/blob/HEAD/SBAT.md
