@@ -25,7 +25,6 @@ fn device_paths_for_handle(
             // `InvalidParameter`.
             OpenProtocolAttributes::GetProtocol,
         )
-        .log_warning()
         .map_err(|err| Error::DevicePathProtocolMissing(err.status()))?;
     let device_path = unsafe { &*device_path.interface.get() };
     Ok(device_path)
@@ -109,7 +108,6 @@ fn find_disk_block_io(
             },
             OpenProtocolAttributes::Exclusive,
         )
-        .log_warning()
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let loaded_image = unsafe { &*loaded_image.interface.get() };
     let partition_handle = loaded_image.device();
@@ -118,7 +116,6 @@ fn find_disk_block_io(
     // and logical partition devices.
     let block_io_handles = bt
         .find_handles::<BlockIO>()
-        .log_warning()
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
@@ -138,7 +135,6 @@ fn find_disk_block_io(
             },
             OpenProtocolAttributes::Exclusive,
         )
-        .log_warning()
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
     let disk_block_io = unsafe { &mut *disk_block_io.interface.get() };
     Ok(disk_block_io)
@@ -169,11 +165,11 @@ impl<'a> DiskIo for GptDisk<'a> {
     }
 
     fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-        match self
-            .block_io
-            .read_blocks(self.block_io.media().media_id(), lba_start, buffer)
-            .log_warning()
-        {
+        match self.block_io.read_blocks(
+            self.block_io.media().media_id(),
+            lba_start,
+            buffer,
+        ) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
@@ -186,11 +182,11 @@ impl<'a> DiskIo for GptDisk<'a> {
     }
 
     fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
-        match self
-            .block_io
-            .write_blocks(self.block_io.media().media_id(), lba_start, buffer)
-            .log_warning()
-        {
+        match self.block_io.write_blocks(
+            self.block_io.media().media_id(),
+            lba_start,
+            buffer,
+        ) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk write failed: lba_start={}, size in bytes: {}, err: {:?}",

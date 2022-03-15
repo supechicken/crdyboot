@@ -49,7 +49,6 @@ fn get_kernel_verification_key() -> &'static [u8] {
 
 fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
-        .log_warning()
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
 
     set_log_level();

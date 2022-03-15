@@ -12,8 +12,7 @@ use uefi::CString16;
 
 #[entry]
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut st)
-        .expect_success("failed to initialize utilities");
+    uefi_services::init(&mut st).expect("failed to initialize utilities");
 
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),
@@ -41,7 +40,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         attrs,
         db_var,
     )
-    .expect_success("failed to write db");
+    .expect("failed to write db");
 
     info!("writing KEK var");
     rt.set_variable(
@@ -50,7 +49,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         attrs,
         pk_and_kek_var,
     )
-    .expect_success("failed to write KEK");
+    .expect("failed to write KEK");
 
     info!("writing PK var");
     rt.set_variable(
@@ -59,7 +58,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         attrs,
         pk_and_kek_var,
     )
-    .expect_success("failed to write PK");
+    .expect("failed to write PK");
 
     info!("Successfully set custom db, KEK, and PK variables");
 
