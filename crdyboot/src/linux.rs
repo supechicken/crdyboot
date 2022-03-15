@@ -2,7 +2,6 @@ use crate::result::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
-use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams};
 use uefi::table::{Boot, SystemTable};
@@ -54,7 +53,6 @@ fn modify_loaded_image(
             },
             OpenProtocolAttributes::Exclusive,
         )
-        .log_warning()
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let li: &mut LoadedImage = unsafe { &mut *li.interface.get() };
 
@@ -63,7 +61,7 @@ fn modify_loaded_image(
     let load_options_size = u32::try_from(load_options_size)
         .map_err(|_| Error::CommandLineTooBig(load_options_size))?;
     unsafe {
-        li.set_load_options(cmdline_ucs2.as_ptr(), load_options_size);
+        li.set_load_options(cmdline_ucs2.as_ptr().cast(), load_options_size);
     }
 
     // Set kernel data.
