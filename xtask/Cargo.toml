@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.57"
 argh = "0.1.7"
 base64 = "0.13.0"
 camino = "1.0.7"
 command-run = "1.1.1"
 fehler = "1.0.0"
-fs-err = "2.6.0"
+fs-err = "2.7.0"
 tempfile = "3.3.0"
