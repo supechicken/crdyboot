@@ -194,11 +194,7 @@ pub fn gen_enroller_disk(conf: &Config) {
 
     // Copy in the two enroller executables.
     for arch in Arch::all() {
-        let src = conf
-            .target_path()
-            .join(arch.uefi_target())
-            .join(conf.build_mode().dir_name())
-            .join("enroller.efi");
+        let src = conf.target_exec_path(arch, "enroller.efi");
         let dst = boot_dir.join(arch.efi_file_name("boot"));
         Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
             .run()?;
@@ -214,11 +210,7 @@ pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
     let mut dst_names = Vec::new();
 
     for arch in Arch::all() {
-        let src = conf
-            .target_path()
-            .join(arch.uefi_target())
-            .join(conf.build_mode().dir_name())
-            .join("crdyboot.efi");
+        let src = conf.target_exec_path(arch, "crdyboot.efi");
 
         let dst_name = arch.efi_file_name("grub");
         dst_names.push(dst_name.clone());

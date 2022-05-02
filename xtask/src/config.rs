@@ -114,6 +114,18 @@ impl Config {
         self.repo.join("target")
     }
 
+    /// Get the path of an EFI executable in the build output.
+    ///
+    /// For example, this might return a path like:
+    ///
+    ///     <repo>/target/x86_64-unknown-uefi/release/enroller.efi
+    pub fn target_exec_path(&self, arch: Arch, file_name: &str) -> Utf8PathBuf {
+        self.target_path()
+            .join(arch.uefi_target())
+            .join(self.build_mode().dir_name())
+            .join(file_name)
+    }
+
     pub fn workspace_path(&self) -> Utf8PathBuf {
         self.repo.join("workspace")
     }
