@@ -38,21 +38,11 @@ impl LoopbackDevice {
         format!("{}p{}", self.device_path.as_str(), partition_num).into()
     }
 
-    fn is_disk_using_partition_layout_27(&self) -> bool {
-        self.partition_device(27).exists()
-    }
-
     pub fn partition_paths(&self) -> PartitionPaths {
-        let offset = if self.is_disk_using_partition_layout_27() {
-            15
-        } else {
-            0
-        };
-
         PartitionPaths {
-            kern_a: self.partition_device(offset + 2),
-            kern_b: self.partition_device(offset + 4),
-            efi: self.partition_device(offset + 12),
+            kern_a: self.partition_device(2),
+            kern_b: self.partition_device(4),
+            efi: self.partition_device(12),
         }
     }
 }
