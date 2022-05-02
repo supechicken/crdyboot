@@ -20,7 +20,7 @@ use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
 use package::Package;
-use qemu::Qemu;
+use qemu::{Qemu, VarAccess};
 use std::env;
 
 const NIGHTLY_TC: &str = "nightly-2022-02-06";
@@ -110,11 +110,7 @@ struct PrepDiskAction {}
 /// Set up secure boot keys.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "secure-boot-setup")]
-struct SecureBootSetupAction {
-    /// print output from QEMU
-    #[argh(switch)]
-    verbose: bool,
-}
+struct SecureBootSetupAction {}
 
 /// Run "cargo test" in the vboot project.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -327,14 +323,10 @@ fn generate_secure_boot_keys(conf: &Config) {
 }
 
 #[throws]
-fn run_secure_boot_setup(conf: &Config, action: &SecureBootSetupAction) {
+fn run_secure_boot_setup(conf: &Config) {
     generate_secure_boot_keys(conf)?;
 
-    let po = if action.verbose {
-        qemu::PrintOutput::Yes
-    } else {
-        qemu::PrintOutput::No
-    };
+    run_build_enroller(conf)?;
 
     for arch in Arch::all() {
         let ovmf = conf.ovmf_paths(arch);
@@ -342,8 +334,7 @@ fn run_secure_boot_setup(conf: &Config, action: &SecureBootSetupAction) {
         copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
         let qemu = Qemu::new(ovmf);
-        let oemstr_path = conf.secure_boot_root_key_paths().enroll_data();
-        qemu.enroll(&oemstr_path, po)?;
+        qemu.run_disk_image(&conf.enroller_disk_path(), VarAccess::ReadWrite)?;
     }
 }
 
@@ -361,7 +352,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = action.secure_boot;
-    qemu.run_disk_image(disk)?;
+    qemu.run_disk_image(disk, VarAccess::ReadOnly)?;
 }
 
 #[throws]
@@ -434,7 +425,7 @@ fn main() {
         Action::UpdateDisk(_) => run_update_disk(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
-        Action::SecureBootSetup(action) => run_secure_boot_setup(&conf, action),
+        Action::SecureBootSetup(_) => run_secure_boot_setup(&conf),
         Action::Test(_) => run_tests(),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
