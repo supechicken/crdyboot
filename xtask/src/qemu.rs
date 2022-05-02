@@ -30,10 +30,6 @@ impl OvmfPaths {
         self.dir.join("OVMF_VARS.fd.secure_boot")
     }
 
-    pub fn enroll_executable(&self) -> Utf8PathBuf {
-        self.dir.join("enroll.efi")
-    }
-
     /// Path to which OVMF debugging log messages are sent.
     pub fn qemu_log(&self) -> Utf8PathBuf {
         self.dir.join("qemu.log")
