@@ -62,7 +62,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("Successfully set custom db, KEK, and PK variables");
 
-    let delay_in_s = 10;
+    let delay_in_s = 2;
     info!("shutting down in {} seconds", delay_in_s);
 
     let bt = st.boot_services();
