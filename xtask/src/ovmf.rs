@@ -44,21 +44,16 @@ pub fn run_build_ovmf(conf: &Config) {
     // Copy the outputs to a more convenient location.
     let compiler = "DEBUG_GCC5";
     for arch in Arch::all() {
-        let (src_name, efi_dir_name) = match arch {
-            Arch::Ia32 => ("OvmfIa32", "IA32"),
-            Arch::X64 => ("OvmfX64", "X64"),
+        let src_name = match arch {
+            Arch::Ia32 => "OvmfIa32",
+            Arch::X64 => "OvmfX64",
         };
 
         let src_dir = edk2_dir.join("Build").join(src_name).join(compiler);
         let fv_dir = src_dir.join("FV");
-        let efi_dir = src_dir.join(efi_dir_name);
 
         let dst = conf.ovmf_paths(arch);
         copy_file(fv_dir.join("OVMF_CODE.fd"), dst.code())?;
         copy_file(fv_dir.join("OVMF_VARS.fd"), dst.original_vars())?;
-        copy_file(
-            efi_dir.join("EnrollDefaultKeys.efi"),
-            dst.enroll_executable(),
-        )?;
     }
 }
