@@ -7,7 +7,7 @@ repository = "https://chromium.googlesource.com/crdyboot"
 version = "1.0.0"
 
 [dependencies]
-log = "0.4.14"
+log = "0.4.16"
 uefi = { version = "0.15.2", features = ["exts", "ignore-logger-errors"] }
 uefi-services = "0.12.1"
 
