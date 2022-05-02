@@ -1,17 +1,7 @@
-use crate::copy_file;
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
-use fs_err as fs;
-use std::io::{BufRead, BufReader, Write};
-use std::process::{self, Stdio};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PrintOutput {
-    No,
-    Yes,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VarAccess {
@@ -38,10 +28,6 @@ impl OvmfPaths {
 
     pub fn secure_boot_vars(&self) -> Utf8PathBuf {
         self.dir.join("OVMF_VARS.fd.secure_boot")
-    }
-
-    pub fn enroll_executable(&self) -> Utf8PathBuf {
-        self.dir.join("enroll.efi")
     }
 
     /// Path to which OVMF debugging log messages are sent.
@@ -119,92 +105,10 @@ impl Qemu {
     }
 
     #[throws]
-    pub fn run_disk_image(&self, image_path: &Utf8Path) {
-        let mut cmd = self.create_command(VarAccess::ReadOnly);
+    pub fn run_disk_image(&self, image_path: &Utf8Path, var_access: VarAccess) {
+        let mut cmd = self.create_command(var_access);
 
         cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
         cmd.run()?;
-    }
-
-    #[throws]
-    pub fn enroll(&self, oemstr_path: &Utf8Path, po: PrintOutput) {
-        let mut cmd = self.create_command(VarAccess::ReadWrite);
-
-        let tmp_dir = tempfile::tempdir()?;
-        let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
-
-        let boot_dir = tmp_path.join("efi/boot");
-        fs::create_dir_all(&boot_dir)?;
-
-        let dst_name = "enroll.efi";
-
-        cmd.add_args(&[
-            "-drive",
-            &format!("format=raw,file=fat:rw:{}", tmp_path),
-        ]);
-
-        cmd.add_args(&["-smbios", &format!("type=11,path={}", oemstr_path)]);
-
-        copy_file(self.ovmf.enroll_executable(), boot_dir.join(dst_name))?;
-
-        // Convert to an std Command, command_run doesn't
-        // support the interactive session needed here.
-        let mut cmd = process::Command::from(&cmd);
-
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped());
-
-        let mut child = cmd.spawn()?;
-        let stdout = child.stdout.take().unwrap();
-        let mut stdin = child.stdin.take().unwrap();
-
-        let mut reader = BufReader::new(stdout);
-
-        // Wait for the shell to start.
-        wait_for_line_containing(&mut reader, "UEFI Interactive Shell", po)?;
-
-        // Send an escape to skip the five second delay before
-        // the shell starts.
-        write!(stdin, "\x1b")?;
-        // Send a return so that we get an actual shell prompt.
-        write!(stdin, "\r\n")?;
-
-        // Wait for the shell prompt.
-        wait_for_line_containing(&mut reader, "Shell> ", po)?;
-
-        // Send the enroll command. Passing in "--no-default" changes
-        // what certificates get enrolled in the db. The default, for
-        // some reason, is to enroll the Microsoft certs rather than
-        // the cert we have passed in. Now, the cert we passed in does
-        // get enrolled as the PK and first KEK, and in theory it
-        // being in the KEK should allow our custom-signed shim to
-        // boot, but that doesn't seem to work in practice with OVMF.
-        write!(stdin, "enroll --no-default\r\n")?;
-
-        // Wait again for the shell prompt.
-        wait_for_line_containing(&mut reader, "Shell> ", po)?;
-
-        // Send the shutdown command.
-        write!(stdin, "reset -s\r\n")?;
-
-        child.wait()?;
-    }
-}
-
-#[throws]
-fn wait_for_line_containing(
-    reader: &mut dyn BufRead,
-    substr: &str,
-    po: PrintOutput,
-) {
-    for line in reader.lines() {
-        let line = line?;
-        if po == PrintOutput::Yes {
-            println!("{}", line);
-        }
-        // Can't use "starts_with" because of the color
-        // escape codes.
-        if line.contains(substr) {
-            break;
-        }
     }
 }
