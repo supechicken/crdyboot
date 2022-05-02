@@ -1,3 +1,4 @@
+#[derive(Clone, Copy, Debug)]
 pub enum Arch {
     Ia32,
     X64,
