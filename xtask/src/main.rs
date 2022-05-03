@@ -4,7 +4,6 @@ mod config;
 mod gen_disk;
 mod loopback;
 mod mount;
-mod ovmf;
 mod package;
 mod qemu;
 mod shim;
@@ -49,7 +48,6 @@ enum Action {
     Build(BuildAction),
     PrepDisk(PrepDiskAction),
     UpdateDisk(UpdateDiskAction),
-    BuildOvmf(BuildOvmfAction),
     SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
@@ -67,11 +65,6 @@ struct BuildAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build-enroller")]
 struct BuildEnrollerAction {}
-
-/// Build OVMF.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "build-ovmf")]
-struct BuildOvmfAction {}
 
 /// Build vboot test disk.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -331,8 +324,21 @@ fn run_secure_boot_setup(conf: &Config) {
     for arch in Arch::all() {
         let ovmf = conf.ovmf_paths(arch);
 
+        // Copy the system OVMF files to a local directory.
+        // TODO: move these hardcoded paths to the config.
+        let system_ovmf_dir = Utf8Path::new("/usr/share/OVMF/");
+        let (system_code, system_vars) = match arch {
+            Arch::Ia32 => ("OVMF32_CODE_4M.secboot.fd", "OVMF32_VARS_4M.fd"),
+            Arch::X64 => ("OVMF_CODE_4M.secboot.fd", "OVMF_VARS_4M.fd"),
+        };
+        copy_file(system_ovmf_dir.join(system_code), ovmf.code())?;
+        copy_file(system_ovmf_dir.join(system_vars), ovmf.original_vars())?;
+
+        // Keep a copy of the original vars for running QEMU in
+        // non-secure-boot mode.
         copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
+        // Run the enroller in QEMU to set up secure boot UEFI variables.
         let qemu = Qemu::new(ovmf);
         qemu.run_disk_image(&conf.enroller_disk_path(), VarAccess::ReadWrite)?;
     }
@@ -418,7 +424,6 @@ fn main() {
     match &opt.action {
         Action::Build(_) => run_crdyboot_build(&conf),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
-        Action::BuildOvmf(_) => ovmf::run_build_ovmf(&conf),
         Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Format(action) => run_rustfmt(action),

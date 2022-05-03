@@ -57,13 +57,9 @@ Rust UEFI targets.
 
     sudo apt install mingw-w64-i686-dev mingw-w64-x86-64-dev
 
-For building OVMF:
-
-    sudo apt install acpica-tools nasm uuid-dev
-
 Other tools used for image signing and running in a VM:
 
-    sudo apt install efitools gdisk qemu-system-x86 sbsigntool
+    sudo apt install efitools gdisk ovmf ovmf-ia32 qemu-system-x86 sbsigntool
 
 ## Building and testing
 
@@ -74,10 +70,6 @@ To check formatting, lint, test, and build both vboot and crdyboot:
 To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
     cargo xtask build
-
-One-time step to build OVMF:
-
-    cargo xtask build-ovmf
 
 One-time step to enroll custom secure-boot keys:
 
