@@ -1,4 +1,4 @@
 keys/
 target/
 workspace/
-crdyboot.conf
+crdyboot.toml

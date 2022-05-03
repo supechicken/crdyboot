@@ -10,4 +10,4 @@ use_test_key = true
 
 # Path of the reven disk (relative to the repo root) to modify for boot
 # testing.
-disk_path = workspace/disk.bin
+disk_path = "workspace/disk.bin"
