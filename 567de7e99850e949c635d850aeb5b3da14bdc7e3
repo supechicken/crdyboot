@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f7fcbed5_9b704da7",
+        "filename": "xtask/default.toml",
+        "patchSetId": 1
+      },
+      "lineNbr": 13,
+      "author": {
+        "id": 1501785
+      },
+      "writtenOn": "2022-05-03T15:43:06Z",
+      "side": 0,
+      "message": "I am surprised you can get away with this in the first place.",
+      "revId": "567de7e99850e949c635d850aeb5b3da14bdc7e3",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
