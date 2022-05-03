@@ -14,10 +14,6 @@ impl KeyPaths {
         KeyPaths { dir }
     }
 
-    pub fn enroll_data(&self) -> Utf8PathBuf {
-        self.dir.join("key.oemstr")
-    }
-
     pub fn priv_pem(&self) -> Utf8PathBuf {
         self.dir.join("key.priv.pem")
     }
