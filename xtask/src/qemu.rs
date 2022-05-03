@@ -1,12 +1,43 @@
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VarAccess {
     ReadOnly,
     ReadWrite,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Display {
+    None,
+    Gtk,
+    Sdl,
+}
+
+impl FromStr for Display {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "none" => Ok(Self::None),
+            "gtk" => Ok(Self::Gtk),
+            "sdl" => Ok(Self::Sdl),
+            _ => Err(anyhow!("invalid display type: {s}")),
+        }
+    }
+}
+
+impl Display {
+    fn as_arg_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Gtk => "gtk,gl=on,show-cursor=on",
+            Self::Sdl => "sdl,gl=on,show-cursor=on",
+        }
+    }
 }
 
 pub struct OvmfPaths {
@@ -49,12 +80,17 @@ impl Qemu {
         }
     }
 
-    fn create_command(&self, var_access: VarAccess) -> Command {
+    fn create_command(
+        &self,
+        var_access: VarAccess,
+        display: Display,
+    ) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
         cmd.add_args(&["-vga", "virtio"]);
         cmd.add_args(&["-serial", "stdio"]);
+        cmd.add_args(&["-display", display.as_arg_str()]);
 
         // Give it a small but reasonable amount of memory (the
         // default of 128M is too small).
@@ -105,8 +141,13 @@ impl Qemu {
     }
 
     #[throws]
-    pub fn run_disk_image(&self, image_path: &Utf8Path, var_access: VarAccess) {
-        let mut cmd = self.create_command(var_access);
+    pub fn run_disk_image(
+        &self,
+        image_path: &Utf8Path,
+        var_access: VarAccess,
+        display: Display,
+    ) {
+        let mut cmd = self.create_command(var_access, display);
 
         cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
         cmd.run()?;
