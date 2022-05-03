@@ -16,6 +16,24 @@
       "message": "Out of curiousity: did this self-resolve with the repo change?",
       "revId": "6d847fd0222274a0c4383cc029ec5b096df1e016",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9f82152c_7b39cef3",
+        "filename": "xtask/src/shim.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 52,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-03T16:55:16Z",
+      "side": 0,
+      "message": "Yep, this is something I ran into when adding the shim-review recipe and was able to fix it: https://chromium.googlesource.com/chromiumos/shim-review/+/358a64b42bba87472cf3e65dbd063c00ee796b35",
+      "parentUuid": "3dfbb6b9_d758f1e0",
+      "revId": "6d847fd0222274a0c4383cc029ec5b096df1e016",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
