@@ -3,84 +3,42 @@ use crate::build_mode::BuildMode;
 use crate::package::Package;
 use crate::qemu::OvmfPaths;
 use crate::sign::KeyPaths;
-use anyhow::{anyhow, bail, Error};
+use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use fehler::throws;
 use fs_err as fs;
+use serde::Deserialize;
 
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     enable_verbose_logging: bool,
     use_test_key: bool,
     disk_path: Utf8PathBuf,
-    /// Absolute path of the crdyboot repo.
+
+    /// Absolute path of the crdyboot repo. This is passed in to
+    /// [`Config::load`], not part of the input config file.
+    #[serde(skip)]
     repo: Utf8PathBuf,
 }
 
 /// Path of the config file relative to the repo root directory.
 pub fn config_path(repo_root: &Utf8Path) -> Utf8PathBuf {
-    repo_root.join("crdyboot.conf")
+    repo_root.join("crdyboot.toml")
 }
 
 impl Config {
     #[throws]
     pub fn load(repo_root: &Utf8Path) -> Config {
-        let ini = fs::read_to_string(config_path(repo_root))?;
-        Config::parse(&ini, repo_root)?
+        let src = fs::read_to_string(config_path(repo_root))?;
+        Config::parse(&src, repo_root)?
     }
 
     #[throws]
-    fn parse(ini: &str, repo: &Utf8Path) -> Config {
-        let mut disk_path = Utf8PathBuf::from("workspace/disk.bin");
-        let mut enable_verbose_logging = true;
-        let mut use_test_key = false;
-
-        for (index, line) in ini.lines().enumerate() {
-            let line_no = index + 1;
-            let line = line.trim();
-
-            // Ignore empty lines and comments.
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            let parts: Vec<_> = line.splitn(2, '=').collect();
-            if parts.len() != 2 {
-                bail!(
-                    "invalid config: line {}: expected 'option = value'",
-                    line_no
-                );
-            }
-
-            let key = parts[0].trim();
-            let val = parts[1].trim();
-
-            let parse_bool = || -> Result<bool, Error> {
-                val.parse().map_err(|_| {
-                    anyhow!(
-                        "invalid config: line {}: expected bool value",
-                        line_no
-                    )
-                })
-            };
-
-            let parse_path = || -> Utf8PathBuf { repo.join(val) };
-
-            match key {
-                "disk_path" => disk_path = parse_path(),
-                "enable_verbose_logging" => {
-                    enable_verbose_logging = parse_bool()?
-                }
-                "use_test_key" => use_test_key = parse_bool()?,
-                _ => println!("warning: unknown config option: {}", key),
-            }
-        }
-
-        Config {
-            enable_verbose_logging,
-            use_test_key,
-            disk_path,
-            repo: repo.to_path_buf(),
-        }
+    fn parse(src: &str, repo: &Utf8Path) -> Config {
+        let mut config: Self = toml::de::from_str(src)?;
+        config.repo = repo.into();
+        config
     }
 
     /// Get all cargo features to enable while building a package.
@@ -190,20 +148,18 @@ mod tests {
     #[test]
     #[throws]
     fn test_parse() {
-        let path = Utf8PathBuf::from("path");
+        let repo = &Utf8PathBuf::new();
 
-        // An empty config is OK.
-        let conf = Config::parse("", &path)?;
-        assert!(conf.enable_verbose_logging);
+        // Default config parses OK.
+        let default_cfg = include_str!("../default.toml");
+        Config::parse(default_cfg, repo)?;
 
-        // Parse a bool.
-        let conf = Config::parse("enable_verbose_logging=false", &path)?;
-        assert!(!conf.enable_verbose_logging);
+        // Config with unknown key is invalid.
+        let unknown_key = format!("{}\n unknown_key = true", default_cfg);
+        assert!(Config::parse(&unknown_key, repo).is_err());
 
-        // Invalid bool.
-        assert!(Config::parse("enable_verbose_logging=asdf", &path).is_err());
-
-        // An unknown key is allowed.
-        assert!(Config::parse("asdf=true", &path).is_ok());
+        // Partial config is invalid.
+        let partial = default_cfg.replace("use_test_key = true", "");
+        assert!(Config::parse(&partial, repo).is_err());
     }
 }
