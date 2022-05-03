@@ -5,17 +5,15 @@ use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
 use crate::sign;
 use anyhow::Error;
-use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
-use std::env;
 
 #[throws]
 fn build_shim(conf: &Config) {
     let shim_dir = conf.shim_build_path();
-    let shim_url = "https://github.com/neverware/shim-build.git";
-    let shim_rev = "f91f23e3ce3f93fe8532d8bbcfe90ace755a5fed";
+    let shim_url = "https://chromium.googlesource.com/chromiumos/shim-review";
+    let shim_rev = "aba1fb2b7bffa4af651a40e667bde0dfdfc4ab0a";
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
 
@@ -26,7 +24,7 @@ fn build_shim(conf: &Config) {
 
     copy_file(
         conf.secure_boot_shim_key_paths().pub_der(),
-        shim_dir.join("neverware.cer"),
+        shim_dir.join("chromeos_reven.cer"),
     )?;
 
     // Disable EBS protection. This is a shim feature that hooks the
@@ -49,27 +47,6 @@ fn build_shim(conf: &Config) {
     Command::with_args("make", &["copy"])
         .set_dir(&shim_dir)
         .run()?;
-
-    // For some reason the files get dumped to the CWD instead of the
-    // CWD passed into set_dir above. Super confused as to why.
-    let install_dir = Utf8Path::new("install");
-    Command::with_args(
-        "sudo",
-        &[
-            "chown",
-            "-R",
-            &env::var("USER").unwrap(),
-            install_dir.as_str(),
-        ],
-    )
-    .run()?;
-
-    for arch in Arch::all() {
-        let file_name = arch.efi_file_name("shim");
-        fs::rename(install_dir.join(&file_name), shim_dir.join(&file_name))?;
-    }
-
-    fs::remove_dir(install_dir)?;
 }
 
 #[throws]
