@@ -299,20 +299,9 @@ fn generate_secure_boot_keys(conf: &Config) {
 
     let root_key_paths = conf.secure_boot_root_key_paths();
 
-    // Generate the PK/KEK and db vars for use with the non-VM enroller.
+    // Generate the PK/KEK and db vars for use with the enroller.
     sign::generate_signed_vars(&root_key_paths, "PK")?;
     sign::generate_signed_vars(&root_key_paths, "db")?;
-
-    // Generate the oemstr for use with the VM enroller.
-
-    let der = fs::read(root_key_paths.pub_der())?;
-
-    // Defined in edk2/OvmfPkg/Include/Guid/OvmfPkKek1AppPrefix.h
-    let uuid = "4e32566d-8e9e-4f52-81d3-5bb9715f9727";
-
-    let oemstr = format!("{}:{}", uuid, base64::encode(der));
-
-    fs::write(root_key_paths.enroll_data(), oemstr)?;
 }
 
 #[throws]
