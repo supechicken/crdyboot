@@ -64,6 +64,11 @@ For building OVMF:
 Other tools used for image signing and running in a VM:
 
     sudo apt install efitools gdisk ovmf ovmf-ia32 qemu-system-x86 sbsigntool
+    
+After installing qemu, add your user to the `kvm` group. You will need
+to log out and back in for this to take effect:
+
+    sudo adduser ${USER} kvm
 
 ## Building and testing
 
