@@ -19,7 +19,7 @@ use fehler::throws;
 use fs_err as fs;
 use loopback::LoopbackDevice;
 use package::Package;
-use qemu::{Qemu, VarAccess};
+use qemu::{Display, Qemu, VarAccess};
 use std::env;
 
 const NIGHTLY_TC: &str = "nightly-2022-02-06";
@@ -121,6 +121,10 @@ struct QemuAction {
     /// enable secure boot
     #[argh(switch)]
     secure_boot: bool,
+
+    /// type of qemu display to use none, gtk, sdl (default=sdl)
+    #[argh(option, default = "Display::Sdl")]
+    display: Display,
 }
 
 /// Write the disk binary to a USB with `writedisk`.
@@ -321,7 +325,11 @@ fn run_secure_boot_setup(conf: &Config) {
 
         // Run the enroller in QEMU to set up secure boot UEFI variables.
         let qemu = Qemu::new(ovmf);
-        qemu.run_disk_image(&conf.enroller_disk_path(), VarAccess::ReadWrite)?;
+        qemu.run_disk_image(
+            &conf.enroller_disk_path(),
+            VarAccess::ReadWrite,
+            Display::None,
+        )?;
     }
 }
 
@@ -337,7 +345,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = action.secure_boot;
-    qemu.run_disk_image(disk, VarAccess::ReadOnly)?;
+    qemu.run_disk_image(disk, VarAccess::ReadOnly, action.display)?;
 }
 
 #[throws]
