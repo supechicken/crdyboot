@@ -16,6 +16,24 @@
       "message": "nit: A first thought based purely on the names I would expect `Display::from_str(Display::from_str(\"gtk\").unwrap().as_str())` to work for the function pair from_str and as_str.\n\nI know based on the context here that it\u0027s an option so it seems OK but I might be missing a general pattern here",
       "revId": "028da70f2802c655199fa366b8f5b55d52b4758f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ccb9b1cd_f810e852",
+        "filename": "xtask/src/qemu.rs",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-04T15:25:12Z",
+      "side": 1,
+      "message": "I think that\u0027s a good point -- originally the function was just returning \"gtk\" rather than \"gtk,...\", and when I updated it I didn\u0027t think to rename.\n\nI\u0027ve changed it to `as_arg_str`.",
+      "parentUuid": "08d615f2_702b9730",
+      "revId": "028da70f2802c655199fa366b8f5b55d52b4758f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
