@@ -349,6 +349,15 @@ fn enroll_secure_boot_keys(conf: &Config) {
 /// vboot_reference.
 #[throws]
 pub fn build_futility(conf: &Config) {
+    if conf.read_setup_version() < 2 {
+        // Fix build errors caused by a vboot upgrade.
+        Command::with_args(
+            "make",
+            &["-C", conf.vboot_reference_path().as_str(), "clean"],
+        )
+        .run()?;
+    }
+
     Command::with_args(
         "make",
         &[
@@ -426,7 +435,7 @@ fn run_install_toolchain() {
 #[throws]
 fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 1;
+    let current_version = 2;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
