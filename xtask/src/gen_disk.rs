@@ -34,6 +34,7 @@ struct PartitionSettings {
     start: &'static str,
     end: &'static str,
     type_guid: Option<GptPartitionType>,
+    partition_guid: Option<&'static str>,
     set_successful_boot_bit: bool,
     // 15: highest, 1: lowest, 0: not bootable.
     priority: Option<u8>,
@@ -104,6 +105,18 @@ impl Disk {
             .run()?;
         }
 
+        // Set partition GUID.
+        if let Some(guid) = settings.partition_guid {
+            Command::with_args(
+                "sgdisk",
+                &[
+                    &format!("--partition-guid={}:{}", part_num, guid),
+                    self.path.as_str(),
+                ],
+            )
+            .run()?;
+        }
+
         #[throws]
         fn set_bit(disk: &Disk, part_num: u32, bit_num: u8) {
             Command::with_args(
@@ -142,6 +155,9 @@ pub fn gen_vboot_test_disk(conf: &Config) {
         start: "1MiB",
         end: "17MiB",
         type_guid: Some(GptPartitionType::ChromeOsKernel),
+        // The specific value doesn't matter here, but must match the
+        // partition GUID in the vboot test `test_load_kernel`.
+        partition_guid: Some("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
         set_successful_boot_bit: true,
         priority: Some(1),
     })?;
@@ -171,6 +187,7 @@ pub fn gen_enroller_disk(conf: &Config) {
         start: "2048s",
         end: "-2048s",
         type_guid: Some(GptPartitionType::EfiSystem),
+        partition_guid: None,
         set_successful_boot_bit: false,
         priority: None,
     })?;
@@ -227,7 +244,7 @@ pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
 }
 
 #[throws]
-pub fn build_futility(conf: &Config) {
+fn build_futility(conf: &Config) {
     Command::with_args(
         "make",
         &[
