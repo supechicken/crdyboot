@@ -8,7 +8,8 @@
 #include <2secdata.h>
 #include <2struct.h>
 #include <futility/kernel_blob.h>
-#include <vboot_kernel.h>
+#include <load_kernel_fw.h>
+#include <vboot_api.h>
 
 void crdyboot_set_kernel_key(struct vb2_context *ctx,
                              const struct vb2_packed_key *packed_key,

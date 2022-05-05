@@ -345,6 +345,16 @@ fn enroll_secure_boot_keys(conf: &Config) {
     }
 }
 
+/// Fix build errors caused by a vboot upgrade.
+#[throws]
+fn clean_futility_build(conf: &Config) {
+    Command::with_args(
+        "make",
+        &["-C", conf.vboot_reference_path().as_str(), "clean"],
+    )
+    .run()?;
+}
+
 /// Build futility, the firmware utility executable that is part of
 /// vboot_reference.
 #[throws]
@@ -426,7 +436,7 @@ fn run_install_toolchain() {
 #[throws]
 fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 1;
+    let current_version = 2;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
@@ -448,6 +458,15 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) {
         "Re-running setup: upgrading from {} to {}",
         existing_version, current_version
     );
+
+    // Put any version-specific cleanup operations here.
+
+    if conf.read_setup_version() < 2 {
+        clean_futility_build(conf)?;
+    }
+
+    // End version-specific cleanup operations.
+
     run_setup(conf, &SetupAction { disk_image: None })?;
     conf.write_setup_version(current_version)?;
 }
