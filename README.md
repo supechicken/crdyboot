@@ -55,7 +55,7 @@ Install nightly Rust:
 Provides headers needed for compiling C code compatible with the
 Rust UEFI targets.
 
-    sudo apt install mingw-w64-i686-dev mingw-w64-x86-64-dev
+    sudo apt install libflashrom-dev mingw-w64-i686-dev mingw-w64-x86-64-dev
 
 Other tools used for image signing and running in a VM:
 
