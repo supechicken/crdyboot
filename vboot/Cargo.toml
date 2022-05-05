@@ -9,6 +9,9 @@ log = "0.4.16"
 printf-compat = { version = "0.1.1", default-features = false }
 scroll = { version = "0.11.0", default-features = false }
 
+[dev-dependencies]
+simple_logger = { version = "2.1.0", default-features = false }
+
 [build-dependencies]
 bindgen = "0.59.2"
 camino = "1.0.7"
