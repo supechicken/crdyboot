@@ -440,7 +440,16 @@ pub fn copy_in_crdyboot(conf: &Config) {
 }
 
 #[throws]
-pub fn build_futility(conf: &Config) {
+fn build_futility(conf: &Config) {
+    if conf.read_setup_version() < 2 {
+        // Fix build errors caused by a vboot upgrade.
+        Command::with_args(
+            "make",
+            &["-C", conf.vboot_reference_path().as_str(), "clean"],
+        )
+        .run()?;
+    }
+
     Command::with_args(
         "make",
         &[

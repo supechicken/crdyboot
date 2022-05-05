@@ -17,3 +17,7 @@ void crdyboot_set_kernel_key(struct vb2_context *ctx,
   sd->kernel_key_size = packed_key->key_offset + packed_key->key_size;
   vb2_set_workbuf_used(ctx, vb2_offset_of(sd, wb->buf));
 }
+
+uint32_t abi_test(const char* name, const char* f, uint32_t val) {
+  return val + 1;
+}
