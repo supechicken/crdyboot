@@ -37,3 +37,8 @@ extern "C" fn vb2_nv_get(
 ) -> u32 {
     panic!("vb2_nv_get");
 }
+
+#[no_mangle]
+extern "C" fn vb2ex_tpm_set_mode(_mode_val: vb2_tpm_mode) -> vb2_error_t {
+    panic!("vb2ex_tpm_set_mode");
+}

@@ -77,6 +77,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .allowlist_type("vb2_nv_param")
         .allowlist_type("vb2_return_code")
         .allowlist_type("vb2_secdata_kernel_param")
+        .allowlist_type("vb2_tpm_mode")
         .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
