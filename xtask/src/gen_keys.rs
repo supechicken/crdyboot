@@ -57,7 +57,10 @@ fn gen_keyblock(
     // Copied from vboot_reference/firmware/2lib/include/2struct.h
     const VB2_KEYBLOCK_FLAG_DEVELOPER_0: u32 = 0x1;
     const VB2_KEYBLOCK_FLAG_RECOVERY_0: u32 = 0x4;
-    let flags = VB2_KEYBLOCK_FLAG_DEVELOPER_0 | VB2_KEYBLOCK_FLAG_RECOVERY_0;
+    const VB2_KEYBLOCK_FLAG_MINIOS_0: u32 = 0x10;
+    let flags = VB2_KEYBLOCK_FLAG_DEVELOPER_0
+        | VB2_KEYBLOCK_FLAG_RECOVERY_0
+        | VB2_KEYBLOCK_FLAG_MINIOS_0;
 
     Command::with_args(
         futility_path,
