@@ -410,7 +410,7 @@ fn run_install_toolchain() {
 #[throws]
 fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 1;
+    let current_version = 2;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
