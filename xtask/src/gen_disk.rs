@@ -1,10 +1,8 @@
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::loopback::PartitionPaths;
-use crate::mount::Mount;
-use crate::sign;
-use anyhow::Error;
-use camino::Utf8Path;
+use crate::sign::{self, KeyPaths};
+use anyhow::{Context, Error, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use fehler::throws;
@@ -12,6 +10,7 @@ use fs_err::{self as fs, File, OpenOptions};
 use gptman::{GPTPartitionEntry, GPT};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
+use tempfile::TempDir;
 
 /// Standard sector size.
 const SECTOR_SIZE: u64 = 512;
@@ -106,6 +105,17 @@ impl<'a> PartitionSettings<'a> {
     }
 }
 
+/// Open `path` in read+write mode, without truncating the existing
+/// file. This will return an error if the file doesn't exist.
+#[throws]
+fn open_rw(path: &Utf8Path) -> File {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(path)?
+}
+
 struct DiskSettings<'a> {
     path: &'a Utf8Path,
     size: &'a str,
@@ -118,11 +128,7 @@ impl<'a> DiskSettings<'a> {
     fn create(&self) {
         create_empty_file_with_size(self.path, self.size)?;
 
-        let mut disk_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(self.path)?;
+        let mut disk_file = open_rw(self.path)?;
 
         let mut gpt = GPT::new_from(
             &mut disk_file,
@@ -315,29 +321,118 @@ pub fn gen_enroller_disk(conf: &Config) {
     disk.create()?;
 }
 
-/// Replace both grub executables with crdyboot.
+/// Modify data in the EFI system partition FAT file system.
+///
+/// This loads the partition into memory and opens it with `fatfs`. The
+/// root directory handle is then passed to the `modify` function, and
+/// the caller can update the contents as desired. Then the partition is
+/// written back out to disk.
 #[throws]
-pub fn copy_in_crdyboot(conf: &Config, partitions: &PartitionPaths) {
-    let efi_mount = Mount::new(&partitions.efi)?;
-    let efi = efi_mount.mount_point();
+fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F)
+where
+    F: Fn(fatfs::Dir<Cursor<&mut Vec<u8>>>) -> Result<()>,
+{
+    let mut disk_file = open_rw(disk_path)?;
+    let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
+    let partition_type =
+        guid_str_to_array(GptPartitionType::EfiSystem.as_guid_str());
+    let sys_part = gpt
+        .iter()
+        .find(|(_, part)| part.partition_type_guid == partition_type)
+        .expect("system partition not found")
+        .1;
+    let sys_data_range = PartitionDataRange::new(sys_part);
 
-    let mut dst_names = Vec::new();
+    // Load the entire partition into memory.
+    let mut sys_part_data =
+        sys_data_range.read_bytes_from_file(&mut disk_file)?;
 
-    for arch in Arch::all() {
-        let src = conf.target_exec_path(arch, "crdyboot.efi");
-
-        let dst_name = arch.efi_file_name("grub");
-        dst_names.push(dst_name.clone());
-
-        let dst = efi.join("efi/boot").join(dst_name);
-
-        Command::with_args("sudo", &["cp"])
-            .add_arg(src.as_str())
-            .add_arg(dst.as_str())
-            .run()?;
+    {
+        let sys_part_cursor = Cursor::new(&mut sys_part_data);
+        let sys_part_fs = FileSystem::new(sys_part_cursor, FsOptions::new())?;
+        let root_dir = sys_part_fs.root_dir();
+        modify(root_dir)?;
     }
 
-    sign::sign_all(efi, &conf.secure_boot_shim_key_paths(), &dst_names)?;
+    // Write the entire partition back out.
+    sys_data_range.write_bytes_to_file(&mut disk_file, &sys_part_data)?;
+}
+
+/// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
+/// system partition in the disk image at `disk_path`.
+#[throws]
+pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) {
+    modify_system_partition(disk_path, |root_dir| {
+        let dst_efi_dir = root_dir.open_dir("EFI")?;
+        let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
+
+        for entry in fs::read_dir(src_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name = file_name.to_str().unwrap();
+
+            let src = fs::read(entry.path())?;
+            let mut dst = dst_boot_dir.open_file(file_name)?;
+
+            // Clear out existing data, then copy in the new data.
+            dst.truncate()?;
+            dst.write_all(&src)?;
+        }
+
+        Ok(())
+    })
+    .context("failed to update boot files")?;
+}
+
+pub struct SignAndUpdateBootloader<'a> {
+    /// Path to a reven disk image.
+    pub disk_path: &'a Utf8Path,
+
+    /// Keys to sign with.
+    pub key_paths: KeyPaths,
+
+    /// Mapping from source file path (an unsigned bootloader
+    /// executable) to the destination file name (within the EFI/BOOT
+    /// subdirectory of the system partition).
+    pub mapping: Vec<(Utf8PathBuf, String)>,
+}
+
+impl<'a> SignAndUpdateBootloader<'a> {
+    /// Sign each source file (in a temporary directory, source files
+    /// are not modified), then copy the signed files into the system
+    /// partition of the disk image.
+    #[throws]
+    pub fn run(&self) {
+        let tmp_dir = TempDir::new()?;
+        let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+        for (src, dst_name) in &self.mapping {
+            let signed_src = tmp_path.join(dst_name);
+            sign::sign(src, &signed_src, &self.key_paths)?;
+        }
+
+        update_boot_files(self.disk_path, tmp_path)?;
+    }
+}
+
+/// Sign crdyboot, then copy it into the disk image under the "grub"
+/// name (since that's what shim currently chains to).
+#[throws]
+pub fn copy_in_crdyboot(conf: &Config) {
+    SignAndUpdateBootloader {
+        disk_path: conf.disk_path(),
+        key_paths: conf.secure_boot_shim_key_paths(),
+        mapping: Arch::all()
+            .iter()
+            .map(|arch| {
+                (
+                    conf.target_exec_path(*arch, "crdyboot.efi"),
+                    arch.efi_file_name("grub"),
+                )
+            })
+            .collect(),
+    }
+    .run()?;
 }
 
 #[throws]
