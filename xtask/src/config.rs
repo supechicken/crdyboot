@@ -109,7 +109,7 @@ impl Config {
     }
 
     pub fn vboot_test_disk_path(&self) -> Utf8PathBuf {
-        self.repo.join("vboot/test_data/disk.bin")
+        self.workspace_path().join("vboot_test_disk.bin")
     }
 
     pub fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
