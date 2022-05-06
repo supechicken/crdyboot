@@ -449,7 +449,16 @@ pub fn build_futility(conf: &Config) {
 }
 
 #[throws]
-pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
+pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
+    let mut disk_file = open_rw(conf.disk_path())?;
+    let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
+    let kern_part = gpt
+        .iter()
+        .find(|part| part.1.partition_name.as_str() == partition_name)
+        .unwrap()
+        .1;
+    let kern_data_range = PartitionDataRange::new(kern_part);
+
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
@@ -474,23 +483,16 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
     fs::write(&bootloader, "not a real bootloader")?;
 
     // Copy the whole partition to a temporary file.
-    Command::with_args(
-        "sudo",
-        &[
-            "cp",
-            partition_device_path.as_str(),
-            unsigned_kernel_partition.as_str(),
-        ],
-    )
-    .run()?;
+    let orig_kern_data =
+        kern_data_range.read_bytes_from_file(&mut disk_file)?;
+    fs::write(&unsigned_kernel_partition, orig_kern_data)?;
 
     build_futility(conf)?;
 
     // Get the kernel command line and write it to a file.
     let output = Command::with_args(
-        "sudo",
+        futility,
         &[
-            futility,
             "vbutil_kernel",
             "--verify",
             unsigned_kernel_partition.as_str(),
@@ -505,9 +507,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
 
     // Extract vmlinuz.
     Command::with_args(
-        "sudo",
+        futility,
         &[
-            futility,
             "vbutil_kernel",
             "--get-vmlinuz",
             unsigned_kernel_partition.as_str(),
@@ -522,7 +523,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
 
     // Sign it.
     #[rustfmt::skip]
-    Command::with_args("sudo", &[futility, "vbutil_kernel",
+    Command::with_args(futility, &["vbutil_kernel",
         "--pack", signed_kernel_partition.as_str(),
         "--keyblock", kernel_data_key_keyblock.as_str(),
         "--signprivate", kernel_data_key_private.as_str(),
@@ -537,9 +538,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
 
     // Verify it.
     Command::with_args(
-        "sudo",
+        futility,
         &[
-            futility,
             "vbutil_kernel",
             "--verify",
             signed_kernel_partition.as_str(),
@@ -549,16 +549,9 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
     )
     .run()?;
 
-    // Copy it back to the partition.
-    Command::with_args(
-        "sudo",
-        &[
-            "cp",
-            signed_kernel_partition.as_str(),
-            partition_device_path.as_str(),
-        ],
-    )
-    .run()?;
+    // Write the updated kernel partition back to the disk image.
+    let signed_kern_data = fs::read(signed_kernel_partition)?;
+    kern_data_range.write_bytes_to_file(&mut disk_file, &signed_kern_data)?;
 }
 
 #[cfg(test)]

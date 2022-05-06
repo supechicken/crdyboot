@@ -2,7 +2,6 @@ mod arch;
 mod build_mode;
 mod config;
 mod gen_disk;
-mod loopback;
 mod package;
 mod qemu;
 mod shim;
@@ -16,7 +15,6 @@ use command_run::Command;
 use config::Config;
 use fehler::throws;
 use fs_err as fs;
-use loopback::LoopbackDevice;
 use package::Package;
 use qemu::{Display, Qemu, VarAccess};
 use std::{env, process};
@@ -229,16 +227,11 @@ fn run_rustfmt(action: &FormatAction) {
 
 #[throws]
 fn run_prep_disk(conf: &Config) {
-    let disk = conf.disk_path();
-
     shim::update_shim(conf)?;
 
-    let lo_dev = LoopbackDevice::new(disk)?;
-    let partitions = lo_dev.partition_paths();
-
     // Sign both kernel partitions.
-    gen_disk::sign_kernel_partition(conf, &partitions.kern_a)?;
-    gen_disk::sign_kernel_partition(conf, &partitions.kern_b)?;
+    gen_disk::sign_kernel_partition(conf, "KERN-A")?;
+    gen_disk::sign_kernel_partition(conf, "KERN-B")?;
 }
 
 #[throws]
