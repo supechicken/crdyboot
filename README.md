@@ -68,6 +68,14 @@ to log out and back in for this to take effect:
 
 ## Building and testing
 
+Before running any other commands in the repository, run this setup
+command:
+
+    cargo xtask setup <reven-image-path>
+    
+This will copy the reven image to a local directory and run various
+setup commands.
+
 To check formatting, lint, test, and build both vboot and crdyboot:
 
     cargo xtask check
@@ -75,18 +83,6 @@ To check formatting, lint, test, and build both vboot and crdyboot:
 To build crdyboot for both 64-bit and 32-bit UEFI targets:
 
     cargo xtask build
-
-One-time step to enroll custom secure-boot keys:
-
-    cargo xtask secure-boot-setup
-
-One-time step to copy in an existing cloudready image:
-
-    cp /path/to/cloudready.bin workspace/disk.bin
-
-One-time step to prepare the image:
-
-    cargo xtask prep-disk
 
 To copy the latest crdyboot build to the image:
 
@@ -105,12 +101,8 @@ turned off.
 ## Testing on real hardware
 
 To test secure boot with real hardware you will need to enroll custom
-keys. First build the enroller image (`workspace/enroller.bin`):
-
-    cargo xtask build-enroller
-
-Write `workspace/enroller.bin` to a USB, and write `workspace/disk.bin` to a
-second USB, e.g. using [writedisk][writedisk].
+keys. Write `workspace/enroller.bin` to a USB, and write
+`workspace/disk.bin` to a second USB, e.g. using [writedisk].
 
 Boot the DUT and enter the boot setup. Find the secure boot settings and change
 it to setup mode. (The details will vary from one vendor to another.)
