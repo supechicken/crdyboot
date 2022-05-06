@@ -3,7 +3,6 @@ mod build_mode;
 mod config;
 mod gen_disk;
 mod loopback;
-mod mount;
 mod package;
 mod qemu;
 mod shim;
@@ -232,24 +231,14 @@ fn run_rustfmt(action: &FormatAction) {
 fn run_prep_disk(conf: &Config) {
     let disk = conf.disk_path();
 
+    shim::update_shim(conf)?;
+
     let lo_dev = LoopbackDevice::new(disk)?;
     let partitions = lo_dev.partition_paths();
-
-    shim::update_shim(conf, &partitions)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(conf, &partitions.kern_a)?;
     gen_disk::sign_kernel_partition(conf, &partitions.kern_b)?;
-}
-
-#[throws]
-fn run_update_disk(conf: &Config) {
-    let disk = conf.disk_path();
-
-    let lo_dev = LoopbackDevice::new(disk)?;
-    let partitions = lo_dev.partition_paths();
-
-    gen_disk::copy_in_crdyboot(conf, &partitions)?;
 }
 
 #[throws]
@@ -437,7 +426,7 @@ fn main() {
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Format(action) => run_rustfmt(action),
-        Action::UpdateDisk(_) => run_update_disk(&conf),
+        Action::UpdateDisk(_) => gen_disk::copy_in_crdyboot(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
