@@ -295,6 +295,7 @@ pub fn load_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
 
     struct MemDisk {
         data: &'static [u8],
@@ -351,19 +352,31 @@ mod tests {
         );
     }
 
+    /// Replace verity args in the kernel command line with hardcoded
+    /// values. This allows the test to run against a more or less
+    /// arbitrary reven kernel partition.
+    #[must_use]
+    fn replace_command_line_verity_args(cmdline: &str) -> String {
+        let r = Regex::new("root_hexdigest=[[:xdigit:]]{64}").unwrap();
+        let cmdline = r.replace(&cmdline, "root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630");
+
+        let r = Regex::new("salt=[[:xdigit:]]{64}").unwrap();
+        let cmdline = r.replace(&cmdline, "salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476");
+
+        cmdline.into()
+    }
+
     #[test]
     fn test_load_kernel() {
         simple_logger::init().unwrap();
 
         let test_key_vbpubk = include_bytes!("../test_data/kernel_key.vbpubk");
-        let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_secure drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 6082560 verity payload=PARTUUID=%U/PARTNROFF=1 hashtree=PARTUUID=%U/PARTNROFF=1 hashstart=6082560 alg=sha256 root_hexdigest=69185175957ada9cb25bf34621a4a52b03d568b44adf8dfb136ce89152be524a salt=4332c7477474e9131fa629af556314ccb49e872282d6fade4801876d54d56236\" noinitrd vt.global_cursor_default=0 kern_guid=%U add_efi_memmap boot=local noresume noswap i915.modeset=1 ";
-        let expected_command_line = "console= loglevel=7 init=/sbin/init cros_secure drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 6082560 verity payload=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashtree=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashstart=6082560 alg=sha256 root_hexdigest=69185175957ada9cb25bf34621a4a52b03d568b44adf8dfb136ce89152be524a salt=4332c7477474e9131fa629af556314ccb49e872282d6fade4801876d54d56236\" noinitrd vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap boot=local noresume noswap i915.modeset=1 ";
+        let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=PARTUUID=%U/PARTNROFF=1 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=0 dm=\"1 vroot none ro 1,0 4710400 verity payload=ROOT_DEV hashtree=HASH_DEV hashstart=4710400 alg=sha256 root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630 salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=%U add_efi_memmap boot=local noresume noswap i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
+        let expected_command_line = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=0 dm=\"1 vroot none ro 1,0 4710400 verity payload=ROOT_DEV hashtree=HASH_DEV hashstart=4710400 alg=sha256 root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630 salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap boot=local noresume noswap i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
 
         let mut disk = MemDisk {
-            // This file was generated with:
-            //
-            //     cargo xtask build-vboot-test-disk
-            data: include_bytes!("../test_data/disk.bin"),
+            // This file was generated during `cargo xtask setup`.
+            data: include_bytes!("../../workspace/vboot_test_disk.bin"),
         };
 
         match load_kernel(test_key_vbpubk, &mut disk) {
@@ -374,13 +387,17 @@ mod tests {
                 );
 
                 assert_eq!(
-                    loaded_kernel.command_line_with_placeholders(),
-                    Some(expected_command_line_with_placeholders)
+                    replace_command_line_verity_args(
+                        loaded_kernel.command_line_with_placeholders().unwrap()
+                    ),
+                    expected_command_line_with_placeholders
                 );
 
                 assert_eq!(
-                    loaded_kernel.command_line(),
-                    Some(expected_command_line.into())
+                    replace_command_line_verity_args(
+                        &loaded_kernel.command_line().unwrap()
+                    ),
+                    expected_command_line
                 );
             }
             Err(err) => {
