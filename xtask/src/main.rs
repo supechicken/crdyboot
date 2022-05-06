@@ -51,7 +51,6 @@ enum Action {
     UpdateDisk(UpdateDiskAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
-    BuildVbootTestDisk(BuildVbootTestDiskAction),
     Writedisk(WritediskAction),
     InstallToolchain(InstallToolchainAction),
 }
@@ -65,11 +64,6 @@ struct BuildAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build-enroller")]
 struct BuildEnrollerAction {}
-
-/// Build vboot test disk.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "build-vboot-test-disk")]
-struct BuildVbootTestDiskAction {}
 
 /// Check formating, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -375,6 +369,9 @@ fn run_setup(conf: &Config, action: &SetupAction) {
     // Build and install shim, and sign the kernel partitions with a
     // local key.
     run_prep_disk(conf)?;
+
+    // Generate a disk image used by the `test_load_kernel` vboot test.
+    gen_disk::gen_vboot_test_disk(conf)?;
 }
 
 #[throws]
@@ -438,7 +435,6 @@ fn main() {
     match &opt.action {
         Action::Build(_) => run_crdyboot_build(&conf),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
-        Action::BuildVbootTestDisk(_) => gen_disk::gen_vboot_test_disk(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Format(action) => run_rustfmt(action),
         Action::UpdateDisk(_) => run_update_disk(&conf),
