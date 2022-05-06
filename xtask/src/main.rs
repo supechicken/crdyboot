@@ -20,7 +20,7 @@ use fs_err as fs;
 use loopback::LoopbackDevice;
 use package::Package;
 use qemu::{Display, Qemu, VarAccess};
-use std::env;
+use std::{env, process};
 
 const NIGHTLY_TC: &str = "nightly-2022-02-06";
 
@@ -41,6 +41,7 @@ pub struct Opt {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 enum Action {
+    Setup(SetupAction),
     Check(CheckAction),
     Format(FormatAction),
     Lint(LintAction),
@@ -48,7 +49,6 @@ enum Action {
     Build(BuildAction),
     PrepDisk(PrepDiskAction),
     UpdateDisk(UpdateDiskAction),
-    SecureBootSetup(SecureBootSetupAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     BuildVbootTestDisk(BuildVbootTestDiskAction),
@@ -100,10 +100,14 @@ struct LintAction {}
 #[argh(subcommand, name = "prep-disk")]
 struct PrepDiskAction {}
 
-/// Set up secure boot keys.
+/// Initialize the workspace.
 #[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "secure-boot-setup")]
-struct SecureBootSetupAction {}
+#[argh(subcommand, name = "setup")]
+struct SetupAction {
+    /// path of the reven disk image to copy.
+    #[argh(positional)]
+    disk_image: Option<Utf8PathBuf>,
+}
 
 /// Run "cargo test" in the vboot project.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -303,9 +307,23 @@ fn generate_secure_boot_keys(conf: &Config) {
 }
 
 #[throws]
-fn run_secure_boot_setup(conf: &Config) {
-    run_build_enroller(conf)?;
+fn init_submodules(conf: &Config) {
+    Command::with_args(
+        "git",
+        &[
+            "-C",
+            conf.repo_path().as_str(),
+            "submodule",
+            "update",
+            "--init",
+        ],
+    )
+    .run()?;
+}
 
+/// Run the enroller in a VM to set up UEFI variables for secure boot.
+#[throws]
+fn enroll_secure_boot_keys(conf: &Config) {
     for arch in Arch::all() {
         let ovmf = conf.ovmf_paths(arch);
 
@@ -331,6 +349,32 @@ fn run_secure_boot_setup(conf: &Config) {
             Display::None,
         )?;
     }
+}
+
+// Run various setup operations. This must be run once before running
+// any other xtask commands.
+#[throws]
+fn run_setup(conf: &Config, action: &SetupAction) {
+    init_submodules(conf)?;
+
+    if let Some(disk_image) = &action.disk_image {
+        copy_file(disk_image, conf.disk_path())?;
+    }
+
+    if !conf.disk_path().exists() {
+        println!("A disk image is needed to continue. Rerun this command");
+        println!("with the path of a reven disk image, which will be copied");
+        println!("to a local path.");
+        process::exit(1);
+    }
+
+    generate_secure_boot_keys(conf)?;
+    run_build_enroller(conf)?;
+    enroll_secure_boot_keys(conf)?;
+
+    // Build and install shim, and sign the kernel partitions with a
+    // local key.
+    run_prep_disk(conf)?;
 }
 
 #[throws]
@@ -363,23 +407,6 @@ fn run_install_toolchain() {
     .run()?;
 }
 
-#[throws]
-fn initial_setup(conf: &Config) {
-    Command::with_args(
-        "git",
-        &[
-            "-C",
-            conf.repo_path().as_str(),
-            "submodule",
-            "update",
-            "--init",
-        ],
-    )
-    .run()?;
-
-    generate_secure_boot_keys(conf)?;
-}
-
 /// Get the repo root path. This assumes this executable is located at
 /// <repo>/target/<buildmode>/<exe>.
 #[throws]
@@ -408,8 +435,6 @@ fn main() {
     }
     let conf = Config::load(&repo_root)?;
 
-    initial_setup(&conf)?;
-
     match &opt.action {
         Action::Build(_) => run_crdyboot_build(&conf),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
@@ -419,7 +444,7 @@ fn main() {
         Action::UpdateDisk(_) => run_update_disk(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
-        Action::SecureBootSetup(_) => run_secure_boot_setup(&conf),
+        Action::Setup(action) => run_setup(&conf, action),
         Action::Test(_) => run_tests(),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
