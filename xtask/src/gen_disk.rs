@@ -1,221 +1,318 @@
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::loopback::{LoopbackDevice, PartitionPaths};
+use crate::loopback::PartitionPaths;
 use crate::mount::Mount;
 use crate::sign;
 use anyhow::Error;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use command_run::Command;
+use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use fehler::throws;
-use fs_err as fs;
-use std::fmt;
+use fs_err::{self as fs, File, OpenOptions};
+use gptman::{GPTPartitionEntry, GPT};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 
+/// Standard sector size.
+const SECTOR_SIZE: u64 = 512;
+
+#[derive(Clone, Copy, Debug)]
 enum GptPartitionType {
-    EfiSystem,
     ChromeOsKernel,
+    EfiSystem,
 }
 
-impl fmt::Display for GptPartitionType {
-    #[throws(fmt::Error)]
-    fn fmt(&self, f: &mut fmt::Formatter) {
+impl GptPartitionType {
+    fn as_guid_str(self) -> &'static str {
         match self {
-            GptPartitionType::EfiSystem => {
-                write!(f, "c12a7328-f81f-11d2-ba4b-00a0c93ec93b")?;
-            }
-            GptPartitionType::ChromeOsKernel => {
-                write!(f, "fe3a2a5d-4f32-41a7-b725-accc3285a309")?;
-            }
+            Self::ChromeOsKernel => "fe3a2a5d-4f32-41a7-b725-accc3285a309",
+            Self::EfiSystem => "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",
         }
     }
 }
 
-struct PartitionSettings {
-    label: &'static str,
-    start: &'static str,
-    end: &'static str,
-    type_guid: Option<GptPartitionType>,
-    partition_guid: Option<&'static str>,
+/// Convert a GUID string to a byte array.
+///
+/// For example, "d24199e7-33f0-4409-b677-1c04683552c5" is converted to:
+/// [e7, 99, 41, d2, f0, 33, 09, 44, b6, 77, 1c, 04, 68, 35, 52, c5]
+///
+/// Note that some bytes appear in a different order between the string
+/// and byte representation; that's just how GUIDs are.
+fn guid_str_to_array(guid: &str) -> [u8; 16] {
+    assert_eq!(guid.len(), 36);
+
+    let a = &guid[0..8];
+    let b = &guid[9..13];
+    let c = &guid[14..18];
+    let d = &guid[19..23];
+    let e = &guid[24..36];
+
+    let a = u32::from_str_radix(a, 16).unwrap();
+    let b = u16::from_str_radix(b, 16).unwrap();
+    let c = u16::from_str_radix(c, 16).unwrap();
+    let d = u16::from_str_radix(d, 16).unwrap();
+    let e = u64::from_str_radix(e, 16).unwrap();
+
+    let mut output = Vec::new();
+    output.extend(a.to_le_bytes());
+    output.extend(b.to_le_bytes());
+    output.extend(c.to_le_bytes());
+    output.extend(d.to_be_bytes());
+    output.extend(&e.to_be_bytes()[2..]);
+
+    output.try_into().unwrap()
+}
+
+/// Create an empty file with the given size (using the `truncate`
+/// command). This will delete the file first if it already exists.
+#[throws]
+fn create_empty_file_with_size(path: &Utf8Path, size: &str) {
+    // Delete the file if it already exists.
+    if path.exists() {
+        fs::remove_file(&path)?;
+    }
+
+    // Generate empty image.
+    Command::with_args("truncate", &["--size", size, path.as_str()]).run()?;
+}
+
+struct PartitionSettings<'a> {
+    label: &'a str,
+    data_range: PartitionDataRange,
+    type_guid: GptPartitionType,
+    guid: &'a str,
     set_successful_boot_bit: bool,
     // 15: highest, 1: lowest, 0: not bootable.
     priority: Option<u8>,
+    // Contents of the partition.
+    data: &'a [u8],
 }
 
-struct Disk {
-    path: Utf8PathBuf,
-    num_partitions: u32,
-}
+impl<'a> PartitionSettings<'a> {
+    fn attribute_bits(&self) -> u64 {
+        let mut attribute_bits: u64 = 0;
 
-impl Disk {
-    #[throws]
-    fn create(path: Utf8PathBuf, size: &str) -> Disk {
-        // Delete the file if it already exists.
-        if path.exists() {
-            fs::remove_file(&path)?;
+        // ChromeOS-specific attributes.
+        if self.set_successful_boot_bit {
+            attribute_bits |= 1 << 56;
+        }
+        if let Some(priority) = self.priority {
+            assert!((1..=15).contains(&priority));
+            let priority: u64 = priority.into();
+            attribute_bits |= priority << 48;
         }
 
-        // Generate empty image.
-        Command::with_args("truncate", &["--size", size, path.as_str()])
-            .run()?;
-
-        Disk {
-            path,
-            num_partitions: 0,
-        }
+        attribute_bits
     }
+}
 
+struct DiskSettings<'a> {
+    path: &'a Utf8Path,
+    size: &'a str,
+    guid: &'a str,
+    partitions: &'a [PartitionSettings<'a>],
+}
+
+impl<'a> DiskSettings<'a> {
     #[throws]
-    fn add_partition(&mut self, settings: PartitionSettings) -> u32 {
-        // Get the partition number (starts at one, not zero).
-        let part_num = self.num_partitions + 1;
+    fn create(&self) {
+        create_empty_file_with_size(self.path, self.size)?;
 
-        // Create a single partition.
-        Command::with_args(
-            "sgdisk",
-            &[
-                &format!(
-                    "--new={}:{}:{}",
-                    part_num, settings.start, settings.end
+        let mut disk_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(self.path)?;
+
+        let mut gpt = GPT::new_from(
+            &mut disk_file,
+            SECTOR_SIZE,
+            guid_str_to_array(self.guid),
+        )?;
+
+        for (i, part) in self.partitions.iter().enumerate() {
+            // GPT partitions start at 1.
+            let part_num: u32 = (i + 1).try_into().unwrap();
+
+            // Create the partition entry.
+            gpt[part_num] = gptman::GPTPartitionEntry {
+                partition_type_guid: guid_str_to_array(
+                    part.type_guid.as_guid_str(),
                 ),
-                self.path.as_str(),
-            ],
-        )
-        .run()?;
+                unique_partition_guid: guid_str_to_array(part.guid),
+                starting_lba: part.data_range.start_lba,
+                ending_lba: part.data_range.end_lba,
+                attribute_bits: part.attribute_bits(),
+                partition_name: part.label.into(),
+            };
 
-        self.num_partitions += 1;
-
-        // Set the partition label.
-        Command::with_args(
-            "sgdisk",
-            &[
-                &format!("--change-name={}:{}", part_num, settings.label),
-                self.path.as_str(),
-            ],
-        )
-        .run()?;
-
-        // Set partition type.
-        if let Some(guid) = settings.type_guid {
-            Command::with_args(
-                "sgdisk",
-                &[
-                    &format!("--typecode={}:{}", part_num, guid),
-                    self.path.as_str(),
-                ],
-            )
-            .run()?;
+            // Write out the partition data.
+            part.data_range
+                .write_bytes_to_file(&mut disk_file, part.data)?;
         }
 
-        // Set partition GUID.
-        if let Some(guid) = settings.partition_guid {
-            Command::with_args(
-                "sgdisk",
-                &[
-                    &format!("--partition-guid={}:{}", part_num, guid),
-                    self.path.as_str(),
-                ],
-            )
-            .run()?;
-        }
-
-        #[throws]
-        fn set_bit(disk: &Disk, part_num: u32, bit_num: u8) {
-            Command::with_args(
-                "sgdisk",
-                &[
-                    "-A",
-                    &format!("{}:set:{}", part_num, bit_num),
-                    disk.path.as_str(),
-                ],
-            )
-            .run()?;
-        }
-
-        if settings.set_successful_boot_bit {
-            set_bit(self, part_num, 56)?;
-        }
-
-        if let Some(priority) = settings.priority {
-            // Only priority 1 supported for now.
-            assert_eq!(priority, 1);
-            set_bit(self, part_num, 48)?;
-        }
-
-        part_num
+        // Write out the protective MBR and GPT headers.
+        GPT::write_protective_mbr_into(&mut disk_file, SECTOR_SIZE)?;
+        gpt.write_into(&mut disk_file)?;
     }
+}
+
+/// Convert from MiB to bytes.
+fn mib_to_byte(val: u64) -> u64 {
+    val * 1024 * 1024
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct PartitionDataRange {
+    // Start and end are inclusive.
+    start_lba: u64,
+    end_lba: u64,
+}
+
+impl PartitionDataRange {
+    fn new(partition: &GPTPartitionEntry) -> Self {
+        Self {
+            start_lba: partition.starting_lba,
+            end_lba: partition.ending_lba,
+        }
+    }
+
+    fn from_byte_range(byte_range: Range<u64>) -> Self {
+        let byte_to_lba = |b| {
+            assert_eq!(b % SECTOR_SIZE, 0);
+            b / SECTOR_SIZE
+        };
+        Self {
+            start_lba: byte_to_lba(byte_range.start),
+            end_lba: byte_to_lba(byte_range.end) - 1,
+        }
+    }
+
+    fn byte_range(&self) -> Range<u64> {
+        self.start_lba * SECTOR_SIZE..(self.end_lba + 1) * SECTOR_SIZE
+    }
+
+    fn num_bytes(&self) -> usize {
+        let r = self.byte_range();
+        let num = r.end - r.start;
+        usize::try_from(num).unwrap()
+    }
+
+    #[throws]
+    fn read_bytes_from_file(&self, f: &mut File) -> Vec<u8> {
+        let mut v = vec![0; self.num_bytes()];
+        f.seek(SeekFrom::Start(self.byte_range().start))?;
+        f.read_exact(&mut v)?;
+        v
+    }
+
+    #[throws]
+    fn write_bytes_to_file(&self, f: &mut File, data: &[u8]) {
+        assert!(data.len() <= self.num_bytes());
+        f.seek(SeekFrom::Start(self.byte_range().start))?;
+        f.write_all(data)?;
+    }
+}
+
+/// Read data from a reven kernel partition.
+#[throws]
+fn read_real_kernel_partition(conf: &Config) -> Vec<u8> {
+    let mut f = File::open(conf.disk_path())?;
+    let gpt = gptman::GPT::find_from(&mut f)?;
+
+    let kern_a = &gpt[2];
+    assert_eq!(kern_a.partition_name.as_str(), "KERN-A");
+
+    let kern_a_data_range = PartitionDataRange::new(kern_a);
+    kern_a_data_range.read_bytes_from_file(&mut f)?
 }
 
 #[throws]
 pub fn gen_vboot_test_disk(conf: &Config) {
-    // 16MiB kernel partition, plus some extra space for GPT.
-    let mut disk = Disk::create(conf.vboot_test_disk_path(), "18MiB")?;
+    let kern_a = read_real_kernel_partition(conf)?;
 
-    // Create kernel partition.
-    let part_num = disk.add_partition(PartitionSettings {
-        label: "KERN-A",
-        start: "1MiB",
-        end: "17MiB",
-        type_guid: Some(GptPartitionType::ChromeOsKernel),
-        // The specific value doesn't matter here, but must match the
-        // partition GUID in the vboot test `test_load_kernel`.
-        partition_guid: Some("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
-        set_successful_boot_bit: true,
-        priority: Some(1),
-    })?;
+    let disk = DiskSettings {
+        path: &conf.vboot_test_disk_path(),
+        // 16MiB kernel partition, plus extra space for GPT headers.
+        size: "18MiB",
+        // Arbitrary GUID.
+        guid: "d24199e7-33f0-4409-b677-1c04683552c5",
+        partitions: &[PartitionSettings {
+            label: "KERN-A",
+            data_range: PartitionDataRange::from_byte_range(
+                mib_to_byte(1)..mib_to_byte(17),
+            ),
+            type_guid: GptPartitionType::ChromeOsKernel,
+            // Arbitrary, but must match the partition GUID in the vboot
+            // test `test_load_kernel`.
+            guid: "c6fbb888-1b6d-4988-a66e-ace443df68f4",
+            set_successful_boot_bit: true,
+            // Must be set to something between 1 and 15, but otherwise
+            // arbitrary.
+            priority: Some(1),
+            data: &kern_a,
+        }],
+    };
+    disk.create()?;
+}
 
-    let vboot_disk_lo_dev = LoopbackDevice::new(&disk.path)?;
-    let cloudready_lo_dev = LoopbackDevice::new(conf.disk_path())?;
+/// Generate the EFI system partition FAT file system containing the
+/// enroller executables.
+#[throws]
+fn gen_enroller_fs(conf: &Config) -> Vec<u8> {
+    let mut sys_part_data = vec![0; mib_to_byte(2).try_into().unwrap()];
 
-    // Copy a kernel partition from the cloudready disk to the new disk.
-    Command::with_args(
-        "sudo",
-        &[
-            "cp",
-            cloudready_lo_dev.partition_paths().kern_a.as_str(),
-            vboot_disk_lo_dev.partition_device(part_num).as_str(),
-        ],
-    )
-    .run()?;
+    {
+        let sys_part_cursor = Cursor::new(&mut sys_part_data);
+        fatfs::format_volume(sys_part_cursor, FormatVolumeOptions::new())?;
+    }
+
+    {
+        let sys_part_cursor = Cursor::new(&mut sys_part_data);
+        let sys_part_fs = FileSystem::new(sys_part_cursor, FsOptions::new())?;
+        let root_dir = sys_part_fs.root_dir();
+        let efi_dir = root_dir.create_dir("EFI")?;
+        let boot_dir = efi_dir.create_dir("BOOT")?;
+
+        // Copy in the two enroller executables.
+        for arch in Arch::all() {
+            let src_path = conf.target_exec_path(arch, "enroller.efi");
+            let src_data = fs::read(src_path)?;
+
+            let dst_file_name = arch.efi_file_name("boot");
+            let mut dst_file = boot_dir.create_file(&dst_file_name)?;
+
+            dst_file.write_all(&src_data)?;
+        }
+    }
+
+    sys_part_data
 }
 
 #[throws]
 pub fn gen_enroller_disk(conf: &Config) {
-    let mut disk = Disk::create(conf.enroller_disk_path(), "4MiB")?;
+    let part_data = gen_enroller_fs(conf)?;
 
-    // Create a single bootable partition.
-    let part_num = disk.add_partition(PartitionSettings {
-        label: "boot",
-        start: "2048s",
-        end: "-2048s",
-        type_guid: Some(GptPartitionType::EfiSystem),
-        partition_guid: None,
-        set_successful_boot_bit: false,
-        priority: None,
-    })?;
-
-    let lo_dev = LoopbackDevice::new(&disk.path)?;
-
-    // Format the partition.
-    Command::with_args(
-        "sudo",
-        &["mkfs.fat", lo_dev.partition_device(part_num).as_str()],
-    )
-    .run()?;
-
-    // Mount the partition.
-    let esp_mount = Mount::new(&lo_dev.partition_device(part_num))?;
-    let esp = esp_mount.mount_point();
-
-    // Create the standard boot directory.
-    let boot_dir = esp.join("efi/boot");
-    Command::with_args("sudo", &["mkdir", "-p", boot_dir.as_str()]).run()?;
-
-    // Copy in the two enroller executables.
-    for arch in Arch::all() {
-        let src = conf.target_exec_path(arch, "enroller.efi");
-        let dst = boot_dir.join(arch.efi_file_name("boot"));
-        Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
-            .run()?;
-    }
+    let disk = DiskSettings {
+        path: &conf.enroller_disk_path(),
+        // 2MiB system partition, plus extra space for GPT headers.
+        size: "4MiB",
+        // Arbitrary GUID.
+        guid: "4345f688-5dac-4ab0-a596-ad5bcaf30163",
+        partitions: &[PartitionSettings {
+            label: "boot",
+            data_range: PartitionDataRange::from_byte_range(
+                mib_to_byte(1)..mib_to_byte(3),
+            ),
+            type_guid: GptPartitionType::EfiSystem,
+            // Arbitrary GUID.
+            guid: "21049f0f-75a3-4fba-beff-569ba248a19d",
+            set_successful_boot_bit: false,
+            priority: None,
+            data: &part_data,
+        }],
+    };
+    disk.create()?;
 }
 
 /// Replace both grub executables with crdyboot.
@@ -367,4 +464,34 @@ pub fn sign_kernel_partition(conf: &Config, partition_device_path: &Utf8Path) {
         ],
     )
     .run()?;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_guid() {
+        assert_eq!(
+            guid_str_to_array("d24199e7-33f0-4409-b677-1c04683552c5"),
+            [
+                0xe7, 0x99, 0x41, 0xd2, 0xf0, 0x33, 0x09, 0x44, 0xb6, 0x77,
+                0x1c, 0x04, 0x68, 0x35, 0x52, 0xc5
+            ]
+        );
+    }
+
+    #[test]
+    fn test_partition_range() {
+        let r = PartitionDataRange {
+            start_lba: 1,
+            end_lba: 1,
+        };
+
+        assert_eq!(r.num_bytes(), 512);
+        assert_eq!(r.byte_range(), 512..1024);
+
+        let r2 = PartitionDataRange::from_byte_range(512..1024);
+        assert_eq!(r, r2);
+    }
 }
