@@ -1,13 +1,11 @@
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::copy_file;
-use crate::loopback::PartitionPaths;
-use crate::mount::Mount;
-use crate::sign;
+use crate::{copy_file, gen_disk};
 use anyhow::Error;
 use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
+use gen_disk::SignAndUpdateBootloader;
 
 #[throws]
 fn build_shim(conf: &Config) {
@@ -49,26 +47,23 @@ fn build_shim(conf: &Config) {
         .run()?;
 }
 
+/// Build shim, sign it, and copy into the disk image.
 #[throws]
-pub fn update_shim(conf: &Config, partitions: &PartitionPaths) {
+pub fn update_shim(conf: &Config) {
     build_shim(conf)?;
 
-    let efi_mount = Mount::new(&partitions.efi)?;
-    let efi = efi_mount.mount_point();
-
-    let mut to_sign = Vec::new();
-
-    for arch in Arch::all() {
-        let src = conf.shim_build_path().join(arch.efi_file_name("shim"));
-
-        let dst_file_name = arch.efi_file_name("boot");
-        let dst = efi.join("efi/boot").join(&dst_file_name);
-
-        Command::with_args("sudo", &["cp", src.as_str(), dst.as_str()])
-            .run()?;
-
-        to_sign.push(dst_file_name);
+    SignAndUpdateBootloader {
+        disk_path: conf.disk_path(),
+        key_paths: conf.secure_boot_root_key_paths(),
+        mapping: Arch::all()
+            .iter()
+            .map(|arch| {
+                (
+                    conf.shim_build_path().join(arch.efi_file_name("shim")),
+                    arch.efi_file_name("boot"),
+                )
+            })
+            .collect(),
     }
-
-    sign::sign_all(efi, &conf.secure_boot_root_key_paths(), &to_sign)?;
+    .run()?;
 }
