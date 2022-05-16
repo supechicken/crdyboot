@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c3b0e147_ad2fcf12",
+        "filename": "xtask/src/gen_disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-05-16T23:00:30Z",
+      "side": 1,
+      "message": "Is it true that GUIDs are generally known to need to be encoded this way? I didn\u0027t find a reference that made me think so.\n\nI did find that the \"Appendix A GUID and Time Formats\" of the UEFI spec 2.9 specifies the byte ordering for the EFI_GUID structure which you have implemented here.\n\nCould this comment be more specific that it\u0027s the byte ordering expected by UEFI?",
+      "revId": "41189f0018f97852f7b998d9690f58684f1a695a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0e50875d_2d069403",
+        "filename": "xtask/src/gen_disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 195,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-05-16T23:00:30Z",
+      "side": 1,
+      "message": "nit: it would be nicer if the SECTOR_SIZE was part of the type somehow instead of being global. However, it\u0027s not necessary for this code and the use in this file",
+      "revId": "41189f0018f97852f7b998d9690f58684f1a695a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
