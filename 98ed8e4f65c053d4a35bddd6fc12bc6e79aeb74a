@@ -18,6 +18,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "6751848f_79ba2422",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 359,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-17T17:53:47Z",
+      "side": 1,
+      "message": "Good point, fixed by doing a regex replace in `replace_command_line_verity_args` so we don\u0027t depend on a particular root partition.",
+      "parentUuid": "6ff08379_72cab048",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "909f9ba0_742e423b",
@@ -37,6 +55,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "713573cd_f6e8f753",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 360,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-17T17:53:47Z",
+      "side": 1,
+      "message": "I\u0027m not sure about those, I\u0027ll check into how those are supposed to be handled.",
+      "parentUuid": "909f9ba0_742e423b",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "9b1118e1_c245ccd5",
         "filename": "vboot/src/load_kernel.rs",
         "patchSetId": 2
@@ -48,6 +84,24 @@
       "writtenOn": "2022-05-17T16:15:13Z",
       "side": 1,
       "message": "This comment needs adjusting with the change",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "256895d2_973ba7ef",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 365,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-17T17:53:47Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "9b1118e1_c245ccd5",
       "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
