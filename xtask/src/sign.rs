@@ -1,3 +1,7 @@
+// Copyright 2022 The ChromiumOS Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;

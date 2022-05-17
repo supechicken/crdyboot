@@ -1,3 +1,7 @@
+// Copyright 2022 The ChromiumOS Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 //! The vboot crate is a `no_std` library that handles loading and verifying
 //! the kernel. Internally it uses the `LoadKernel` function from
 //! `third_party/vboot_reference`.
