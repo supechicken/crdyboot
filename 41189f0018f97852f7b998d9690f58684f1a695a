@@ -20,6 +20,24 @@
     {
       "unresolved": false,
       "key": {
+        "uuid": "b249603e_e2e2f8d3",
+        "filename": "xtask/src/gen_disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-17T13:43:00Z",
+      "side": 1,
+      "message": "I think it\u0027s not just UEFI, it\u0027s all Microsoft GUIDs. See this for example: https://docs.microsoft.com/en-us/dotnet/api/system.guid.tobytearray?view\u003dnet-6.0#remarks\n\nThis is in contrast to \"normal\" UUIDs.",
+      "parentUuid": "c3b0e147_ad2fcf12",
+      "revId": "41189f0018f97852f7b998d9690f58684f1a695a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
         "uuid": "0e50875d_2d069403",
         "filename": "xtask/src/gen_disk.rs",
         "patchSetId": 2
