@@ -2,6 +2,7 @@
 name = "enroller"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
 
 [dependencies]
 log = "0.4.16"

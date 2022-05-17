@@ -3,6 +3,7 @@ name = "sbat"
 version = "0.1.0"
 edition = "2021"
 repository = "https://chromium.googlesource.com/crdyboot"
+license = "BSD-3-Clause"
 
 [dependencies]
 arrayvec = { version = "0.7.2", default-features = false }

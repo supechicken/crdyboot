@@ -2,6 +2,7 @@
 name = "vboot"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
 
 [dependencies]
 goblin = { version = "0.5.1", default-features = false, features = ["pe32", "pe64"] }
