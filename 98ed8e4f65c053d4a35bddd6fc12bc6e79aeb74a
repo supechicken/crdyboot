@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "6ff08379_72cab048",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 359,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-05-17T16:15:13Z",
+      "side": 1,
+      "message": "Couldn\u0027t the partuuid and dm arguments here will vary between arbitrary reven images passed in to setup?",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "909f9ba0_742e423b",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 360,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-05-17T16:15:13Z",
+      "side": 1,
+      "message": "Is this correct? payload and hastree in \u0027expected command line\u0027 are not replaced here.",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9b1118e1_c245ccd5",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 365,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-05-17T16:15:13Z",
+      "side": 1,
+      "message": "This comment needs adjusting with the change",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
