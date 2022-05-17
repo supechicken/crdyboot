@@ -71,6 +71,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "b2bc935c_c64ee207",
+        "filename": "vboot/src/load_kernel.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 360,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-17T19:09:11Z",
+      "side": 1,
+      "message": "Fixed -- I had accidentally used args from a build that didn\u0027t have verity forced on.",
+      "parentUuid": "713573cd_f6e8f753",
+      "revId": "98ed8e4f65c053d4a35bddd6fc12bc6e79aeb74a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "9b1118e1_c245ccd5",
