@@ -1,6 +1,7 @@
 [package]
 name = "crdyboot"
 edition = "2021"
+license = "BSD-3-Clause"
 
 # These two fields are also used when generating sbat.csv.
 repository = "https://chromium.googlesource.com/crdyboot"
