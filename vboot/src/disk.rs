@@ -1,3 +1,7 @@
+// Copyright 2022 The ChromiumOS Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
 use crate::ReturnCode;
 use core::ffi::c_void;

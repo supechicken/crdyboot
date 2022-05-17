@@ -1,3 +1,7 @@
+// Copyright 2022 The ChromiumOS Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 //! UEFI SBAT (Secure Boot Advanced Targeting)
 //!
 //! SBAT is used to revoke insecure UEFI exectuables in a way that won't
