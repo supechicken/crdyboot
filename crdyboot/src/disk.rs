@@ -47,9 +47,10 @@ fn is_parent_disk(
     bt: &BootServices,
 ) -> Result<bool> {
     let potential_parent_paths_iter =
-        device_paths_for_handle(crdyboot_image, potential_parent, bt)?.iter();
+        device_paths_for_handle(crdyboot_image, potential_parent, bt)?
+            .node_iter();
     let mut partition_paths_iter =
-        device_paths_for_handle(crdyboot_image, partition, bt)?.iter();
+        device_paths_for_handle(crdyboot_image, partition, bt)?.node_iter();
 
     for (parent_path, partition_path) in
         potential_parent_paths_iter.zip(&mut partition_paths_iter)
@@ -68,10 +69,8 @@ fn is_parent_disk(
     };
 
     // That final path should be a Hard Drive Media Device Path.
-    if (
-        final_partition_path.device_type(),
-        final_partition_path.sub_type(),
-    ) != (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE)
+    if final_partition_path.full_type()
+        != (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE)
     {
         return Ok(false);
     }
