@@ -5,6 +5,6 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-log = "0.4.16"
+log = "0.4.17"
 uefi = { version = "0.15.2", features = ["exts", "ignore-logger-errors"] }
 uefi-services = "0.12.1"

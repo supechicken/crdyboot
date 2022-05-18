@@ -8,7 +8,7 @@ license = "BSD-3-Clause"
 [dependencies]
 arrayvec = { version = "0.7.2", default-features = false }
 ascii = { version = "1.0.0", default-features = false }
-log = { version = "0.4.16", default-features = false }
+log = { version = "0.4.17", default-features = false }
 
 [features]
 alloc = []
