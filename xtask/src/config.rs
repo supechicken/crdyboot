@@ -115,10 +115,6 @@ impl Config {
         fs::write(self.setup_version_path(), format!("{}\n", version))?;
     }
 
-    pub fn vboot_path(&self) -> Utf8PathBuf {
-        self.repo.join("vboot")
-    }
-
     pub fn vboot_reference_path(&self) -> Utf8PathBuf {
         self.repo.join("third_party/vboot_reference")
     }
@@ -145,6 +141,17 @@ impl Config {
             Arch::X64 => "uefi64",
         };
         OvmfPaths::new(self.workspace_path().join(subdir))
+    }
+
+    /// Key used to sign the kernel keyblock which contains the public
+    /// part of the kernel_data_key.
+    pub fn kernel_key_paths(&self) -> KeyPaths {
+        KeyPaths::new(self.workspace_path().join("test_kernel_key"))
+    }
+
+    /// Key used to sign the kernel data.
+    pub fn kernel_data_key_paths(&self) -> KeyPaths {
+        KeyPaths::new(self.workspace_path().join("test_kernel_data_key"))
     }
 
     /// This cert will be enrolled as the PK, first KEK, and first DB
