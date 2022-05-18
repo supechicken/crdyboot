@@ -2,6 +2,7 @@ mod arch;
 mod build_mode;
 mod config;
 mod gen_disk;
+mod gen_keys;
 mod package;
 mod qemu;
 mod shim;
@@ -361,6 +362,9 @@ fn run_setup(conf: &Config, action: &SetupAction) {
         process::exit(1);
     }
 
+    // TODO: build futility first.
+    gen_keys::generate_test_keys(conf)?;
+
     generate_secure_boot_keys(conf)?;
     run_build_enroller(conf)?;
     enroll_secure_boot_keys(conf)?;
@@ -406,7 +410,7 @@ fn run_install_toolchain() {
 #[throws]
 fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 0;
+    let current_version = 1;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {

@@ -470,10 +470,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     let futility = futility.as_str();
 
     // TODO: for now just use a pregenerated test keys.
-    let test_data = conf.vboot_path().join("test_data");
-    let kernel_key_public = test_data.join("kernel_key.vbpubk");
-    let kernel_data_key_private = test_data.join("kernel_data_key.vbprivk");
-    let kernel_data_key_keyblock = test_data.join("kernel_data_key.keyblock");
+    let kernel_key = &conf.kernel_key_paths();
+    let kernel_data_key = &conf.kernel_data_key_paths();
 
     let unsigned_kernel_partition = tmp_path.join("kernel_partition");
     let vmlinuz = tmp_path.join("vmlinuz");
@@ -529,8 +527,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     #[rustfmt::skip]
     Command::with_args(futility, &["vbutil_kernel",
         "--pack", signed_kernel_partition.as_str(),
-        "--keyblock", kernel_data_key_keyblock.as_str(),
-        "--signprivate", kernel_data_key_private.as_str(),
+        "--keyblock", kernel_data_key.keyblock().as_str(),
+        "--signprivate", kernel_data_key.vbprivk().as_str(),
         "--version", &version.to_string(),
         "--vmlinuz", vmlinuz.as_str(),
         "--bootloader", bootloader.as_str(),
@@ -548,7 +546,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
             "--verify",
             signed_kernel_partition.as_str(),
             "--signpubkey",
-            kernel_key_public.as_str(),
+            kernel_key.vbpubk().as_str(),
         ],
     )
     .run()?;
