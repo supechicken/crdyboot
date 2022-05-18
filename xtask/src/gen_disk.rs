@@ -440,19 +440,6 @@ pub fn copy_in_crdyboot(conf: &Config) {
 }
 
 #[throws]
-pub fn build_futility(conf: &Config) {
-    Command::with_args(
-        "make",
-        &[
-            "-C",
-            conf.vboot_reference_path().as_str(),
-            conf.futility_executable_path().as_str(),
-        ],
-    )
-    .run()?;
-}
-
-#[throws]
 pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     let mut disk_file = open_rw(conf.disk_path())?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
@@ -470,10 +457,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     let futility = futility.as_str();
 
     // TODO: for now just use a pregenerated test keys.
-    let test_data = conf.vboot_path().join("test_data");
-    let kernel_key_public = test_data.join("kernel_key.vbpubk");
-    let kernel_data_key_private = test_data.join("kernel_data_key.vbprivk");
-    let kernel_data_key_keyblock = test_data.join("kernel_data_key.keyblock");
+    let kernel_key = &conf.kernel_key_paths();
+    let kernel_data_key = &conf.kernel_data_key_paths();
 
     let unsigned_kernel_partition = tmp_path.join("kernel_partition");
     let vmlinuz = tmp_path.join("vmlinuz");
@@ -490,8 +475,6 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     let orig_kern_data =
         kern_data_range.read_bytes_from_file(&mut disk_file)?;
     fs::write(&unsigned_kernel_partition, orig_kern_data)?;
-
-    build_futility(conf)?;
 
     // Get the kernel command line and write it to a file.
     let output = Command::with_args(
@@ -529,8 +512,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     #[rustfmt::skip]
     Command::with_args(futility, &["vbutil_kernel",
         "--pack", signed_kernel_partition.as_str(),
-        "--keyblock", kernel_data_key_keyblock.as_str(),
-        "--signprivate", kernel_data_key_private.as_str(),
+        "--keyblock", kernel_data_key.keyblock().as_str(),
+        "--signprivate", kernel_data_key.vbprivk().as_str(),
         "--version", &version.to_string(),
         "--vmlinuz", vmlinuz.as_str(),
         "--bootloader", bootloader.as_str(),
@@ -548,7 +531,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
             "--verify",
             signed_kernel_partition.as_str(),
             "--signpubkey",
-            kernel_key_public.as_str(),
+            kernel_key.vbpubk().as_str(),
         ],
     )
     .run()?;
