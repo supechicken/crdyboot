@@ -92,6 +92,29 @@ impl Config {
         self.repo.join("workspace")
     }
 
+    /// Path of the setup-version file in the workspace. This file is
+    /// used to automatically re-run the setup operations when needed.
+    fn setup_version_path(&self) -> Utf8PathBuf {
+        self.workspace_path().join("setup_version")
+    }
+
+    /// Read the current setup version. Returns version 0 if any error
+    /// occurs (such as the version file not existing).
+    pub fn read_setup_version(&self) -> u32 {
+        let default = 0;
+        if let Ok(version) = fs::read_to_string(self.setup_version_path()) {
+            version.parse().unwrap_or(default)
+        } else {
+            default
+        }
+    }
+
+    /// Write out the setup-version file.
+    #[throws]
+    pub fn write_setup_version(&self, version: u32) {
+        fs::write(self.setup_version_path(), version.to_string())?;
+    }
+
     pub fn vboot_path(&self) -> Utf8PathBuf {
         self.repo.join("vboot")
     }
