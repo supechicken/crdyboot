@@ -133,7 +133,24 @@ struct WritediskAction {}
 struct InstallToolchainAction {}
 
 #[throws]
+fn run_cargo_deny() {
+    // Check if cargo-deny is installed, and install it if not.
+    if Command::with_args("cargo", &["deny", "--version"])
+        .enable_capture()
+        .run()
+        .is_err()
+    {
+        Command::with_args("cargo", &["install", "--locked", "cargo-deny"])
+            .run()?;
+    }
+
+    // Run cargo-deny. This uses the config in `.deny.toml`.
+    Command::with_args("cargo", &["deny", "check"]).run()?;
+}
+
+#[throws]
 fn run_check(conf: &Config) {
+    run_cargo_deny()?;
     run_rustfmt(&FormatAction { check: true })?;
     run_tests()?;
     run_crdyboot_build(conf)?;
