@@ -403,6 +403,35 @@ fn run_install_toolchain() {
     .run()?;
 }
 
+#[throws]
+fn rerun_setup_if_needed(action: &Action, conf: &Config) {
+    // Bump this version any time the setup step needs to be re-run.
+    let current_version = 0;
+
+    // Don't run setup if the user is already doing it.
+    if matches!(action, Action::Setup(_)) {
+        return;
+    }
+
+    // Don't try to run setup if the workspace doesn't exist yet.
+    if !conf.workspace_path().exists() {
+        return;
+    }
+
+    // Nothing to do if the version is already high enough.
+    let existing_version = conf.read_setup_version();
+    if existing_version >= current_version {
+        return;
+    }
+
+    println!(
+        "Re-running setup: upgrading from {} to {}",
+        existing_version, current_version
+    );
+    run_setup(conf, &SetupAction { disk_image: None })?;
+    conf.write_setup_version(current_version)?;
+}
+
 /// Get the repo root path. This assumes this executable is located at
 /// <repo>/target/<buildmode>/<exe>.
 #[throws]
@@ -430,6 +459,9 @@ fn main() {
         copy_file(&default_conf_path, &conf_path)?;
     }
     let conf = Config::load(&repo_root)?;
+
+    // Re-run setup if something has changed that requires it.
+    rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
         Action::Build(_) => run_crdyboot_build(&conf),
