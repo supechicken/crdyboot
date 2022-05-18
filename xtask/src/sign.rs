@@ -17,6 +17,14 @@ impl KeyPaths {
         KeyPaths { dir }
     }
 
+    /// Create the directory if it doesn't exist.
+    #[throws]
+    pub fn create_dir(&self) {
+        if !self.dir.exists() {
+            fs::create_dir(&self.dir)?;
+        }
+    }
+
     pub fn priv_pem(&self) -> Utf8PathBuf {
         self.dir.join("key.priv.pem")
     }
@@ -40,9 +48,7 @@ impl KeyPaths {
 
 #[throws]
 pub fn generate_key(paths: &KeyPaths, name: &str) {
-    if !paths.dir.exists() {
-        fs::create_dir(&paths.dir)?;
-    }
+    paths.create_dir()?;
 
     if paths.priv_pem().exists()
         && paths.pub_pem().exists()
