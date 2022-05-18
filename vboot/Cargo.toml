@@ -6,7 +6,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 goblin = { version = "0.5.1", default-features = false, features = ["pe32", "pe64"] }
-log = "0.4.16"
+log = "0.4.17"
 printf-compat = { version = "0.1.1", default-features = false }
 scroll = { version = "0.11.0", default-features = false }
 
@@ -16,7 +16,7 @@ simple_logger = { version = "2.1.0", default-features = false }
 
 [build-dependencies]
 bindgen = "0.59.2"
-camino = "1.0.7"
+camino = "1.0.8"
 cc = "1.0.73"
 serde = { version = "1.0.137", features = ["derive"] }
-serde_json = "1.0.80"
+serde_json = "1.0.81"
