@@ -9,8 +9,8 @@ version = "1.0.0"
 
 [dependencies]
 log = "0.4.17"
-uefi = { version = "0.15.2", features = ["exts", "ignore-logger-errors"] }
-uefi-services = "0.12.1"
+uefi = { version = "0.16.0", features = ["exts", "ignore-logger-errors"] }
+uefi-services = "0.13.0"
 
 vboot = { path = "../vboot" }
 
