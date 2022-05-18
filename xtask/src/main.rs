@@ -2,6 +2,7 @@ mod arch;
 mod build_mode;
 mod config;
 mod gen_disk;
+mod gen_keys;
 mod package;
 mod qemu;
 mod shim;
@@ -344,6 +345,21 @@ fn enroll_secure_boot_keys(conf: &Config) {
     }
 }
 
+/// Build futility, the firmware utility executable that is part of
+/// vboot_reference.
+#[throws]
+fn build_futility(conf: &Config) {
+    Command::with_args(
+        "make",
+        &[
+            "-C",
+            conf.vboot_reference_path().as_str(),
+            conf.futility_executable_path().as_str(),
+        ],
+    )
+    .run()?;
+}
+
 // Run various setup operations. This must be run once before running
 // any other xtask commands.
 #[throws]
@@ -360,6 +376,10 @@ fn run_setup(conf: &Config, action: &SetupAction) {
         println!("to a local path.");
         process::exit(1);
     }
+
+    build_futility(conf)?;
+
+    gen_keys::generate_test_keys(conf)?;
 
     generate_secure_boot_keys(conf)?;
     run_build_enroller(conf)?;
@@ -406,7 +426,7 @@ fn run_install_toolchain() {
 #[throws]
 fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 0;
+    let current_version = 1;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
