@@ -25,6 +25,10 @@ impl KeyPaths {
         }
     }
 
+    pub fn base_name_path(&self) -> Utf8PathBuf {
+        self.dir.join("key")
+    }
+
     pub fn priv_pem(&self) -> Utf8PathBuf {
         self.dir.join("key.priv.pem")
     }
@@ -35,6 +39,18 @@ impl KeyPaths {
 
     pub fn pub_der(&self) -> Utf8PathBuf {
         self.dir.join("key.pub.der")
+    }
+
+    pub fn vbprivk(&self) -> Utf8PathBuf {
+        self.dir.join("key.vbprivk")
+    }
+
+    pub fn vbpubk(&self) -> Utf8PathBuf {
+        self.dir.join("key.vbpubk")
+    }
+
+    pub fn keyblock(&self) -> Utf8PathBuf {
+        self.dir.join("key.keyblock")
     }
 
     pub fn pk_and_kek_var(&self) -> Utf8PathBuf {

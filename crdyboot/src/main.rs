@@ -40,7 +40,7 @@ fn get_kernel_verification_key() -> &'static [u8] {
     #[cfg(feature = "use_test_key")]
     {
         log::warn!("using test key for kernel verification");
-        key = include_bytes!("../../vboot/test_data/kernel_key.vbpubk");
+        key = include_bytes!("../../workspace/test_kernel_key/key.vbpubk");
     }
 
     #[cfg(not(feature = "use_test_key"))]
