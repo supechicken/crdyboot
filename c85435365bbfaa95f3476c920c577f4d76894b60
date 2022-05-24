@@ -16,6 +16,24 @@
       "message": "do you mean to write .priv.pem? (key.priv.pem vs key)\nI\u0027m not sure just by the documentation what the create argument does with two inputs http://manpages.ubuntu.com/manpages/impish/man1/futility.1.html\nI assume it would just create both files, but you seem to insinuate it does something different?",
       "revId": "c85435365bbfaa95f3476c920c577f4d76894b60",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4f1e85d2_885ebf59",
+        "filename": "xtask/src/gen_keys.rs",
+        "patchSetId": 6
+      },
+      "lineNbr": 46,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-24T21:50:22Z",
+      "side": 1,
+      "message": "Ah yep, I meant .priv.pem. I rewrote the comments again, hopefully clearer now. Just to provide full examples:\n\n```\n# With only the input argument specified:\nfutility --vb1 create /foo/key.priv.pem\n# This produces:\n/foo/key.priv.pem.vbprivk\n/foo/key.priv.pem.vbpubk\n\n# By adding an output argument we can avoid the (incorrect) \".priv.pem\" naming:\nfutility --vb1 create /foo/key.priv.pem /foo/key\n# This produces:\n/foo/key.vbprivk\n/foo/key.vbpubk\n```\n\nSo there\u0027s no difference in the content of what is being produced, just the file paths are different.",
+      "parentUuid": "c6a9bcc1_d70dd393",
+      "revId": "c85435365bbfaa95f3476c920c577f4d76894b60",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
