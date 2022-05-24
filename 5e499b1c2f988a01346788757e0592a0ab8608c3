@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "547ea5e7_3198a9ad",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 14,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2022-05-24T20:29:20Z",
+      "side": 1,
+      "message": "you mean gen_kernel is removed? might be helpful to write explicitly what is removed, as this is a big commit.",
+      "revId": "5e499b1c2f988a01346788757e0592a0ab8608c3",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "acbbfec0_6f1ee052",
+        "filename": "xtask/src/gen_keys.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2022-05-24T20:29:20Z",
+      "side": 1,
+      "message": "So this used to be  `run(futility_path, \u0027--vb1\u0027, \u0027create\u0027, key_name.pem())` ----why are we adding the extra argument?",
+      "revId": "5e499b1c2f988a01346788757e0592a0ab8608c3",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
