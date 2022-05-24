@@ -34,6 +34,24 @@
       "parentUuid": "0786bc1a_265e0626",
       "revId": "1edf386ac38608967ca46e05c42faed6814a0fad",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1777dc37_47ad610c",
+        "filename": "vboot/test_data/kernel_data_key.pem",
+        "patchSetId": 4
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2022-05-24T21:30:09Z",
+      "side": 0,
+      "message": "Ah ok! I guess I was confused because formerly it seems like you had both the gen.py and the hardcoded deleted files, and now we just have gen_key.rs which seems to do the same thing as gen.py.",
+      "parentUuid": "5a783e31_316ba1be",
+      "revId": "1edf386ac38608967ca46e05c42faed6814a0fad",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }

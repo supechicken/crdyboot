@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c6a9bcc1_d70dd393",
+        "filename": "xtask/src/gen_keys.rs",
+        "patchSetId": 6
+      },
+      "lineNbr": 46,
+      "author": {
+        "id": 1477897
+      },
+      "writtenOn": "2022-05-24T21:30:09Z",
+      "side": 1,
+      "message": "do you mean to write .priv.pem? (key.priv.pem vs key)\nI\u0027m not sure just by the documentation what the create argument does with two inputs http://manpages.ubuntu.com/manpages/impish/man1/futility.1.html\nI assume it would just create both files, but you seem to insinuate it does something different?",
+      "revId": "c85435365bbfaa95f3476c920c577f4d76894b60",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
