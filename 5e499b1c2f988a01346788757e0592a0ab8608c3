@@ -18,6 +18,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "f7cdc076_ddea8ed9",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 4
+      },
+      "lineNbr": 14,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-24T20:49:02Z",
+      "side": 1,
+      "message": "Updated the commit message -- I meant the various `fake_*` files and kernel_commandline which were passed in to gen_kernel.",
+      "parentUuid": "547ea5e7_3198a9ad",
+      "revId": "5e499b1c2f988a01346788757e0592a0ab8608c3",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "acbbfec0_6f1ee052",
@@ -31,6 +49,24 @@
       "writtenOn": "2022-05-24T20:29:20Z",
       "side": 1,
       "message": "So this used to be  `run(futility_path, \u0027--vb1\u0027, \u0027create\u0027, key_name.pem())` ----why are we adding the extra argument?",
+      "revId": "5e499b1c2f988a01346788757e0592a0ab8608c3",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d2cc1349_db497972",
+        "filename": "xtask/src/gen_keys.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-24T20:49:02Z",
+      "side": 1,
+      "message": "The additional argument sets the base name of the output (needed because the input name has a `.pem` extension, unlike the python version). I\u0027ve added a comment to make it clearer in the code what that arg is for.",
+      "parentUuid": "acbbfec0_6f1ee052",
       "revId": "5e499b1c2f988a01346788757e0592a0ab8608c3",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }

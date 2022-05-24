@@ -16,6 +16,24 @@
       "message": "I\u0027m unclear on how these files are now created just by reading through the code",
       "revId": "1edf386ac38608967ca46e05c42faed6814a0fad",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5a783e31_316ba1be",
+        "filename": "vboot/test_data/kernel_data_key.pem",
+        "patchSetId": 4
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-05-24T20:49:02Z",
+      "side": 0,
+      "message": "I updated the commit message to hopefully be a bit clearer. These files are now generated inside the `workspace` directory by `gen_key.rs`. (Let me know if more details would be helpful.)",
+      "parentUuid": "0786bc1a_265e0626",
+      "revId": "1edf386ac38608967ca46e05c42faed6814a0fad",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
