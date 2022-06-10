@@ -15,14 +15,18 @@ use gen_disk::SignAndUpdateBootloader;
 fn build_shim(conf: &Config) {
     let shim_dir = conf.shim_build_path();
     let shim_url = "https://chromium.googlesource.com/chromiumos/shim-review";
-    let shim_rev = "aba1fb2b7bffa4af651a40e667bde0dfdfc4ab0a";
+    let shim_rev = "6e743839a611dceafccdf4b592bad1c23ecb20f5";
+
+    if shim_dir.exists() {
+        // Remove local modifications so that the Dockerfile
+        // modification below doesn't keep inserting the same change,
+        // and so that the checked-out revision can be changed without
+        // conflicts.
+        Command::with_args("git", &["-C", shim_dir.as_str(), "checkout", "-f"])
+            .run()?;
+    }
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;
-
-    // Remove local modifications so that the Dockerfile modification below
-    // doesn't keep inserting the same change.
-    Command::with_args("git", &["-C", shim_dir.as_str(), "checkout", "-f"])
-        .run()?;
 
     copy_file(
         conf.secure_boot_shim_key_paths().pub_der(),
