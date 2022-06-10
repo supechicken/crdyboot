@@ -8,7 +8,10 @@ use crate::sign::{self, KeyPaths};
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
-use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
+use fatfs::{
+    FileSystem, FormatVolumeOptions, FsOptions, LossyOemCpConverter,
+    NullTimeProvider, StdIoWrapper,
+};
 use fehler::throws;
 use fs_err::{self as fs, File, OpenOptions};
 use gptman::{GPTPartitionEntry, GPT};
@@ -273,8 +276,9 @@ fn gen_enroller_fs(conf: &Config) -> Vec<u8> {
     let mut sys_part_data = vec![0; mib_to_byte(2).try_into().unwrap()];
 
     {
-        let sys_part_cursor = Cursor::new(&mut sys_part_data);
-        fatfs::format_volume(sys_part_cursor, FormatVolumeOptions::new())?;
+        let mut sys_part_cursor =
+            StdIoWrapper::new(Cursor::new(&mut sys_part_data));
+        fatfs::format_volume(&mut sys_part_cursor, FormatVolumeOptions::new())?;
     }
 
     {
@@ -334,7 +338,13 @@ pub fn gen_enroller_disk(conf: &Config) {
 #[throws]
 fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F)
 where
-    F: Fn(fatfs::Dir<Cursor<&mut Vec<u8>>>) -> Result<()>,
+    F: Fn(
+        fatfs::Dir<
+            StdIoWrapper<Cursor<&mut Vec<u8>>>,
+            NullTimeProvider,
+            LossyOemCpConverter,
+        >,
+    ) -> Result<()>,
 {
     let mut disk_file = open_rw(disk_path)?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
