@@ -14,10 +14,12 @@ use fatfs::{
 };
 use fehler::throws;
 use fs_err::{self as fs, File, OpenOptions};
-use gpt_disk_types::{guid, GptPartitionType, Guid};
+use gpt_disk_types::{
+    guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive,
+};
 use gptman::{GPTPartitionEntry, GPT};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use std::ops::Range;
+use std::ops::{Range, RangeInclusive};
 use tempfile::TempDir;
 
 const SECTOR_SIZE: u64 = 512;
@@ -101,8 +103,8 @@ impl<'a> DiskSettings<'a> {
             gpt[part_num] = gptman::GPTPartitionEntry {
                 partition_type_guid: part.type_guid.0.to_bytes(),
                 unique_partition_guid: part.guid.to_bytes(),
-                starting_lba: part.data_range.start_lba,
-                ending_lba: part.data_range.end_lba,
+                starting_lba: part.data_range.0.start().0,
+                ending_lba: part.data_range.0.end().0,
                 attribute_bits: part.attribute_bits(),
                 partition_name: part.label.into(),
             };
@@ -124,45 +126,45 @@ fn mib_to_byte(val: u64) -> u64 {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct PartitionDataRange {
-    // Start and end are inclusive.
-    start_lba: u64,
-    end_lba: u64,
-}
+struct PartitionDataRange(LbaRangeInclusive);
 
 impl PartitionDataRange {
     fn new(partition: &GPTPartitionEntry) -> Self {
-        Self {
-            start_lba: partition.starting_lba,
-            end_lba: partition.ending_lba,
-        }
+        Self(
+            LbaRangeInclusive::new(
+                Lba(partition.starting_lba),
+                Lba(partition.ending_lba),
+            )
+            .unwrap(),
+        )
     }
 
     fn from_byte_range(byte_range: Range<u64>) -> Self {
-        let byte_to_lba = |b| {
-            assert_eq!(b % SECTOR_SIZE, 0);
-            b / SECTOR_SIZE
-        };
-        Self {
-            start_lba: byte_to_lba(byte_range.start),
-            end_lba: byte_to_lba(byte_range.end) - 1,
-        }
+        Self(
+            LbaRangeInclusive::from_byte_range(
+                byte_range.start..=byte_range.end - 1,
+                BlockSize::BS_512,
+            )
+            .unwrap(),
+        )
     }
 
-    fn byte_range(&self) -> Range<u64> {
-        self.start_lba * SECTOR_SIZE..(self.end_lba + 1) * SECTOR_SIZE
+    fn to_byte_range(&self) -> RangeInclusive<u64> {
+        self.0.to_byte_range(BlockSize::BS_512).unwrap()
     }
 
     fn num_bytes(&self) -> usize {
-        let r = self.byte_range();
-        let num = r.end - r.start;
-        usize::try_from(num).unwrap()
+        self.0
+            .num_bytes(BlockSize::BS_512)
+            .unwrap()
+            .try_into()
+            .unwrap()
     }
 
     #[throws]
     fn read_bytes_from_file(&self, f: &mut File) -> Vec<u8> {
         let mut v = vec![0; self.num_bytes()];
-        f.seek(SeekFrom::Start(self.byte_range().start))?;
+        f.seek(SeekFrom::Start(*self.to_byte_range().start()))?;
         f.read_exact(&mut v)?;
         v
     }
@@ -170,7 +172,7 @@ impl PartitionDataRange {
     #[throws]
     fn write_bytes_to_file(&self, f: &mut File, data: &[u8]) {
         assert!(data.len() <= self.num_bytes());
-        f.seek(SeekFrom::Start(self.byte_range().start))?;
+        f.seek(SeekFrom::Start(*self.to_byte_range().start()))?;
         f.write_all(data)?;
     }
 }
@@ -504,13 +506,11 @@ mod tests {
 
     #[test]
     fn test_partition_range() {
-        let r = PartitionDataRange {
-            start_lba: 1,
-            end_lba: 1,
-        };
+        let r =
+            PartitionDataRange(LbaRangeInclusive::new(Lba(1), Lba(1)).unwrap());
 
         assert_eq!(r.num_bytes(), 512);
-        assert_eq!(r.byte_range(), 512..1024);
+        assert_eq!(r.to_byte_range(), 512..=1023);
 
         let r2 = PartitionDataRange::from_byte_range(512..1024);
         assert_eq!(r, r2);
