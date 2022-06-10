@@ -16,6 +16,24 @@
       "message": "does cargo deny work with github hashes like this? or is it a way of sidestepping cargo-deny system technically?",
       "revId": "1203aee72f883b1ae4c04380903e53f917966c8c",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "763a2a1b_20481e06",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-06-10T18:13:52Z",
+      "side": 1,
+      "message": "In general I think cargo-deny works fine with hashes, like it\u0027ll still check the license and check for advisories against the non-git deps that get pulled in (including the recursive deps of the git dep)",
+      "parentUuid": "b565fda4_ce2ca7a0",
+      "revId": "1203aee72f883b1ae4c04380903e53f917966c8c",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
