@@ -20,3 +20,6 @@ confidence-threshold = 1.0
 
 [bans]
 multiple-versions = "warn"
+
+[sources]
+unknown-git = "allow"
