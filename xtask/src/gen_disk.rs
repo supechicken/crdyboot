@@ -14,60 +14,13 @@ use fatfs::{
 };
 use fehler::throws;
 use fs_err::{self as fs, File, OpenOptions};
+use gpt_disk_types::{guid, GptPartitionType, Guid};
 use gptman::{GPTPartitionEntry, GPT};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use tempfile::TempDir;
 
-/// Standard sector size.
 const SECTOR_SIZE: u64 = 512;
-
-#[derive(Clone, Copy, Debug)]
-enum GptPartitionType {
-    ChromeOsKernel,
-    EfiSystem,
-}
-
-impl GptPartitionType {
-    fn as_guid_str(self) -> &'static str {
-        match self {
-            Self::ChromeOsKernel => "fe3a2a5d-4f32-41a7-b725-accc3285a309",
-            Self::EfiSystem => "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",
-        }
-    }
-}
-
-/// Convert a GUID string to a byte array.
-///
-/// For example, "d24199e7-33f0-4409-b677-1c04683552c5" is converted to:
-/// [e7, 99, 41, d2, f0, 33, 09, 44, b6, 77, 1c, 04, 68, 35, 52, c5]
-///
-/// Note that some bytes appear in a different order between the string
-/// and byte representation; that's just how GUIDs are.
-fn guid_str_to_array(guid: &str) -> [u8; 16] {
-    assert_eq!(guid.len(), 36);
-
-    let a = &guid[0..8];
-    let b = &guid[9..13];
-    let c = &guid[14..18];
-    let d = &guid[19..23];
-    let e = &guid[24..36];
-
-    let a = u32::from_str_radix(a, 16).unwrap();
-    let b = u16::from_str_radix(b, 16).unwrap();
-    let c = u16::from_str_radix(c, 16).unwrap();
-    let d = u16::from_str_radix(d, 16).unwrap();
-    let e = u64::from_str_radix(e, 16).unwrap();
-
-    let mut output = Vec::new();
-    output.extend(a.to_le_bytes());
-    output.extend(b.to_le_bytes());
-    output.extend(c.to_le_bytes());
-    output.extend(d.to_be_bytes());
-    output.extend(&e.to_be_bytes()[2..]);
-
-    output.try_into().unwrap()
-}
 
 /// Create an empty file with the given size (using the `truncate`
 /// command). This will delete the file first if it already exists.
@@ -86,7 +39,7 @@ struct PartitionSettings<'a> {
     label: &'a str,
     data_range: PartitionDataRange,
     type_guid: GptPartitionType,
-    guid: &'a str,
+    guid: Guid,
     set_successful_boot_bit: bool,
     // 15: highest, 1: lowest, 0: not bootable.
     priority: Option<u8>,
@@ -126,7 +79,7 @@ fn open_rw(path: &Utf8Path) -> File {
 struct DiskSettings<'a> {
     path: &'a Utf8Path,
     size: &'a str,
-    guid: &'a str,
+    guid: Guid,
     partitions: &'a [PartitionSettings<'a>],
 }
 
@@ -137,11 +90,8 @@ impl<'a> DiskSettings<'a> {
 
         let mut disk_file = open_rw(self.path)?;
 
-        let mut gpt = GPT::new_from(
-            &mut disk_file,
-            SECTOR_SIZE,
-            guid_str_to_array(self.guid),
-        )?;
+        let mut gpt =
+            GPT::new_from(&mut disk_file, SECTOR_SIZE, self.guid.to_bytes())?;
 
         for (i, part) in self.partitions.iter().enumerate() {
             // GPT partitions start at 1.
@@ -149,10 +99,8 @@ impl<'a> DiskSettings<'a> {
 
             // Create the partition entry.
             gpt[part_num] = gptman::GPTPartitionEntry {
-                partition_type_guid: guid_str_to_array(
-                    part.type_guid.as_guid_str(),
-                ),
-                unique_partition_guid: guid_str_to_array(part.guid),
+                partition_type_guid: part.type_guid.0.to_bytes(),
+                unique_partition_guid: part.guid.to_bytes(),
                 starting_lba: part.data_range.start_lba,
                 ending_lba: part.data_range.end_lba,
                 attribute_bits: part.attribute_bits(),
@@ -249,16 +197,16 @@ pub fn gen_vboot_test_disk(conf: &Config) {
         // 16MiB kernel partition, plus extra space for GPT headers.
         size: "18MiB",
         // Arbitrary GUID.
-        guid: "d24199e7-33f0-4409-b677-1c04683552c5",
+        guid: guid!("d24199e7-33f0-4409-b677-1c04683552c5"),
         partitions: &[PartitionSettings {
             label: "KERN-A",
             data_range: PartitionDataRange::from_byte_range(
                 mib_to_byte(1)..mib_to_byte(17),
             ),
-            type_guid: GptPartitionType::ChromeOsKernel,
+            type_guid: GptPartitionType::CHROME_OS_KERNEL,
             // Arbitrary, but must match the partition GUID in the vboot
             // test `test_load_kernel`.
-            guid: "c6fbb888-1b6d-4988-a66e-ace443df68f4",
+            guid: guid!("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
             set_successful_boot_bit: true,
             // Must be set to something between 1 and 15, but otherwise
             // arbitrary.
@@ -312,15 +260,15 @@ pub fn gen_enroller_disk(conf: &Config) {
         // 2MiB system partition, plus extra space for GPT headers.
         size: "4MiB",
         // Arbitrary GUID.
-        guid: "4345f688-5dac-4ab0-a596-ad5bcaf30163",
+        guid: guid!("4345f688-5dac-4ab0-a596-ad5bcaf30163"),
         partitions: &[PartitionSettings {
             label: "boot",
             data_range: PartitionDataRange::from_byte_range(
                 mib_to_byte(1)..mib_to_byte(3),
             ),
-            type_guid: GptPartitionType::EfiSystem,
+            type_guid: GptPartitionType::EFI_SYSTEM,
             // Arbitrary GUID.
-            guid: "21049f0f-75a3-4fba-beff-569ba248a19d",
+            guid: guid!("21049f0f-75a3-4fba-beff-569ba248a19d"),
             set_successful_boot_bit: false,
             priority: None,
             data: &part_data,
@@ -348,8 +296,7 @@ where
 {
     let mut disk_file = open_rw(disk_path)?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
-    let partition_type =
-        guid_str_to_array(GptPartitionType::EfiSystem.as_guid_str());
+    let partition_type = GptPartitionType::EFI_SYSTEM.0.to_bytes();
     let sys_part = gpt
         .iter()
         .find(|(_, part)| part.partition_type_guid == partition_type)
@@ -554,17 +501,6 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_guid() {
-        assert_eq!(
-            guid_str_to_array("d24199e7-33f0-4409-b677-1c04683552c5"),
-            [
-                0xe7, 0x99, 0x41, 0xd2, 0xf0, 0x33, 0x09, 0x44, 0xb6, 0x77,
-                0x1c, 0x04, 0x68, 0x35, 0x52, 0xc5
-            ]
-        );
-    }
 
     #[test]
     fn test_partition_range() {

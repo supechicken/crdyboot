@@ -14,6 +14,7 @@ command-run = "1.1.1"
 fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", rev = "4892fb1791b29616d8573235eb83644003d13791", default-features = false, features = ["std"] }
 fehler = "1.0.0"
 fs-err = "2.7.0"
+gpt_disk_types = { version = "0.8.0", features = ["std"] }
 gptman = { version = "1.0.0", default-features = false }
 serde = { version = "1.0.137", features = ["derive"] }
 tempfile = "3.3.0"

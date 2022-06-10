@@ -126,6 +126,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "bytemuck"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdead85bdec19c194affaeeb670c0e41fe23de31459efd1c174d049269cf02cc"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "562e382481975bc61d11275ac5e62a19abd00b0547d99516a415336f183dcd0e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "camino"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -238,6 +258,7 @@ dependencies = [
  "fatfs",
  "fehler",
  "fs-err",
+ "gpt_disk_types",
  "gptman",
  "serde",
  "tempfile",
@@ -347,6 +368,17 @@ dependencies = [
  "log",
  "plain",
  "scroll",
+]
+
+[[package]]
+name = "gpt_disk_types"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf2d948e8e080ae143dd509b4f73aa1732956a38c87b4495e746a9bf0b8fc8cb"
+dependencies = [
+ "bytemuck",
+ "crc",
+ "ucs2",
 ]
 
 [[package]]
