@@ -52,10 +52,9 @@ Install nightly Rust:
 
     cargo xtask install-toolchain
 
-Provides headers needed for compiling C code compatible with the
-Rust UEFI targets.
+Headers needed for compiling vboot_reference:
 
-    sudo apt install libflashrom-dev mingw-w64-i686-dev mingw-w64-x86-64-dev
+    sudo apt install libflashrom-dev
 
 Other tools used for image signing and running in a VM:
 
