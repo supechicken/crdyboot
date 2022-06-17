@@ -1,0 +1,10 @@
+// Copyright 2022 The ChromiumOS Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef VBOOT_SRC_LIBC_INTTYPES_H_
+#define VBOOT_SRC_LIBC_INTTYPES_H_
+
+#define PRIu64 __UINT64_FMTu__
+
+#endif  // VBOOT_SRC_LIBC_INTTYPES_H_

@@ -188,6 +188,7 @@ fn main() {
 
     let include_dirs = vec![
         Utf8PathBuf::from("src"),
+        Utf8PathBuf::from("src/libc"),
         vboot_ref.to_path_buf(),
         vboot_ref.join("firmware/2lib/include"),
         vboot_ref.join("firmware/include"),
