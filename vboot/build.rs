@@ -118,7 +118,8 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
 }
 
 /// Clang AST node.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 struct AstNode {
     kind: String,
     name: Option<String>,
