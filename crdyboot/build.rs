@@ -2,29 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-//! Generate an sbat.csv file that gets added as a section of the crdyboot
-//! executable.
+use std::path::PathBuf;
+use std::{env, fs};
 
-use sbat_gen::{ascii, generation, Component, Entry, Sbat, Vendor};
-use std::env;
-
+/// Write Rust code to a file that, when included in a binary, will add
+/// a `.sbat` section. The section contains the `sbat.csv` file in this
+/// directory.
+///
+/// The file is written to `sbat_section.rs` in the target output
+/// directory, and can be included like this:
+///
+/// ```no_compile
+/// include!(concat!(env!("OUT_DIR"), "/sbat_section.rs"));
+/// ```
 fn main() {
-    let crdyboot_name = "crdyboot";
-    let crdyboot_generation = generation(1);
-    let crdyboot_vendor = "Google";
-    let crdyboot_version = env::var("CARGO_PKG_VERSION").unwrap();
-    let crdyboot_url = env::var("CARGO_PKG_REPOSITORY").unwrap();
+    let csv = include_str!("sbat.csv");
 
-    let mut sbat = Sbat::new();
-    sbat.add(Entry::new(
-        Component::new(ascii(crdyboot_name), crdyboot_generation),
-        Vendor {
-            name: Some(ascii(crdyboot_vendor)),
-            package_name: Some(ascii(crdyboot_name)),
-            version: Some(ascii(&crdyboot_version)),
-            url: Some(ascii(&crdyboot_url)),
-        },
-    ));
+    let code = format!(
+        r#"#[no_mangle]
+#[link_section = ".sbat"]
+static SBAT: [u8; {}] = *b"{}";
+"#,
+        csv.len(),
+        csv
+    );
 
-    sbat.write_rust_file();
+    let dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = dir.join("sbat_section.rs");
+
+    fs::write(&out_path, &code).unwrap();
 }

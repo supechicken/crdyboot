@@ -2,8 +2,6 @@
 name = "crdyboot"
 edition = "2021"
 license = "BSD-3-Clause"
-
-# These two fields are also used when generating sbat.csv.
 repository = "https://chromium.googlesource.com/crdyboot"
 version = "1.0.0"
 
@@ -23,6 +21,3 @@ use_test_key = []
 # If enabled, the max log level is set to Debug. If disabled (the default),
 # the max log level is set to Warn.
 verbose = []
-
-[build-dependencies]
-sbat_gen = { path = "../sbat_gen" }
