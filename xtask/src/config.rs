@@ -60,8 +60,7 @@ impl Config {
                     features.push("use_test_key");
                 }
             }
-            Sbat => features.push("alloc"),
-            Enroller | SbatGen | Tools | Vboot => {}
+            Enroller | Tools | Vboot => {}
         }
 
         features
