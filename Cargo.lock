@@ -448,7 +448,9 @@ checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 name = "libcrdy"
 version = "0.1.0"
 dependencies = [
+ "goblin",
  "log",
+ "scroll",
  "uefi",
  "vboot",
 ]
@@ -825,11 +827,9 @@ dependencies = [
  "bindgen",
  "camino",
  "cc",
- "goblin",
  "log",
  "printf-compat",
  "regex",
- "scroll",
  "serde",
  "serde_json",
  "simple_logger",

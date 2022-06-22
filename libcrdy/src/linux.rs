@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk::GptDisk;
+use crate::pe::PeExecutable;
 use crate::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
@@ -13,7 +14,7 @@ use uefi::table::boot::{
 };
 use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16, Handle};
-use vboot::{LoadedKernel, PeExecutable};
+use vboot::LoadedKernel;
 
 type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
 
