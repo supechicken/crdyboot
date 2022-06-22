@@ -60,7 +60,7 @@ impl Config {
                     features.push("use_test_key");
                 }
             }
-            Enroller | Vboot | Xtask => {}
+            Enroller | Libcrdy | Vboot | Xtask => {}
         }
 
         features

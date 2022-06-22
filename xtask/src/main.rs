@@ -278,6 +278,7 @@ fn run_tests_for_package(package: Package, nightly: bool) {
 fn run_tests() {
     run_tests_for_package(Package::Xtask, /* nightly=*/ false)?;
     run_tests_for_package(Package::Vboot, /* nightly=*/ true)?;
+    run_tests_for_package(Package::Libcrdy, /* nightly=*/ true)?;
 }
 
 #[throws]
