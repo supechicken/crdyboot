@@ -3,10 +3,8 @@
 // found in the LICENSE file.
 
 use crate::disk::{Disk, DiskIo};
-use crate::{
-    kernel_data_as_boot_params, return_code_to_str, vboot_sys, BootParamsError,
-    ReturnCode,
-};
+use crate::linux::validate_kernel_buffer_size;
+use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::{format, vec};
@@ -35,11 +33,14 @@ pub enum LoadKernelError {
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
 
-    /// Failed to unpack kernel boot params.
-    BadBootParams(BootParamsError),
+    /// Kernel data is too small to contain boot parameters.
+    KernelTooSmall,
+
+    /// Kernel's `SetupHeader` doesn't contain the expected magic bytes.
+    InvalidKernelMagic,
 
     /// The buffer allocated to hold the kernel is not big enough.
-    KernelBufferTooSmall(u32, usize),
+    KernelBufferTooSmall(usize, usize),
 }
 
 impl fmt::Display for LoadKernelError {
@@ -63,8 +64,11 @@ impl fmt::Display for LoadKernelError {
             LoadKernelFailed(rc) => {
                 write_with_rc("call to LoadKernel failed", rc)
             }
-            BadBootParams(err) => {
-                write!(f, "bad boot parameters: {}", err)
+            KernelTooSmall => {
+                write!(f, "kernel data is too small to contain boot parameters")
+            }
+            InvalidKernelMagic => {
+                write!(f, "invalid magic in the kernel setup header")
             }
             KernelBufferTooSmall(required, allocated) => {
                 write!(
@@ -209,22 +213,6 @@ unsafe fn init_vb2_context(
     );
 
     Ok(ctx_ptr)
-}
-
-fn validate_kernel_buffer_size(
-    kernel_buffer: &[u8],
-) -> Result<(), LoadKernelError> {
-    let boot_params = kernel_data_as_boot_params(kernel_buffer)
-        .map_err(LoadKernelError::BadBootParams)?;
-    info!("required size: {}", { boot_params.hdr.init_size });
-    if u32_to_usize(boot_params.hdr.init_size) <= kernel_buffer.len() {
-        Ok(())
-    } else {
-        Err(LoadKernelError::KernelBufferTooSmall(
-            boot_params.hdr.init_size,
-            kernel_buffer.len(),
-        ))
-    }
 }
 
 /// Find the best kernel. The details are up to the firmware library in
