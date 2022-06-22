@@ -1,2 +1,2 @@
 [alias]
-xtask = "run --package crdyboot_tools --"
+xtask = "run --package xtask --"
