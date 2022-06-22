@@ -23,7 +23,6 @@
 extern crate alloc;
 
 mod disk;
-mod linux;
 mod load_kernel;
 mod printf;
 mod stubs;
