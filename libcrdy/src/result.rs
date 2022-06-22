@@ -8,6 +8,9 @@ use uefi::Status;
 use vboot::LoadKernelError;
 
 pub enum Error {
+    /// Failed to convert numeric type.
+    BadNumericConversion(&'static str),
+
     UefiServicesInitFailed(Status),
 
     GetCommandLineFailed,
@@ -20,6 +23,15 @@ pub enum Error {
     ParentDiskNotFound,
 
     LoadKernelFailed(LoadKernelError),
+
+    /// Kernel data is too small to contain boot parameters.
+    KernelTooSmall,
+
+    /// Kernel's `SetupHeader` doesn't contain the expected magic bytes.
+    InvalidKernelMagic,
+
+    /// The buffer allocated to hold the kernel is not big enough.
+    KernelBufferTooSmall(usize, usize),
 
     InvalidPe(PeError),
     CommandLineTooBig(usize),
@@ -36,6 +48,10 @@ impl fmt::Display for Error {
             |msg, status| write!(f, "{}: {:?}", msg, status);
 
         match self {
+            BadNumericConversion(info) => {
+                write!(f, "failed to convert numeric type: {}", info)
+            }
+
             UefiServicesInitFailed(status) => {
                 write_with_status("failed to initialize UEFI services", status)
             }
@@ -65,6 +81,20 @@ impl fmt::Display for Error {
 
             LoadKernelFailed(err) => {
                 write!(f, "failed to load kernel: {}", err)
+            }
+
+            KernelTooSmall => {
+                write!(f, "kernel data is too small to contain boot parameters")
+            }
+            InvalidKernelMagic => {
+                write!(f, "invalid magic in the kernel setup header")
+            }
+            KernelBufferTooSmall(required, allocated) => {
+                write!(
+                    f,
+                    "allocated kernel buffer not big enough: {}b > {}b",
+                    required, allocated
+                )
             }
 
             InvalidPe(err) => {

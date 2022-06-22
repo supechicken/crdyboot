@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use crate::disk::{Disk, DiskIo};
-use crate::linux::validate_kernel_buffer_size;
 use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -32,15 +31,6 @@ pub enum LoadKernelError {
 
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
-
-    /// Kernel data is too small to contain boot parameters.
-    KernelTooSmall,
-
-    /// Kernel's `SetupHeader` doesn't contain the expected magic bytes.
-    InvalidKernelMagic,
-
-    /// The buffer allocated to hold the kernel is not big enough.
-    KernelBufferTooSmall(usize, usize),
 }
 
 impl fmt::Display for LoadKernelError {
@@ -63,19 +53,6 @@ impl fmt::Display for LoadKernelError {
             }
             LoadKernelFailed(rc) => {
                 write_with_rc("call to LoadKernel failed", rc)
-            }
-            KernelTooSmall => {
-                write!(f, "kernel data is too small to contain boot parameters")
-            }
-            InvalidKernelMagic => {
-                write!(f, "invalid magic in the kernel setup header")
-            }
-            KernelBufferTooSmall(required, allocated) => {
-                write!(
-                    f,
-                    "allocated kernel buffer not big enough: {}b > {}b",
-                    required, allocated
-                )
             }
         }
     }
@@ -266,11 +243,6 @@ pub fn load_kernel(
         ));
         if status == ReturnCode::VB2_SUCCESS {
             info!("LoadKernel success");
-
-            // Ensure the buffer is large enough to actually run the
-            // kernel. We could just allocate a bigger buffer here, but it
-            // shouldn't be needed unless something has gone wrong anyway.
-            validate_kernel_buffer_size(&kernel_buffer)?;
 
             Ok(LoadedKernel {
                 data: kernel_buffer,
