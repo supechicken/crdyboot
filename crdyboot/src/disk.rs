@@ -8,9 +8,10 @@ use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
-use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams};
-use vboot::DiskIo;
-use vboot::ReturnCode;
+use uefi::table::boot::{
+    OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol,
+};
+use vboot::{DiskIo, ReturnCode};
 
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
@@ -98,7 +99,7 @@ fn find_parent_disk(
 fn find_disk_block_io(
     crdyboot_image: Handle,
     bt: &BootServices,
-) -> Result<&mut BlockIO> {
+) -> Result<ScopedProtocol<BlockIO>> {
     // Get the LoadedImage protocol for the image handle. This provides a
     // device handle which should correspond to the disk that the image was
     // loaded from.
@@ -129,22 +130,21 @@ fn find_disk_block_io(
         bt,
     )?;
 
-    let disk_block_io = bt
-        .open_protocol::<BlockIO>(
-            OpenProtocolParams {
-                handle: disk_handle,
-                agent: crdyboot_image,
-                controller: None,
-            },
-            OpenProtocolAttributes::Exclusive,
-        )
-        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
-    let disk_block_io = unsafe { &mut *disk_block_io.interface.get() };
-    Ok(disk_block_io)
+    bt.open_protocol::<BlockIO>(
+        OpenProtocolParams {
+            handle: disk_handle,
+            agent: crdyboot_image,
+            controller: None,
+        },
+        OpenProtocolAttributes::Exclusive,
+    )
+    .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
 }
 
 pub struct GptDisk<'a> {
-    block_io: &'a mut BlockIO,
+    block_io: ScopedProtocol<'a, BlockIO>,
+    bytes_per_lba: u64,
+    lba_count: u64,
 }
 
 impl<'a> GptDisk<'a> {
@@ -154,22 +154,36 @@ impl<'a> GptDisk<'a> {
     ) -> Result<GptDisk<'a>> {
         let block_io = find_disk_block_io(crdyboot_image, bt)?;
 
-        Ok(GptDisk { block_io })
+        let bytes_per_lba;
+        let lba_count;
+        {
+            let block_io = unsafe { &mut *block_io.interface.get() };
+            bytes_per_lba = block_io.media().block_size().into();
+            lba_count = block_io.media().last_block() + 1;
+        }
+
+        Ok(GptDisk {
+            block_io,
+            bytes_per_lba,
+            lba_count,
+        })
     }
 }
 
 impl<'a> DiskIo for GptDisk<'a> {
     fn bytes_per_lba(&self) -> u64 {
-        self.block_io.media().block_size().into()
+        self.bytes_per_lba
     }
 
     fn lba_count(&self) -> u64 {
-        self.block_io.media().last_block() + 1
+        self.lba_count
     }
 
     fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-        match self.block_io.read_blocks(
-            self.block_io.media().media_id(),
+        let block_io = unsafe { &mut *self.block_io.interface.get() };
+
+        match block_io.read_blocks(
+            block_io.media().media_id(),
             lba_start,
             buffer,
         ) {
@@ -185,8 +199,10 @@ impl<'a> DiskIo for GptDisk<'a> {
     }
 
     fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
-        match self.block_io.write_blocks(
-            self.block_io.media().media_id(),
+        let block_io = unsafe { &mut *self.block_io.interface.get() };
+
+        match block_io.write_blocks(
+            block_io.media().media_id(),
             lba_start,
             buffer,
         ) {

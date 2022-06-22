@@ -21,6 +21,7 @@ mod result;
 use log::LevelFilter;
 use result::{Error, Result};
 use uefi::prelude::*;
+use vboot::LoadedKernel;
 
 fn set_log_level() {
     #[cfg(feature = "verbose")]
@@ -51,17 +52,24 @@ fn get_kernel_verification_key() -> &'static [u8] {
     key
 }
 
+/// Use vboot to load the kernel from the appropriate kernel partition.
+fn load_kernel(
+    crdyboot_image: Handle,
+    boot_services: &BootServices,
+) -> Result<LoadedKernel> {
+    let kernel_verification_key = get_kernel_verification_key();
+    let mut gpt_disk = disk::GptDisk::new(crdyboot_image, boot_services)?;
+
+    vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
+        .map_err(Error::LoadKernelFailed)
+}
+
 fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
-
     set_log_level();
 
-    let kernel_verification_key = get_kernel_verification_key();
-    let mut gpt_disk = disk::GptDisk::new(crdyboot_image, st.boot_services())?;
-    let kernel = vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
-        .map_err(Error::LoadKernelFailed)?;
-
+    let kernel = load_kernel(crdyboot_image, st.boot_services())?;
     linux::execute_linux_kernel(&kernel, crdyboot_image, st)?;
 
     Err(Error::KernelDidNotTakeControl)
