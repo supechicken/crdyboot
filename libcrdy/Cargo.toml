@@ -1,0 +1,11 @@
+[package]
+name = "libcrdy"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+repository = "https://chromium.googlesource.com/crdyboot"
+
+[dependencies]
+log = "0.4.17"
+uefi = { version = "0.16.0", features = ["exts", "ignore-logger-errors"] }
+vboot = { path = "../vboot" }

@@ -10,7 +10,7 @@ log = "0.4.17"
 uefi = { version = "0.16.0", features = ["exts", "ignore-logger-errors"] }
 uefi-services = "0.13.0"
 
-vboot = { path = "../vboot" }
+libcrdy = { path = "../libcrdy" }
 
 [features]
 # If enabled, a test key in the repo will be used to validate the kernel. If

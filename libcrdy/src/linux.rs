@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::result::{Error, Result};
+use crate::disk::GptDisk;
+use crate::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams};
+use uefi::table::boot::{
+    BootServices, OpenProtocolAttributes, OpenProtocolParams,
+};
 use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16, Handle};
 use vboot::{LoadedKernel, PeExecutable};
@@ -153,4 +156,16 @@ pub fn execute_linux_kernel(
     } else {
         Err(Error::KernelTooOld)
     }
+}
+
+/// Use vboot to load the kernel from the appropriate kernel partition.
+pub fn load_kernel(
+    crdyboot_image: Handle,
+    boot_services: &BootServices,
+    kernel_verification_key: &[u8],
+) -> Result<LoadedKernel> {
+    let mut gpt_disk = GptDisk::new(crdyboot_image, boot_services)?;
+
+    vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
+        .map_err(Error::LoadKernelFailed)
 }

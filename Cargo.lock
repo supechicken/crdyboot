@@ -227,10 +227,10 @@ checksum = "2d0165d2900ae6778e36e80bbc4da3b5eefccee9ba939761f9c2882a5d9af3ff"
 name = "crdyboot"
 version = "1.0.0"
 dependencies = [
+ "libcrdy",
  "log",
  "uefi",
  "uefi-services",
- "vboot",
 ]
 
 [[package]]
@@ -443,6 +443,15 @@ name = "libc"
 version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
+
+[[package]]
+name = "libcrdy"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "uefi",
+ "vboot",
+]
 
 [[package]]
 name = "libloading"
