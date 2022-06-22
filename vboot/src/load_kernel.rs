@@ -4,18 +4,19 @@
 
 use crate::disk::{Disk, DiskIo};
 use crate::{return_code_to_str, vboot_sys, ReturnCode};
-use alloc::string::String;
+use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
-use alloc::{format, vec};
 use core::ffi::c_void;
 use core::{fmt, mem, ptr, str};
 use log::{error, info};
+use uguid::Guid;
 
 /// Fully verified kernel loaded into memory.
 pub struct LoadedKernel {
     data: Vec<u8>,
     bootloader_address: u64,
-    unique_partition_guid: [u8; 16],
+    unique_partition_guid: Guid,
 }
 
 /// Errors produced by `load_kernel`.
@@ -66,22 +67,6 @@ fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
 }
 
-#[allow(clippy::many_single_char_names)]
-fn guid_string(guid: [u8; 16]) -> Option<String> {
-    let a = u32::from_le_bytes(guid[0..4].try_into().ok()?);
-    let b = u16::from_le_bytes(guid[4..6].try_into().ok()?);
-    let c = u16::from_le_bytes(guid[6..8].try_into().ok()?);
-    let d = u16::from_be_bytes(guid[8..10].try_into().ok()?);
-    let e = u64::from_be_bytes([
-        0, 0, guid[10], guid[11], guid[12], guid[13], guid[14], guid[15],
-    ]);
-
-    Some(format!(
-        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-        a, b, c, d, e
-    ))
-}
-
 impl LoadedKernel {
     fn command_line_with_placeholders(&self) -> Option<&str> {
         // TODO: would be nice if the command line location was returned in
@@ -116,7 +101,7 @@ impl LoadedKernel {
     /// with the kernel partition's unique GUID.
     pub fn command_line(&self) -> Option<String> {
         let with_placeholders = self.command_line_with_placeholders()?;
-        let unique_partition_guid = guid_string(self.unique_partition_guid)?;
+        let unique_partition_guid = self.unique_partition_guid.to_string();
         Some(with_placeholders.replace("%U", &unique_partition_guid))
     }
 
@@ -247,7 +232,7 @@ pub fn load_kernel(
             Ok(LoadedKernel {
                 data: kernel_buffer,
                 bootloader_address: params.bootloader_address,
-                unique_partition_guid: params.partition_guid,
+                unique_partition_guid: Guid::from_bytes(params.partition_guid),
             })
         } else {
             error!("LoadKernel failed: 0x{:x}", status.0);
@@ -260,6 +245,7 @@ pub fn load_kernel(
 mod tests {
     use super::*;
     use regex::Regex;
+    use uguid::guid;
 
     struct MemDisk {
         data: &'static [u8],
@@ -300,22 +286,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_guid_string() {
-        assert_eq!(
-            guid_string([
-                // a
-                0x01, 0x23, 0x45, 0x67, // b
-                0x89, 0xab, // c
-                0xcd, 0xef, // d
-                0x01, 0x23, // e
-                0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
-            ])
-            .unwrap(),
-            "67452301-ab89-efcd-0123-456789abcdef"
-        );
-    }
-
     /// Replace verity args in the kernel command line with hardcoded
     /// values. This allows the test to run against a more or less
     /// arbitrary reven kernel partition.
@@ -347,8 +317,8 @@ mod tests {
         match load_kernel(test_key_vbpubk, &mut disk) {
             Ok(loaded_kernel) => {
                 assert_eq!(
-                    guid_string(loaded_kernel.unique_partition_guid),
-                    Some("c6fbb888-1b6d-4988-a66e-ace443df68f4".into())
+                    loaded_kernel.unique_partition_guid,
+                    guid!("c6fbb888-1b6d-4988-a66e-ace443df68f4")
                 );
 
                 assert_eq!(

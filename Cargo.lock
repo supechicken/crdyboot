@@ -809,6 +809,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "uguid"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8aea592525653a073645fed93e85808511dce9134a08bfda10940262fb17b5d"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -833,6 +839,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_logger",
+ "uguid",
 ]
 
 [[package]]
