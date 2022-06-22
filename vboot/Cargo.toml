@@ -5,10 +5,8 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-goblin = { version = "0.5.2", default-features = false, features = ["pe32", "pe64"] }
 log = "0.4.17"
 printf-compat = { version = "0.1.1", default-features = false }
-scroll = { version = "0.11.0", default-features = false }
 
 [dev-dependencies]
 regex = "1.5.6"
