@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#![deny(clippy::pedantic)]
+#![allow(clippy::enum_glob_use)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::module_name_repetitions)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 #![feature(abi_efiapi)]
-#![deny(clippy::cast_lossless)]
-#![deny(clippy::cast_possible_truncation)]
-#![deny(clippy::cast_possible_wrap)]
-#![deny(clippy::cast_precision_loss)]
-#![deny(clippy::cast_sign_loss)]
-#![deny(clippy::ptr_as_ptr)]
 
 mod disk;
 mod linux;

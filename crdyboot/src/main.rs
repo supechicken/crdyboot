@@ -2,15 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#![deny(clippy::pedantic)]
 #![no_std]
 #![no_main]
 #![feature(abi_efiapi)]
-#![deny(clippy::cast_lossless)]
-#![deny(clippy::cast_possible_truncation)]
-#![deny(clippy::cast_possible_wrap)]
-#![deny(clippy::cast_precision_loss)]
-#![deny(clippy::cast_sign_loss)]
-#![deny(clippy::ptr_as_ptr)]
 
 extern crate alloc;
 

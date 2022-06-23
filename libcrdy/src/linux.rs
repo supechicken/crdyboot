@@ -41,9 +41,9 @@ fn get_u32_field(kernel_data: &[u8], offset: usize) -> Result<u32> {
 /// `init_size` field in the kernel boot header.
 ///
 /// The layout of the header is described here:
-/// https://docs.kernel.org/x86/boot.html
+/// <https://docs.kernel.org/x86/boot.html>
 pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
-    const SETUP_MAGIC: u32 = 0x53726448; // "HdrS"
+    const SETUP_MAGIC: u32 = 0x5372_6448; // "HdrS"
     const MAGIC_OFFSET: usize = 0x0202;
     const INIT_SIZE_OFFSET: usize = 0x0260;
 
