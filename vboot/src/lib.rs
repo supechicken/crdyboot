@@ -8,13 +8,12 @@
 //!
 //! This crate can be built for the host target so that tests can run.
 
-#![deny(clippy::cast_lossless)]
-#![deny(clippy::cast_possible_truncation)]
-#![deny(clippy::cast_possible_wrap)]
-#![deny(clippy::cast_precision_loss)]
-#![deny(clippy::cast_sign_loss)]
-#![deny(clippy::ptr_as_ptr)]
 #![deny(missing_docs)]
+#![deny(clippy::pedantic)]
+#![allow(clippy::enum_glob_use)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::wildcard_imports)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 // Needed by the printf module.
@@ -35,12 +34,11 @@ mod malloc {
 }
 
 /// Bindgen wrappers for parts of vboot_reference.
-#[allow(clippy::missing_safety_doc)]
-#[allow(clippy::ptr_as_ptr)]
 #[allow(dead_code)]
 #[allow(missing_docs)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
+#[allow(clippy::pedantic)]
 mod vboot_sys {
     // ctypes
     type c_char = i8;
