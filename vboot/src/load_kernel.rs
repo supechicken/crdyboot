@@ -77,7 +77,7 @@ impl LoadedKernel {
         // which is where the magic constant comes from.
         let command_line_start: usize = (self
             .bootloader_address
-            .checked_sub(0x100000)?
+            .checked_sub(0x10_0000)?
             .checked_sub(u32_to_u64(vboot_sys::CROS_PARAMS_SIZE))?
             .checked_sub(u32_to_u64(vboot_sys::CROS_CONFIG_SIZE))?)
         .try_into()
@@ -99,6 +99,7 @@ impl LoadedKernel {
 
     /// Get the kernel command-line with partition placeholders replaced
     /// with the kernel partition's unique GUID.
+    #[must_use]
     pub fn command_line(&self) -> Option<String> {
         let with_placeholders = self.command_line_with_placeholders()?;
         let unique_partition_guid = self.unique_partition_guid.to_string();
@@ -106,6 +107,7 @@ impl LoadedKernel {
     }
 
     /// Raw kernel data.
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -170,15 +172,15 @@ unsafe fn init_vb2_context(
 
     vboot_sys::crdyboot_set_kernel_key(
         ctx_ptr,
-        kernel_key_ptr as *const vboot_sys::vb2_packed_key,
-        &kernel_key_wb as *const vboot_sys::vb2_workbuf,
+        kernel_key_ptr.cast::<vboot_sys::vb2_packed_key>(),
+        &kernel_key_wb,
     );
 
     Ok(ctx_ptr)
 }
 
 /// Find the best kernel. The details are up to the firmware library in
-/// vboot_reference. If successful, the kernel and the command-line data
+/// `vboot_reference`. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
 pub fn load_kernel(
     packed_pubkey: &[u8],
