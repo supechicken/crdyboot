@@ -47,7 +47,7 @@ impl<'a> PeExecutable<'a> {
     /// point. Search for an IA32 entry and return that entry point if found.
     pub fn get_ia32_compat_entry_point(&self) -> Option<usize> {
         let section_data =
-            find_section_data(self.data, &self.parsed.sections, b".compat\0")?;
+            find_section_data(self.data, &self.parsed.sections, *b".compat\0")?;
 
         find_compat_entry_point_in_section(
             section_data,
@@ -139,9 +139,9 @@ impl<'a> Iterator for CompatEntryIter<'a> {
 fn find_section_data<'a>(
     data: &'a [u8],
     sections: &[SectionTable],
-    name: &[u8; 8],
+    name: [u8; 8],
 ) -> Option<&'a [u8]> {
-    let section = sections.iter().find(|s| &s.name == name)?;
+    let section = sections.iter().find(|s| s.name == name)?;
     let data_start: usize = section.pointer_to_raw_data.try_into().ok()?;
     let data_size: usize = section.size_of_raw_data.try_into().ok()?;
     data.get(data_start..data_start + data_size)
@@ -183,7 +183,7 @@ mod tests {
         }];
 
         assert_eq!(
-            find_section_data(data, sections, b"abcdefgh").unwrap(),
+            find_section_data(data, sections, *b"abcdefgh").unwrap(),
             &[0xb, 0xc]
         );
     }
