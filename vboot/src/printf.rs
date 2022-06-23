@@ -23,7 +23,7 @@ unsafe fn str_from_c_str<'a>(s: *const u8) -> Cow<'a, str> {
 }
 
 /// Write a printf-style message to the log at the info level. Called
-/// by vboot_reference for printing.
+/// by `vboot_reference` for printing.
 #[no_mangle]
 unsafe extern "C" fn vb2ex_printf(
     func: *const u8,
