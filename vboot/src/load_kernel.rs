@@ -184,8 +184,8 @@ pub fn load_kernel(
     packed_pubkey: &[u8],
     disk_io: &mut dyn DiskIo,
 ) -> Result<LoadedKernel, LoadKernelError> {
-    // TODO: this could probably be smaller.
-    let mut workbuf = vec![0u8; 4096 * 50];
+    let mut workbuf =
+        vec![0u8; u32_to_usize(vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE)];
 
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot, but also big enough for the

@@ -81,6 +81,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
+        .allowlist_var("VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE")
         .default_enum_style(bindgen::EnumVariation::NewType {
             is_bitfield: false,
         })
