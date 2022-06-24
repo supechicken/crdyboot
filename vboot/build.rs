@@ -93,7 +93,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .blocklist_type("__uint32_t")
         .blocklist_type("__uint64_t")
         .use_core()
-        .ctypes_prefix("crate::vboot_sys")
+        .ctypes_prefix("cty")
         // Turn off a bunch of layout tests because they generate
         // "reference to packed field is unaligned" warnings.
         .layout_tests(false)

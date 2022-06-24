@@ -4,9 +4,9 @@
 
 use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
 use crate::ReturnCode;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::{ptr, slice};
+use cty::c_void;
 
 /// Interface for random-access disk IO.
 pub trait DiskIo {

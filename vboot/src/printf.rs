@@ -5,10 +5,11 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use core::{slice, str};
+use cty::c_char;
 use log::info;
 use printf_compat as printf;
 
-unsafe fn c_str_len(mut s: *const u8) -> usize {
+unsafe fn c_str_len(mut s: *const c_char) -> usize {
     let mut len = 0;
     while *s != 0 {
         len += 1;
@@ -17,7 +18,7 @@ unsafe fn c_str_len(mut s: *const u8) -> usize {
     len
 }
 
-unsafe fn str_from_c_str<'a>(s: *const u8) -> Cow<'a, str> {
+unsafe fn str_from_c_str<'a>(s: *const c_char) -> Cow<'a, str> {
     let bytes = slice::from_raw_parts(s.cast::<u8>(), c_str_len(s));
     String::from_utf8_lossy(bytes)
 }
@@ -26,8 +27,8 @@ unsafe fn str_from_c_str<'a>(s: *const u8) -> Cow<'a, str> {
 /// by `vboot_reference` for printing.
 #[no_mangle]
 unsafe extern "C" fn vb2ex_printf(
-    func: *const u8,
-    fmt: *const u8,
+    func: *const c_char,
+    fmt: *const c_char,
     mut args: ...
 ) {
     // TODO: could set the function into the log record directly
@@ -36,7 +37,7 @@ unsafe extern "C" fn vb2ex_printf(
 
     let func = str_from_c_str(func);
     printf::format(
-        fmt.cast::<i8>(),
+        fmt,
         args.as_va_list(),
         printf::output::fmt_write(&mut output),
     );
