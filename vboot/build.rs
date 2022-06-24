@@ -23,14 +23,22 @@ fn build_vboot_lib(
         firmware.join("2lib/2context.c"),
         firmware.join("2lib/2crc8.c"),
         firmware.join("2lib/2crypto.c"),
+        firmware.join("2lib/2firmware.c"),
+        firmware.join("2lib/2gbb.c"),
+        firmware.join("2lib/2misc.c"),
+        firmware.join("2lib/2nvstorage.c"),
         firmware.join("2lib/2packed_key.c"),
+        firmware.join("2lib/2recovery_reasons.c"),
         firmware.join("2lib/2rsa.c"),
+        firmware.join("2lib/2secdata_firmware.c"),
         firmware.join("2lib/2secdata_fwmp.c"),
+        firmware.join("2lib/2secdata_kernel.c"),
         firmware.join("2lib/2sha1.c"),
         firmware.join("2lib/2sha256.c"),
         firmware.join("2lib/2sha512.c"),
         firmware.join("2lib/2sha_utility.c"),
         firmware.join("2lib/2struct.c"),
+        firmware.join("2lib/2tpm_bootmode.c"),
         firmware.join("lib/cgptlib/cgptlib.c"),
         firmware.join("lib/cgptlib/cgptlib_internal.c"),
         firmware.join("lib/cgptlib/crc32.c"),
@@ -74,10 +82,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .allowlist_function("vb2api_init")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("vb2_context")
-        .allowlist_type("vb2_nv_param")
         .allowlist_type("vb2_return_code")
-        .allowlist_type("vb2_secdata_kernel_param")
-        .allowlist_type("vb2_tpm_mode")
         .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")

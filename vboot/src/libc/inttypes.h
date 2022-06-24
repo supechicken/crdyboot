@@ -6,5 +6,6 @@
 #define VBOOT_SRC_LIBC_INTTYPES_H_
 
 #define PRIu64 __UINT64_FMTu__
+#define PRIx64 __UINT64_FMTx__
 
 #endif  // VBOOT_SRC_LIBC_INTTYPES_H_
