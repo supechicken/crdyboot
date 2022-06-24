@@ -7,7 +7,7 @@ use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::{fmt, mem, ptr, str};
+use core::{fmt, ptr, str};
 use cty::c_void;
 use log::{error, info};
 use uguid::Guid;
@@ -29,6 +29,9 @@ pub enum LoadKernelError {
 
     /// Call to `vb2api_init` failed.
     ApiInitFailed(ReturnCode),
+
+    /// Call to vb2api_init_ctx_for_kernel_verification_only` failed.
+    ApiKernelInitFailed(ReturnCode),
 
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
@@ -52,6 +55,10 @@ impl fmt::Display for LoadKernelError {
             ApiInitFailed(rc) => {
                 write_with_rc("call to vb2api_init failed", rc)
             }
+            ApiKernelInitFailed(rc) => write_with_rc(
+                "call to vb2api_init_ctx_for_kernel_verification_only failed",
+                rc,
+            ),
             LoadKernelFailed(rc) => {
                 write_with_rc("call to LoadKernel failed", rc)
             }
@@ -113,36 +120,17 @@ impl LoadedKernel {
     }
 }
 
-/// Validate the size of the pubkey buffer. It must be at least as large as
-/// the `vb2_packed_key` struct to cast it to that type, and then the
-/// `key_size` field is checked to make sure that it is exactly the same as
-/// the buffer length, less the size of the header struct.
-fn validate_packed_pubkey_size(
-    packed_pubkey: &[u8],
-) -> Result<(), LoadKernelError> {
-    use vboot_sys::vb2_packed_key;
-
-    let packed_pubkey_struct: &vb2_packed_key = unsafe {
-        crate::struct_from_bytes(packed_pubkey)
-            .ok_or(LoadKernelError::PubkeyTooSmall(packed_pubkey.len()))?
-    };
-
-    let key_size = u32_to_usize(packed_pubkey_struct.key_size);
-    if key_size + mem::size_of::<vb2_packed_key>() == packed_pubkey.len() {
-        Ok(())
-    } else {
-        Err(LoadKernelError::PubkeyTooSmall(packed_pubkey.len()))
-    }
-}
-
 unsafe fn init_vb2_context(
     packed_pubkey: &[u8],
     workbuf: &mut [u8],
 ) -> Result<*mut vboot_sys::vb2_context, LoadKernelError> {
     let mut ctx_ptr = ptr::null_mut();
 
+    let packed_pubkey_len = u32::try_from(packed_pubkey.len())
+        .map_err(|_| LoadKernelError::BadNumericConversion("pubkey length"))?;
+
     info!("vb2api_init");
-    let status = ReturnCode(vboot_sys::vb2api_init(
+    let mut status = ReturnCode(vboot_sys::vb2api_init(
         workbuf.as_mut_ptr().cast::<c_void>(),
         workbuf.len().try_into().map_err(|_| {
             LoadKernelError::BadNumericConversion("workbuf length")
@@ -154,27 +142,20 @@ unsafe fn init_vb2_context(
         return Err(LoadKernelError::ApiInitFailed(status));
     }
 
-    let mut kernel_key_wb = vboot_sys::vb2_workbuf {
-        buf: ptr::null_mut(),
-        size: 0,
-    };
-    vboot_sys::vb2_workbuf_from_ctx(ctx_ptr, &mut kernel_key_wb);
-    let kernel_key_ptr = vboot_sys::vb2_workbuf_alloc(
-        &mut kernel_key_wb,
-        packed_pubkey.len().try_into().map_err(|_| {
-            LoadKernelError::BadNumericConversion("pubkey length")
-        })?,
-    )
-    .cast::<u8>();
-    packed_pubkey
-        .as_ptr()
-        .copy_to_nonoverlapping(kernel_key_ptr, packed_pubkey.len());
-
-    vboot_sys::crdyboot_set_kernel_key(
-        ctx_ptr,
-        kernel_key_ptr.cast::<vboot_sys::vb2_packed_key>(),
-        &kernel_key_wb,
-    );
+    info!("vb2api_init_ctx_for_kernel_verification_only");
+    status =
+        ReturnCode(vboot_sys::vb2api_init_ctx_for_kernel_verification_only(
+            ctx_ptr,
+            packed_pubkey.as_ptr(),
+            packed_pubkey_len,
+        ));
+    if status != ReturnCode::VB2_SUCCESS {
+        error!(
+            "vb2api_init_ctx_for_kernel_verification_only failed: 0x{:x}",
+            status.0
+        );
+        return Err(LoadKernelError::ApiKernelInitFailed(status));
+    }
 
     Ok(ctx_ptr)
 }
@@ -196,9 +177,6 @@ pub fn load_kernel(
     // required size is currently around 35 MiB, so 64 MiB should be plenty
     // for the forseeable future.
     let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
-
-    // Check the size of the key buffer before using it.
-    validate_packed_pubkey_size(packed_pubkey)?;
 
     unsafe {
         let ctx_ptr = init_vb2_context(packed_pubkey, &mut workbuf)?;

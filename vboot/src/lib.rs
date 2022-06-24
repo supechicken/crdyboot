@@ -48,21 +48,3 @@ pub use disk::DiskIo;
 pub use load_kernel::{load_kernel, LoadKernelError, LoadedKernel};
 pub use vboot_sys::return_code_to_str;
 pub use vboot_sys::vb2_return_code as ReturnCode;
-
-/// Get an &T backed by a byte slice. The slice is checked to make sure it's
-/// at least as large as the size of T.
-///
-/// # Safety
-///
-/// This can only be called safely on `repr(C, packed)` structs whose fields
-/// are either numeric or structures that also meet these restrictions
-/// (recursively).
-unsafe fn struct_from_bytes<T>(buf: &[u8]) -> Option<&T> {
-    if buf.len() < core::mem::size_of::<T>() {
-        return None;
-    }
-
-    let ptr = buf.as_ptr().cast::<T>();
-
-    Some(&*ptr)
-}

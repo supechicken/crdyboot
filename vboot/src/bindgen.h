@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <2common.h>
-#include <2misc.h>
-#include <2nvstorage.h>
-#include <2secdata.h>
-#include <2struct.h>
+#include <vb2_api.h>
+
 #include <futility/kernel_blob.h>
 #include <load_kernel_fw.h>
 #include <vboot_api.h>
 
-void crdyboot_set_kernel_key(struct vb2_context *ctx,
-                             const struct vb2_packed_key *packed_key,
-                             const struct vb2_workbuf *wb);
+/**
+ * TODO: proposed new entry point to be added to vboot_reference.
+ *
+ * This takes a context initialized with `vb2api_init` and a packed
+ * kernel verification key. The packed key starts with a `struct
+ * vb2_packed_key` header, followed by the actual key data.
+ */
+vb2_error_t vb2api_init_ctx_for_kernel_verification_only(
+    struct vb2_context *ctx, const uint8_t *kernel_packed_key_data,
+    uint32_t kernel_packed_key_data_size);

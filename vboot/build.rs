@@ -80,6 +80,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .allowlist_function("vb2_workbuf_alloc")
         .allowlist_function("vb2_workbuf_from_ctx")
         .allowlist_function("vb2api_init")
+        .allowlist_function("vb2api_init_ctx_for_kernel_verification_only")
         .allowlist_type("VbDiskInfo")
         .allowlist_type("vb2_context")
         .allowlist_type("vb2_return_code")
