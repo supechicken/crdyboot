@@ -4,8 +4,9 @@
 
 use alloc::borrow::Cow;
 use alloc::string::String;
+use core::cmp::min;
 use core::{slice, str};
-use cty::c_char;
+use cty::{c_char, c_int, size_t};
 use log::info;
 use printf_compat as printf;
 
@@ -48,4 +49,89 @@ unsafe extern "C" fn vb2ex_printf(
     let stripped = output.strip_suffix('\n').unwrap_or(&output);
 
     info!("{} {}", func, stripped);
+}
+
+/// Implement the C `snprintf` function.
+#[no_mangle]
+unsafe extern "C" fn snprintf(
+    buffer: *mut c_char,
+    bufsz: size_t,
+    fmt: *const c_char,
+    mut args: ...
+) -> c_int {
+    if buffer.is_null() || fmt.is_null() || bufsz == 0 {
+        return 0;
+    }
+
+    let buffer = slice::from_raw_parts_mut(buffer, bufsz);
+
+    // Format into a temporary buffer.
+    let mut tmp = String::new();
+    printf::format(fmt, args.as_va_list(), printf::output::fmt_write(&mut tmp));
+
+    // Convert the formatted output to a slice of `c_char`.
+    let formatted_bytes = tmp.as_bytes();
+    let formatted_bytes = slice::from_raw_parts(
+        formatted_bytes.as_ptr().cast::<c_char>(),
+        formatted_bytes.len(),
+    );
+
+    // Get the length to copy. This is the size of the formatted output,
+    // capped to one less than the buffer length (to leave room for a
+    // trailing null).
+    let copy_len =
+        min(formatted_bytes.len(), buffer.len().checked_sub(1).unwrap());
+
+    // Copy the formatted output and null terminate.
+    buffer[..copy_len].copy_from_slice(&formatted_bytes[..copy_len]);
+    buffer[copy_len] = 0;
+
+    // Return the size of the formatted bytes (excluding the trailing
+    // null), even if not enough space was available.
+    formatted_bytes.len().try_into().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_snprintf() {
+        unsafe {
+            let mut buf = [0; 4];
+
+            // Format a string that will fit in the buffer.
+            assert_eq!(
+                snprintf(
+                    buf.as_mut_ptr(),
+                    buf.len(),
+                    b"%d %d".as_ptr().cast(),
+                    1,
+                    2
+                ),
+                3
+            );
+            assert_eq!(
+                slice::from_raw_parts(buf.as_ptr().cast::<u8>(), buf.len()),
+                b"1 2\0"
+            );
+
+            // Try to format a string that is too long for the buffer.
+            assert_eq!(
+                snprintf(
+                    buf.as_mut_ptr(),
+                    buf.len(),
+                    b"%d %d %d".as_ptr().cast(),
+                    1,
+                    2,
+                    3
+                ),
+                5
+            );
+            assert_eq!(
+                slice::from_raw_parts(buf.as_ptr().cast::<u8>(), buf.len()),
+                b"1 2\0"
+            );
+        }
+    }
 }

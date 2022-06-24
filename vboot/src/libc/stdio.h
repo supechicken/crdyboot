@@ -5,6 +5,6 @@
 #ifndef VBOOT_SRC_LIBC_STDIO_H_
 #define VBOOT_SRC_LIBC_STDIO_H_
 
-// Intentionally empty.
+int snprintf(char *buffer, size_t bufsz, const char *format, ...);
 
 #endif  // VBOOT_SRC_LIBC_STDIO_H_
