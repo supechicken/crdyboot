@@ -7,8 +7,8 @@ use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ffi::c_void;
 use core::{fmt, mem, ptr, str};
+use cty::c_void;
 use log::{error, info};
 use uguid::Guid;
 

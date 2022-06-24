@@ -5,6 +5,7 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
+cty = "0.2.2"
 log = "0.4.17"
 printf-compat = { version = "0.1.1", default-features = false }
 uguid = "0.7.0"

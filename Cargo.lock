@@ -833,6 +833,7 @@ dependencies = [
  "bindgen",
  "camino",
  "cc",
+ "cty",
  "log",
  "printf-compat",
  "regex",

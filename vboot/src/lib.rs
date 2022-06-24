@@ -40,10 +40,6 @@ mod malloc {
 #[allow(non_snake_case)]
 #[allow(clippy::pedantic)]
 mod vboot_sys {
-    // ctypes
-    type c_char = i8;
-    type c_void = core::ffi::c_void;
-
     include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
     include!(concat!(env!("OUT_DIR"), "/vboot_return_codes.rs"));
 }
