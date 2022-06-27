@@ -6,6 +6,58 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use std::{env, fs, process};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Target {
+    UefiI686,
+    UefiX86_64,
+    Host,
+}
+
+impl Target {
+    /// Read the target from the `TARGET` env var.
+    fn from_env() -> Target {
+        let target = env::var("TARGET").unwrap();
+        match target.as_str() {
+            "i686-unknown-uefi" => Self::UefiI686,
+            "x86_64-unknown-uefi" => Self::UefiX86_64,
+            // For everything else, assume it's a host build
+            // (e.g. "cargo test").
+            _ => Self::Host,
+        }
+    }
+
+    /// True if this is a UEFI target, false if it's a host target.
+    fn is_uefi(self) -> bool {
+        match self {
+            Self::UefiI686 | Self::UefiX86_64 => true,
+            Self::Host => false,
+        }
+    }
+
+    /// Get a target triple to override the default C compiler
+    /// target. Returns None if this is a host build so that the default
+    /// target is used in that case.
+    fn c_target_override(self) -> Option<&'static str> {
+        match self {
+            // UEFI target builds. There are a couple reasons why these are
+            // "-windows-gnu" rather than just "-windows":
+            //
+            // 1. The 32-bit target must be i686-unknown-windows-gnu rather than
+            //    just i686-unknown-windows due to a missing intrinsic. See the
+            //    long comment in
+            //    compiler/rustc_target/src/spec/i686_unknown_uefi.rs in the
+            //    rustlang repo for details.
+            //
+            // 2. It's easier to get the appropriate standard C headers for
+            //    these targets with "-windows-gnu", see README.md for the apt
+            //    packages containing these headers.
+            Self::UefiI686 => Some("i686-unknown-windows-gnu"),
+            Self::UefiX86_64 => Some("x86_64-unknown-windows-gnu"),
+            Self::Host => None,
+        }
+    }
+}
+
 fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
     println!("cargo:rerun-if-changed={}", path.as_ref());
 }
@@ -13,7 +65,7 @@ fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
 fn build_vboot_lib(
     vboot_ref: &Utf8Path,
     include_dirs: &[Utf8PathBuf],
-    target: &str,
+    target: Target,
 ) {
     let firmware = vboot_ref.join("firmware");
     let source_files = [
@@ -53,20 +105,23 @@ fn build_vboot_lib(
         rerun_if_changed(path);
     }
 
-    cc::Build::new()
+    let mut builder = cc::Build::new();
+    builder
         .compiler("clang")
-        .target(target)
         .flag("-Wno-address-of-packed-member")
         .flag("-Wno-int-to-pointer-cast")
         .flag("-Wno-sign-compare")
         .flag("-Wno-unused-parameter")
         .warnings_into_errors(true)
         .includes(include_dirs)
-        .files(source_files)
-        .compile("vboot_c");
+        .files(source_files);
+    if let Some(target) = target.c_target_override() {
+        builder.target(target);
+    }
+    builder.compile("vboot_c");
 }
 
-fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
+fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
     let header_path = "src/bindgen.h";
 
     rerun_if_changed(header_path);
@@ -74,7 +129,6 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
     let mut builder = bindgen::Builder::default();
     builder = builder
         .header(header_path)
-        .clang_arg(format!("--target={}", target))
         .allowlist_function("LoadKernel")
         .allowlist_function("crdyboot_set_kernel_key")
         .allowlist_function("vb2_workbuf_alloc")
@@ -105,6 +159,10 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
         .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks));
 
+    if let Some(target) = target.c_target_override() {
+        builder = builder.clang_arg(format!("--target={}", target));
+    }
+
     for include_dir in include_dirs {
         builder = builder.clang_arg(format!("-I{}", include_dir));
     }
@@ -112,7 +170,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: &str) {
     // Not sure why, but setting the sysroot is needed for the clang
     // windows targets. And it must not be set for the host target as
     // it causes compilation to fail there.
-    if target.ends_with("windows-gnu") {
+    if target.is_uefi() {
         builder = builder.clang_args(&["--sysroot", "/usr"]);
     }
 
@@ -205,27 +263,7 @@ fn main() {
         vboot_ref.join("firmware/lib20/include"),
     ];
 
-    let target = env::var("TARGET").unwrap();
-    let target = match target.as_str() {
-        // UEFI target builds. There are a couple reasons why these are
-        // "-windows-gnu" rather than just "-windows":
-        //
-        // 1. The 32-bit target must be i686-unknown-windows-gnu rather than
-        //    just i686-unknown-windows due to a missing intrinsic. See the
-        //    long comment in
-        //    compiler/rustc_target/src/spec/i686_unknown_uefi.rs in the
-        //    rustlang repo for details.
-        //
-        // 2. It's easier to get the appropriate standard C headers for
-        //    these targets with "-windows-gnu", see README.md for the apt
-        //    packages containing these headers.
-        "i686-unknown-uefi" => "i686-unknown-windows-gnu",
-        "x86_64-unknown-uefi" => "x86_64-unknown-windows-gnu",
-
-        // For everything else (e.g. a host build like "cargo test")
-        // use the same target as rustc.
-        target => target,
-    };
+    let target = Target::from_env();
 
     build_vboot_lib(vboot_ref, &include_dirs, target);
     gen_fwlib_bindings(&include_dirs, target);
