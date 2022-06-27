@@ -56,13 +56,78 @@ impl Target {
             Self::Host => None,
         }
     }
+
+    fn vboot_build_subdir(self) -> &'static str {
+        self.c_target_override().unwrap_or("host")
+    }
+
+    fn fw_arch(self) -> &'static str {
+        match self {
+            Self::UefiI686 => "i386",
+            Self::UefiX86_64 | Self::Host => "amd64",
+        }
+    }
 }
 
 fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
     println!("cargo:rerun-if-changed={}", path.as_ref());
 }
 
-fn build_vboot_lib(
+/// Build vboot_reference's fwlib.
+fn build_vboot_fwlib(vboot_ref: &Utf8Path, target: Target) {
+    let out_dir = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
+    let vboot_build_dir = out_dir
+        .join("vboot_fw_build")
+        .join(target.vboot_build_subdir());
+
+    let mut cflags = "-I../../vboot/src/libc".to_string();
+    if let Some(target) = target.c_target_override() {
+        cflags = format!("{} --target={}", cflags, target);
+    }
+    if target == Target::Host {
+        cflags += " -fPIC";
+    }
+    println!("CFLAGS={}", cflags);
+
+    let mut make_cmd = process::Command::new("make");
+    make_cmd
+        .env("CFLAGS", cflags)
+        .arg("-C")
+        .arg(vboot_ref)
+        .arg("V=1")
+        .arg("CC=clang")
+        .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
+        .arg(format!("BUILD={}", vboot_build_dir))
+        .arg("fwlib");
+    println!("{:?}", make_cmd);
+    let status = make_cmd.status().expect("failed to launch make");
+    if !status.success() {
+        panic!("make failed");
+    }
+
+    // Rename the vboot_fw library to match the pattern expected for the
+    // current target, then tell cargo to link that library in.
+    if target.is_uefi() {
+        fs::copy(
+            vboot_build_dir.join("vboot_fw.a"),
+            vboot_build_dir.join("vboot_fw.lib"),
+        )
+        .unwrap();
+        println!("cargo:rustc-link-lib={}", vboot_build_dir.join("vboot_fw"));
+    } else {
+        fs::copy(
+            vboot_build_dir.join("vboot_fw.a"),
+            vboot_build_dir.join("libvboot_fw.a"),
+        )
+        .unwrap();
+        println!("cargo:rustc-link-search={}", vboot_build_dir);
+        println!("cargo:rustc-link-lib=static=vboot_fw");
+    }
+}
+
+/// Build a small C library to help bridge the Rust code in this crate
+/// with vboot_reference's fwlib.
+fn build_bridge_lib(
     vboot_ref: &Utf8Path,
     include_dirs: &[Utf8PathBuf],
     target: Target,
@@ -70,32 +135,6 @@ fn build_vboot_lib(
     let firmware = vboot_ref.join("firmware");
     let source_files = [
         "src/bridge.c".into(),
-        firmware.join("2lib/2api.c"),
-        firmware.join("2lib/2common.c"),
-        firmware.join("2lib/2context.c"),
-        firmware.join("2lib/2crc8.c"),
-        firmware.join("2lib/2crypto.c"),
-        firmware.join("2lib/2firmware.c"),
-        firmware.join("2lib/2gbb.c"),
-        firmware.join("2lib/2misc.c"),
-        firmware.join("2lib/2nvstorage.c"),
-        firmware.join("2lib/2packed_key.c"),
-        firmware.join("2lib/2recovery_reasons.c"),
-        firmware.join("2lib/2rsa.c"),
-        firmware.join("2lib/2secdata_firmware.c"),
-        firmware.join("2lib/2secdata_fwmp.c"),
-        firmware.join("2lib/2secdata_kernel.c"),
-        firmware.join("2lib/2sha1.c"),
-        firmware.join("2lib/2sha256.c"),
-        firmware.join("2lib/2sha512.c"),
-        firmware.join("2lib/2sha_utility.c"),
-        firmware.join("2lib/2struct.c"),
-        firmware.join("2lib/2tpm_bootmode.c"),
-        firmware.join("lib/cgptlib/cgptlib.c"),
-        firmware.join("lib/cgptlib/cgptlib_internal.c"),
-        firmware.join("lib/cgptlib/crc32.c"),
-        firmware.join("lib/gpt_misc.c"),
-        firmware.join("lib/vboot_kernel.c"),
         // Stubs
         firmware.join("2lib/2stub_hwcrypto.c"),
         firmware.join("stub/vboot_api_stub_stream.c"),
@@ -118,7 +157,7 @@ fn build_vboot_lib(
     if let Some(target) = target.c_target_override() {
         builder.target(target);
     }
-    builder.compile("vboot_c");
+    builder.compile("vboot_bridge");
 }
 
 fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
@@ -258,14 +297,14 @@ fn main() {
         vboot_ref.to_path_buf(),
         vboot_ref.join("firmware/2lib/include"),
         vboot_ref.join("firmware/include"),
-        vboot_ref.join("firmware/lib/cgptlib/include"),
         vboot_ref.join("firmware/lib/include"),
-        vboot_ref.join("firmware/lib20/include"),
     ];
 
     let target = Target::from_env();
 
-    build_vboot_lib(vboot_ref, &include_dirs, target);
+    build_vboot_fwlib(vboot_ref, target);
+    build_bridge_lib(vboot_ref, &include_dirs, target);
+
     gen_fwlib_bindings(&include_dirs, target);
     gen_return_code_strings(vboot_ref);
 }
