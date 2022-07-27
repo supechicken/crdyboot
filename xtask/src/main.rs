@@ -293,7 +293,6 @@ fn generate_secure_boot_keys(conf: &Config) {
     )?;
 
     let root_key_paths = conf.secure_boot_root_key_paths();
-
     // Generate the PK/KEK and db vars for use with the enroller.
     sign::generate_signed_vars(&root_key_paths, "PK")?;
     sign::generate_signed_vars(&root_key_paths, "db")?;
@@ -439,6 +438,11 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) {
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
+        return;
+    }
+
+    // Don't run setup if the user is installing the toolchain.
+    if matches!(action, Action::InstallToolchain(_)) {
         return;
     }
 
