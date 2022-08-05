@@ -123,6 +123,24 @@
       "parentUuid": "d0667a9e_0a2fc9a4",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "123a8844_dbd86ea8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1501785
+      },
+      "writtenOn": "2022-08-05T20:34:51Z",
+      "side": 1,
+      "message": "I tried one last time after completely nuking my crdyboot checkout and still got:\nhttps://paste.googleplex.com/5099933022552064\n\nIs it possible the image has something to do with this (it was created with verity), or do you already see the problem in the command line?",
+      "parentUuid": "b44bb402_158b1069",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
