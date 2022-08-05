@@ -70,6 +70,24 @@
       "parentUuid": "d3946094_9481c890",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d0667a9e_0a2fc9a4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1501785
+      },
+      "writtenOn": "2022-08-05T17:30:00Z",
+      "side": 1,
+      "message": "The issue still reproduces when I run `cargo xtask check` after running `cargo xtask setup chromiumos_base_image.bin` with a newly-created ToT reven base image. I made sure to clear the `vboot_reference/build` directory as well.",
+      "parentUuid": "66e705b5_a3048163",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
