@@ -88,6 +88,23 @@
       "parentUuid": "66e705b5_a3048163",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4dcd1d71_890c48b3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1548047
+      },
+      "writtenOn": "2022-08-05T17:57:43Z",
+      "side": 1,
+      "message": "I was able to `cargo xtask setup` and `cargo xtask check` with an image off of goldeneye. Uninstalling openssl1.1 after installing it from source was quite painful though.",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
