@@ -141,6 +141,24 @@
       "parentUuid": "b44bb402_158b1069",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d6195d6f_1ab64cac",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-05T21:13:31Z",
+      "side": 1,
+      "message": "I think the source image is indeed the cause, but I\u0027m not clear on why your source image would have this slightly different set of kernel parameters. Is it possible the image is a different board (e.g. reven-vmtest?) I didn\u0027t think the rootfs size was different on that, but it seems that something like that is going on.",
+      "parentUuid": "123a8844_dbd86ea8",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
