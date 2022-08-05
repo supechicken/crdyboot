@@ -70,10 +70,13 @@ to log out and back in for this to take effect:
 Before running any other commands in the repository, run this setup
 command:
 
-    cargo xtask setup <reven-image-path>
-    
+    cargo xtask setup <reven-verity-image-path>
+
 This will copy the reven image to a local directory and run various
-setup commands.
+setup commands. The image must have rootfs verification enabled
+(i.e. `build_image` must be run _without_ `-r` or
+`--no-enable-rootfs-verification`). Any kind of image (`base`, `dev`, or
+`test`) is allowed.
 
 To check formatting, lint, test, and build both vboot and crdyboot:
 
