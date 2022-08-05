@@ -52,6 +52,24 @@
       "parentUuid": "faa400f3_327b3e70",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "66e705b5_a3048163",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-05T16:19:03Z",
+      "side": 1,
+      "message": "I think that\u0027s due to the image not having rootfs verification enabled. Filed b/241557362 to document this and make the tool verify it.",
+      "parentUuid": "d3946094_9481c890",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
