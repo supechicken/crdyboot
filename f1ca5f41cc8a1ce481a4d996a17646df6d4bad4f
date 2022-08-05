@@ -16,6 +16,24 @@
       "message": "I tried running `cargo xtask setup` but it failed:\nhttps://paste.googleplex.com/5557327578005504\n\nAre we missing some dependency?",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "faa400f3_327b3e70",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-05T15:55:25Z",
+      "side": 1,
+      "message": "That should be covered by https://chromium.googlesource.com/crdyboot/+/refs/heads/main#dependencies, specifically libflashrom-dev.",
+      "parentUuid": "e313f364_b299365f",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
