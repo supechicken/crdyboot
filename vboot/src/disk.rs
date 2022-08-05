@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::vboot_sys::{VbDiskInfo, VbExDiskHandle_t};
+use crate::vboot_sys::{vb2_disk_info, vb2ex_disk_handle_t};
 use crate::ReturnCode;
 use core::marker::PhantomData;
 use core::{ptr, slice};
@@ -24,18 +24,18 @@ pub trait DiskIo {
 }
 
 pub struct DiskInfo<'a> {
-    info: VbDiskInfo,
+    info: vb2_disk_info,
     phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> DiskInfo<'a> {
-    pub fn as_mut_ptr(&mut self) -> *mut VbDiskInfo {
+    pub fn as_mut_ptr(&mut self) -> *mut vb2_disk_info {
         &mut self.info
     }
 }
 
 /// Wrap `DiskIo` into a new struct so that we can convert it to a thin pointer
-/// and cast that to a `VbExDiskHandle_t`.
+/// and cast that to a `vb2ex_disk_handle_t`.
 pub struct Disk<'a> {
     io: &'a mut dyn DiskIo,
 }
@@ -45,17 +45,17 @@ impl<'a> Disk<'a> {
         Disk { io }
     }
 
-    fn as_handle(&mut self) -> VbExDiskHandle_t {
+    fn as_handle(&mut self) -> vb2ex_disk_handle_t {
         (self as *mut Disk).cast::<c_void>()
     }
 
-    unsafe fn from_handle(handle: VbExDiskHandle_t) -> &'a mut Disk<'a> {
+    unsafe fn from_handle(handle: vb2ex_disk_handle_t) -> &'a mut Disk<'a> {
         &mut *handle.cast::<Disk>()
     }
 
     pub fn info(&mut self) -> DiskInfo {
         DiskInfo {
-            info: VbDiskInfo {
+            info: vb2_disk_info {
                 handle: self.as_handle(),
                 bytes_per_lba: self.bytes_per_lba(),
                 lba_count: self.lba_count(),
@@ -88,7 +88,7 @@ impl<'a> DiskIo for Disk<'a> {
 
 #[no_mangle]
 unsafe extern "C" fn VbExDiskRead(
-    handle: VbExDiskHandle_t,
+    handle: vb2ex_disk_handle_t,
     lba_start: u64,
     lba_count: u64,
     buffer: *mut u8,
@@ -106,7 +106,7 @@ unsafe extern "C" fn VbExDiskRead(
 
 #[no_mangle]
 unsafe extern "C" fn VbExDiskWrite(
-    handle: VbExDiskHandle_t,
+    handle: vb2ex_disk_handle_t,
     lba_start: u64,
     lba_count: u64,
     buffer: *const u8,

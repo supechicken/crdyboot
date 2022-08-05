@@ -77,7 +77,7 @@ fn u32_to_usize(v: u32) -> usize {
 impl LoadedKernel {
     fn command_line_with_placeholders(&self) -> Option<&str> {
         // TODO: would be nice if the command line location was returned in
-        // the output parameters of VbSelectAndLoadKernelParams, might be
+        // the output parameters of vb2_kernel_params, might be
         // worth putting up a CL for that.
         //
         // This arithmetic is based on `fill_info_cros` in depthcharge,
@@ -181,7 +181,7 @@ pub fn load_kernel(
     unsafe {
         let ctx_ptr = init_vb2_context(packed_pubkey, &mut workbuf)?;
 
-        let mut params = vboot_sys::VbSelectAndLoadKernelParams {
+        let mut params = vboot_sys::vb2_kernel_params {
             // Initialize inputs.
             kernel_buffer: kernel_buffer.as_mut_ptr().cast::<c_void>(),
             kernel_buffer_size: kernel_buffer.len().try_into().map_err(
@@ -201,7 +201,7 @@ pub fn load_kernel(
         let mut disk_info = disk.info();
 
         info!("LoadKernel");
-        let status = ReturnCode(vboot_sys::LoadKernel(
+        let status = ReturnCode(vboot_sys::vb2api_load_kernel(
             ctx_ptr,
             &mut params,
             disk_info.as_mut_ptr(),

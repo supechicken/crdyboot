@@ -5,7 +5,6 @@
 #include <vb2_api.h>
 
 #include <futility/kernel_blob.h>
-#include <load_kernel_fw.h>
 #include <vboot_api.h>
 
 /**

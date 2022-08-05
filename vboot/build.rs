@@ -168,14 +168,14 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
     let mut builder = bindgen::Builder::default();
     builder = builder
         .header(header_path)
-        .allowlist_function("LoadKernel")
         .allowlist_function("crdyboot_set_kernel_key")
         .allowlist_function("vb2_workbuf_alloc")
         .allowlist_function("vb2_workbuf_from_ctx")
         .allowlist_function("vb2api_init")
         .allowlist_function("vb2api_init_ctx_for_kernel_verification_only")
-        .allowlist_type("VbDiskInfo")
+        .allowlist_function("vb2api_load_kernel")
         .allowlist_type("vb2_context")
+        .allowlist_type("vb2_disk_info")
         .allowlist_type("vb2_return_code")
         .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
