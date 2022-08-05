@@ -357,15 +357,19 @@ fn clean_futility_build(conf: &Config) {
 /// vboot_reference.
 #[throws]
 fn build_futility(conf: &Config) {
-    Command::with_args(
+    let mut cmd = Command::with_args(
         "make",
         &[
             "-C",
             conf.vboot_reference_path().as_str(),
             conf.futility_executable_path().as_str(),
         ],
-    )
-    .run()?;
+    );
+    // For compatiblity with openssl3, allow use of deprecated
+    // functions.
+    cmd.env
+        .insert("CFLAGS".into(), "-Wno-deprecated-declarations".into());
+    cmd.run()?;
 }
 
 // Run various setup operations. This must be run once before running
