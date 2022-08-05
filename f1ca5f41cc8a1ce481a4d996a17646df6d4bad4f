@@ -213,6 +213,24 @@
       "parentUuid": "a9f3ccdc_beb2c5db",
       "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e83e48cb_3d42833c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1501785
+      },
+      "writtenOn": "2022-08-05T21:41:27Z",
+      "side": 1,
+      "message": "Hrmm, it succeeded when I tried the test image from the same build:\n```\n    Checking xtask v0.1.0 (/usr/local/google/home/josephsussman/repos/chromium/crdyboot/xtask)\n    Finished dev [unoptimized + debuginfo] target(s) in 13.60s\n```\nThis is the setup command I used:\n```\ncargo xtask setup image/chromiumos_test_image.bin\n```\nSo the base image from the linked build fails and the test image succeeds.",
+      "parentUuid": "7be307c1_bdb284dd",
+      "revId": "f1ca5f41cc8a1ce481a4d996a17646df6d4bad4f",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
