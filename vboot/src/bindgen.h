@@ -14,6 +14,6 @@
  * kernel verification key. The packed key starts with a `struct
  * vb2_packed_key` header, followed by the actual key data.
  */
-vb2_error_t vb2api_init_ctx_for_kernel_verification_only(
+vb2_error_t vb2api_inject_kernel_subkey(
     struct vb2_context *ctx, const uint8_t *kernel_packed_key_data,
     uint32_t kernel_packed_key_data_size);

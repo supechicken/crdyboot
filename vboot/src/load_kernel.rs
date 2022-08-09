@@ -142,18 +142,14 @@ unsafe fn init_vb2_context(
         return Err(LoadKernelError::ApiInitFailed(status));
     }
 
-    info!("vb2api_init_ctx_for_kernel_verification_only");
-    status =
-        ReturnCode(vboot_sys::vb2api_init_ctx_for_kernel_verification_only(
-            ctx_ptr,
-            packed_pubkey.as_ptr(),
-            packed_pubkey_len,
-        ));
+    info!("vb2api_inject_kernel_subkey");
+    status = ReturnCode(vboot_sys::vb2api_inject_kernel_subkey(
+        ctx_ptr,
+        packed_pubkey.as_ptr(),
+        packed_pubkey_len,
+    ));
     if status != ReturnCode::VB2_SUCCESS {
-        error!(
-            "vb2api_init_ctx_for_kernel_verification_only failed: 0x{:x}",
-            status.0
-        );
+        error!("vb2api_inject_kernel_subkey failed: 0x{:x}", status.0);
         return Err(LoadKernelError::ApiKernelInitFailed(status));
     }
 
