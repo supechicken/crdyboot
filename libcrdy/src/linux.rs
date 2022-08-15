@@ -32,7 +32,9 @@ fn get_u32_field(kernel_data: &[u8], offset: usize) -> Result<u32> {
     let end = offset
         .checked_add(mem::size_of::<u32>())
         .ok_or(Error::Overflow("get_u32_field"))?;
-    let bytes = kernel_data.get(offset..end).ok_or(Error::KernelTooSmall)?;
+    let bytes = kernel_data
+        .get(offset..end)
+        .ok_or(Error::OutOfBounds("get_u32_field"))?;
     // OK to unwrap, the length of the slice is already known to be correct.
     Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
 }
@@ -74,15 +76,18 @@ fn entry_point_from_offset(
 ) -> Result<Entrypoint> {
     info!("entry_point_offset: 0x{:x}", entry_point_offset);
 
-    let entry_point_address = (data.as_ptr() as usize)
-        .checked_add(entry_point_offset)
-        .ok_or(Error::Overflow("entry_point_address"))?;
-    info!("entry_point_address: 0x{:x}", entry_point_address);
+    // Ensure that the entry point is somewhere in the kernel data.
+    if entry_point_offset >= data.len() {
+        return Err(Error::OutOfBounds("entry_point_offset"));
+    }
 
-    // Convert the address back to a pointer and transmute to the desired
-    // function pointer type.
-    let entry_point = entry_point_address as *const ();
     unsafe {
+        let entry_point = data.as_ptr().add(entry_point_offset);
+        info!("entry_point: 0x{:x?}", entry_point);
+
+        // Transmute is needed to convert from a regular pointer to a
+        // function pointer:
+        // rust-lang.github.io/unsafe-code-guidelines/layout/function-pointers.html
         let entry_point: Entrypoint = mem::transmute(entry_point);
         Ok(entry_point)
     }
