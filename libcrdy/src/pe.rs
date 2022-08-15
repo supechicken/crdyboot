@@ -4,8 +4,8 @@
 
 //! PE executable parsing.
 //!
-//! This uses the goblin library to parse a PE executable and find its entry
-//! point.
+//! This uses the [`object`] library to parse a PE executable and find
+//! its entry point.
 //!
 //! When booting from a 64-bit UEFI environment, the normal PE entry point
 //! in the PE header can be used.
@@ -16,34 +16,38 @@
 //!    efi/x86: Implement mixed mode boot without the handover protocol
 
 use crate::{Error, Result};
-use goblin::pe::section_table::SectionTable;
-use goblin::pe::PE;
+use object::pe::IMAGE_FILE_MACHINE_I386;
+use object::read::pe::PeFile64;
+use object::{LittleEndian, Object, ObjectSection};
 use scroll::Pread;
 
 /// Info about a PE executable.
 pub struct PeInfo {
     /// Primary entry point (as an offset).
-    pub entry_point: usize,
+    pub entry_point: u32,
 
     /// IA32 entry point (as an offset).
-    pub ia32_compat_entry_point: usize,
+    pub ia32_compat_entry_point: u32,
 }
 
 impl PeInfo {
     pub fn parse(data: &[u8]) -> Result<Self> {
-        let pe = PE::parse(data).map_err(Error::InvalidPe)?;
+        let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
 
-        let section_data = find_section_data(data, &pe.sections, *b".compat\0")
+        // Get the primary entry point from a field in the PE header.
+        let entry_point = pe
+            .nt_headers()
+            .optional_header
+            .address_of_entry_point
+            .get(LittleEndian);
+
+        // Get the IA32 entry point for booting from IA32 firmware to a
+        // 64-bit kernel.
+        let ia32_compat_entry_point = find_ia32_compat_entry_point(&pe)
             .ok_or(Error::MissingIa32CompatEntryPoint)?;
 
-        let ia32_compat_entry_point = find_compat_entry_point_in_section(
-            section_data,
-            goblin::pe::header::COFF_MACHINE_X86,
-        )
-        .ok_or(Error::MissingIa32CompatEntryPoint)?;
-
         Ok(Self {
-            entry_point: pe.entry,
+            entry_point,
             ia32_compat_entry_point,
         })
     }
@@ -127,27 +131,28 @@ impl<'a> Iterator for CompatEntryIter<'a> {
     }
 }
 
-/// Search for a section with the specified `name` and return its data (as a
-/// slice within `data`).
-fn find_section_data<'a>(
-    data: &'a [u8],
-    sections: &[SectionTable],
-    name: [u8; 8],
-) -> Option<&'a [u8]> {
-    let section = sections.iter().find(|s| s.name == name)?;
-    let data_start: usize = section.pointer_to_raw_data.try_into().ok()?;
-    let data_size: usize = section.size_of_raw_data.try_into().ok()?;
-    data.get(data_start..data_start + data_size)
+/// Get the IA32 entry point.
+///
+/// This looks for a PE header named ".compat", which contains a
+/// list of entries. Each entry can specify a machine type and an
+/// entry point. Search for an IA32 entry and return that entry
+/// point if found.
+fn find_ia32_compat_entry_point(pe: &PeFile64) -> Option<u32> {
+    let section = pe.section_by_name(".compat")?;
+    find_compat_entry_point_in_section(
+        section.data().ok()?,
+        IMAGE_FILE_MACHINE_I386,
+    )
 }
 
 fn find_compat_entry_point_in_section(
     section: &[u8],
     target_machine_type: u16,
-) -> Option<usize> {
+) -> Option<u32> {
     for entry in CompatEntryIter::new(section) {
         if let Some(entry) = entry.v1 {
             if entry.machine_type == target_machine_type {
-                return entry.entry_point.try_into().ok();
+                return Some(entry.entry_point);
             }
         }
     }
@@ -157,29 +162,6 @@ fn find_compat_entry_point_in_section(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_find_section_data() {
-        let data = &[0xa, 0xb, 0xc, 0xd];
-        let sections = &[SectionTable {
-            name: *b"abcdefgh",
-            real_name: None,
-            virtual_size: 0,
-            virtual_address: 0,
-            size_of_raw_data: 2,
-            pointer_to_raw_data: 1,
-            pointer_to_relocations: 0,
-            pointer_to_linenumbers: 0,
-            number_of_relocations: 0,
-            number_of_linenumbers: 0,
-            characteristics: 0,
-        }];
-
-        assert_eq!(
-            find_section_data(data, sections, *b"abcdefgh").unwrap(),
-            &[0xb, 0xc]
-        );
-    }
 
     #[test]
     fn test_compat_entry() {
