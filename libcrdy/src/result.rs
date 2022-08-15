@@ -8,8 +8,8 @@ use uefi::Status;
 use vboot::LoadKernelError;
 
 pub enum Error {
-    /// Failed to convert numeric type.
-    BadNumericConversion(&'static str),
+    /// An arithmetic operation or a numeric conversion overflowed.
+    Overflow(&'static str),
 
     UefiServicesInitFailed(Status),
 
@@ -48,8 +48,8 @@ impl fmt::Display for Error {
             |msg, status| write!(f, "{}: {:?}", msg, status);
 
         match self {
-            BadNumericConversion(info) => {
-                write!(f, "failed to convert numeric type: {}", info)
+            Overflow(info) => {
+                write!(f, "overflow: {}", info)
             }
 
             UefiServicesInitFailed(status) => {

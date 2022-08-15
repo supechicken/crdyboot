@@ -29,9 +29,10 @@ fn is_64bit() -> bool {
 /// Read a little-endian u32 field from with the kernel data at the
 /// given `offset`.
 fn get_u32_field(kernel_data: &[u8], offset: usize) -> Result<u32> {
-    let bytes = kernel_data
-        .get(offset..offset + mem::size_of::<u32>())
-        .ok_or(Error::KernelTooSmall)?;
+    let end = offset
+        .checked_add(mem::size_of::<u32>())
+        .ok_or(Error::Overflow("get_u32_field"))?;
+    let bytes = kernel_data.get(offset..end).ok_or(Error::KernelTooSmall)?;
     // OK to unwrap, the length of the slice is already known to be correct.
     Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
 }
@@ -57,8 +58,8 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
     let init_size = get_u32_field(kernel_buffer, INIT_SIZE_OFFSET)?;
     info!("minimum required size: {}", init_size);
 
-    let init_size = usize::try_from(init_size)
-        .map_err(|_| Error::BadNumericConversion("init_size"))?;
+    let init_size =
+        usize::try_from(init_size).map_err(|_| Error::Overflow("init_size"))?;
 
     if init_size <= kernel_buffer.len() {
         Ok(())
@@ -70,10 +71,12 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
 fn entry_point_from_offset(
     data: &[u8],
     entry_point_offset: usize,
-) -> Entrypoint {
+) -> Result<Entrypoint> {
     info!("entry_point_offset: 0x{:x}", entry_point_offset);
 
-    let entry_point_address = (data.as_ptr() as usize) + entry_point_offset;
+    let entry_point_address = (data.as_ptr() as usize)
+        .checked_add(entry_point_offset)
+        .ok_or(Error::Overflow("entry_point_address"))?;
     info!("entry_point_address: 0x{:x}", entry_point_address);
 
     // Convert the address back to a pointer and transmute to the desired
@@ -81,7 +84,7 @@ fn entry_point_from_offset(
     let entry_point = entry_point_address as *const ();
     unsafe {
         let entry_point: Entrypoint = mem::transmute(entry_point);
-        entry_point
+        Ok(entry_point)
     }
 }
 
@@ -184,7 +187,7 @@ pub fn execute_linux_kernel(
     let execute_linux_efi_stub = |system_table, entry_point_offset| {
         execute_linux_efi_stub(
             kernel.data(),
-            entry_point_from_offset(kernel.data(), entry_point_offset),
+            entry_point_from_offset(kernel.data(), entry_point_offset)?,
             crdyboot_image,
             system_table,
             &cmdline,
