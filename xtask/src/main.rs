@@ -101,10 +101,27 @@ struct SetupAction {
     disk_image: Option<Utf8PathBuf>,
 }
 
+struct Miri(bool);
+
+fn default_miri_usage() -> bool {
+    true
+}
 /// Run "cargo test" in the vboot project.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "test")]
-struct TestAction {}
+struct TestAction {
+    /// enable or disable miri tests: true, false (default=true)
+    #[argh(option, default="default_miri_usage()")]
+    miri: bool,
+}
+
+impl Default for TestAction {
+    fn default() -> Self {
+        TestAction {
+            miri: default_miri_usage(),
+        }
+    }
+}
 
 /// Run crdyboot under qemu.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -153,7 +170,7 @@ fn run_cargo_deny() {
 fn run_check(conf: &Config) {
     run_cargo_deny()?;
     run_rustfmt(&FormatAction { check: true })?;
-    run_tests()?;
+    run_tests(&Default::default())?;
     run_crdyboot_build(conf)?;
     run_clippy(conf)?;
 }
@@ -265,20 +282,25 @@ fn run_clippy(conf: &Config) {
 }
 
 #[throws]
-fn run_tests_for_package(package: Package, nightly: bool) {
-    let mut cmd = Command::new("cargo");
-    if nightly {
-        cmd.add_arg(&nightly_tc_arg());
+fn run_tests_for_package(package: Package, miri: Miri) {
+    let mut cmd = Command::with_args("cargo", &[nightly_tc_arg()]);
+    if miri.0 {
+        cmd.add_arg("miri");
     }
     cmd.add_args(&["test", "--package", package.name()]);
     cmd.run()?;
 }
 
 #[throws]
-fn run_tests() {
-    run_tests_for_package(Package::Xtask, /* nightly=*/ false)?;
-    run_tests_for_package(Package::Vboot, /* nightly=*/ true)?;
-    run_tests_for_package(Package::Libcrdy, /* nightly=*/ true)?;
+fn run_tests(action: &TestAction) {
+    run_tests_for_package(Package::Xtask, Miri(false))?;
+    run_tests_for_package(Package::Vboot, Miri(false))?;
+    run_tests_for_package(Package::Libcrdy, Miri(false))?;
+
+    if action.miri {
+        run_tests_for_package(Package::Vboot, Miri(true))?;
+        run_tests_for_package(Package::Libcrdy, Miri(true))?;
+    }
 }
 
 #[throws]
@@ -430,7 +452,7 @@ fn run_install_toolchain() {
     Command::with_args("rustup", &["install", NIGHTLY_TC]).run()?;
     Command::with_args(
         "rustup",
-        &["component", "add", "rust-src", "--toolchain", NIGHTLY_TC],
+        &["component", "add", "rust-src", "miri", "--toolchain", NIGHTLY_TC],
     )
     .run()?;
 }
@@ -518,7 +540,7 @@ fn main() {
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
-        Action::Test(_) => run_tests(),
+        Action::Test(action) => run_tests(action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
         Action::InstallToolchain(_) => run_install_toolchain(),
