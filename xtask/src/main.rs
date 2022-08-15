@@ -266,12 +266,18 @@ fn run_clippy(conf: &Config) {
 
 #[throws]
 fn run_tests_for_package(package: Package, nightly: bool) {
-    let mut cmd = Command::new("cargo");
-    if nightly {
-        cmd.add_arg(&nightly_tc_arg());
+    // Run both miri tests and normal tests
+    let test_types = [vec!["miri"], vec![]];
+
+    for test_type in test_types.into_iter() {
+        let mut cmd = Command::new("cargo");
+        if nightly {
+            cmd.add_arg(&nightly_tc_arg());
+        }
+        cmd.add_args(&test_type);
+        cmd.add_args(&["test", "--package", package.name()]);
+        cmd.run()?;
     }
-    cmd.add_args(&["test", "--package", package.name()]);
-    cmd.run()?;
 }
 
 #[throws]
