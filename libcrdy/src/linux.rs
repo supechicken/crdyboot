@@ -72,9 +72,12 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
 
 fn entry_point_from_offset(
     data: &[u8],
-    entry_point_offset: usize,
+    entry_point_offset: u32,
 ) -> Result<Entrypoint> {
     info!("entry_point_offset: 0x{:x}", entry_point_offset);
+
+    let entry_point_offset = usize::try_from(entry_point_offset)
+        .map_err(|_| Error::Overflow("entry_point_offset"))?;
 
     // Ensure that the entry point is somewhere in the kernel data.
     if entry_point_offset >= data.len() {

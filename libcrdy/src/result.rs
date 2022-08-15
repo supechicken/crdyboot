@@ -32,8 +32,8 @@ pub enum Error {
     /// The buffer allocated to hold the kernel is not big enough.
     KernelBufferTooSmall(usize, usize),
 
-    /// Parse error from the [`goblin`] crate.
-    InvalidPe(goblin::error::Error),
+    /// Parse error from the [`object`] crate.
+    InvalidPe(object::Error),
 
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.
