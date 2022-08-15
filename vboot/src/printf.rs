@@ -96,6 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_snprintf() {
         unsafe {
             let mut buf = [0; 4];

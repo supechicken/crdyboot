@@ -277,6 +277,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_load_kernel() {
         simple_logger::init().unwrap();
 
