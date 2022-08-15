@@ -24,8 +24,8 @@ pub enum Error {
 
     LoadKernelFailed(LoadKernelError),
 
-    /// Kernel data is too small to contain boot parameters.
-    KernelTooSmall,
+    /// Attempted to access out-of-bounds data.
+    OutOfBounds(&'static str),
 
     /// Kernel's `SetupHeader` doesn't contain the expected magic bytes.
     InvalidKernelMagic,
@@ -83,8 +83,8 @@ impl fmt::Display for Error {
                 write!(f, "failed to load kernel: {}", err)
             }
 
-            KernelTooSmall => {
-                write!(f, "kernel data is too small to contain boot parameters")
+            OutOfBounds(info) => {
+                write!(f, "out of bounds: {}", info)
             }
             InvalidKernelMagic => {
                 write!(f, "invalid magic in the kernel setup header")
