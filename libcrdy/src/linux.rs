@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk::GptDisk;
-use crate::pe::PeExecutable;
+use crate::pe::PeInfo;
 use crate::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
@@ -187,7 +187,7 @@ pub fn execute_linux_kernel(
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {}", cmdline);
 
-    let pe = PeExecutable::parse(kernel.data()).map_err(Error::InvalidPe)?;
+    let pe = PeInfo::parse(kernel.data())?;
 
     let execute_linux_efi_stub = |system_table, entry_point_offset| {
         execute_linux_efi_stub(
@@ -200,11 +200,9 @@ pub fn execute_linux_kernel(
     };
 
     if is_64bit() {
-        execute_linux_efi_stub(system_table, pe.entry_point())
-    } else if let Some(entry) = pe.get_ia32_compat_entry_point() {
-        execute_linux_efi_stub(system_table, entry)
+        execute_linux_efi_stub(system_table, pe.entry_point)
     } else {
-        Err(Error::MissingIa32CompatEntryPoint)
+        execute_linux_efi_stub(system_table, pe.ia32_compat_entry_point)
     }
 }
 
