@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0cbd2ce7_aa38123e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-16T16:56:20Z",
+      "side": 1,
+      "message": "Hi, is this ready for review? It won\u0027t show up in my review list until it is moved out of WIP status.",
+      "revId": "1786ce65e0d58c45b5e1699774af716312d66857",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
