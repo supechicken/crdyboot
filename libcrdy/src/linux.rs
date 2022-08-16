@@ -204,7 +204,7 @@ pub fn execute_linux_kernel(
     } else if let Some(entry) = pe.get_ia32_compat_entry_point() {
         execute_linux_efi_stub(system_table, entry)
     } else {
-        Err(Error::KernelTooOld)
+        Err(Error::MissingIa32CompatEntryPoint)
     }
 }
 
