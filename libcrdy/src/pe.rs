@@ -15,44 +15,37 @@
 //!
 //!    efi/x86: Implement mixed mode boot without the handover protocol
 
-pub use goblin::error::Error as PeError;
+use crate::{Error, Result};
 use goblin::pe::section_table::SectionTable;
 use goblin::pe::PE;
 use scroll::Pread;
 
-/// Valid PE executable.
-pub struct PeExecutable<'a> {
-    data: &'a [u8],
-    parsed: PE<'a>,
+/// Info about a PE executable.
+pub struct PeInfo {
+    /// Primary entry point (as an offset).
+    pub entry_point: usize,
+
+    /// IA32 entry point (as an offset).
+    pub ia32_compat_entry_point: usize,
 }
 
-impl<'a> PeExecutable<'a> {
-    /// Parse `data` as a PE executable.
-    pub fn parse(data: &[u8]) -> Result<PeExecutable, PeError> {
-        Ok(PeExecutable {
-            data,
-            parsed: PE::parse(data)?,
-        })
-    }
+impl PeInfo {
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        let pe = PE::parse(data).map_err(Error::InvalidPe)?;
 
-    /// Get the primary entry point (as an offset) from the PE header.
-    pub fn entry_point(&self) -> usize {
-        self.parsed.entry
-    }
+        let section_data = find_section_data(data, &pe.sections, *b".compat\0")
+            .ok_or(Error::MissingIa32CompatEntryPoint)?;
 
-    /// Get an IA32 entry point, if available.
-    ///
-    /// This looks for a PE header named ".compat", which contains a list of
-    /// entries. Each entry can specify a machine type and an entry
-    /// point. Search for an IA32 entry and return that entry point if found.
-    pub fn get_ia32_compat_entry_point(&self) -> Option<usize> {
-        let section_data =
-            find_section_data(self.data, &self.parsed.sections, *b".compat\0")?;
-
-        find_compat_entry_point_in_section(
+        let ia32_compat_entry_point = find_compat_entry_point_in_section(
             section_data,
             goblin::pe::header::COFF_MACHINE_X86,
         )
+        .ok_or(Error::MissingIa32CompatEntryPoint)?;
+
+        Ok(Self {
+            entry_point: pe.entry,
+            ia32_compat_entry_point,
+        })
     }
 }
 
