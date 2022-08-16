@@ -34,8 +34,12 @@ pub enum Error {
     KernelBufferTooSmall(usize, usize),
 
     InvalidPe(PeError),
+
+    /// The kernel does not have an entry point for booting from 32-bit
+    /// firmware.
+    MissingIa32CompatEntryPoint,
+
     CommandLineTooBig(usize),
-    KernelTooOld,
 
     KernelDidNotTakeControl,
 }
@@ -100,11 +104,12 @@ impl fmt::Display for Error {
             InvalidPe(err) => {
                 write!(f, "invalid PE: {}", err)
             }
+            MissingIa32CompatEntryPoint => {
+                write!(f, "missing ia32 compatibility entry point")
+            }
+
             CommandLineTooBig(size) => {
                 write!(f, "kernel command line is too large: {}", size)
-            }
-            KernelTooOld => {
-                write!(f, "firmware is 32-bit but kernel doesn't have compatible entry point")
             }
 
             KernelDidNotTakeControl => {
