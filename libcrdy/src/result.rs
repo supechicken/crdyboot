@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::PeError;
 use core::fmt;
 use uefi::Status;
 use vboot::LoadKernelError;
@@ -33,7 +32,8 @@ pub enum Error {
     /// The buffer allocated to hold the kernel is not big enough.
     KernelBufferTooSmall(usize, usize),
 
-    InvalidPe(PeError),
+    /// Parse error from the [`goblin`] crate.
+    InvalidPe(goblin::error::Error),
 
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.

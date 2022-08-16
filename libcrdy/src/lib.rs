@@ -16,5 +16,4 @@ mod pe;
 mod result;
 
 pub use linux::{execute_linux_kernel, load_kernel};
-pub use pe::PeError;
 pub use result::{Error, Result};
