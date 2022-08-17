@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "046e1c5f_45a9bdd3",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 283,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-17T16:25:47Z",
+      "side": 1,
+      "message": "After thinking about it some, I don\u0027t think we actually have a strong reason to not just use the nightly toolchain for everything. In `run_clippy` for example we don\u0027t bother with that distinction. So I think the configuration can be simplified to just with-or-without-miri.\n\nI think I would prefer to make this an explicit parameter. It\u0027s a minor thing, but makes it easy to quickly comment out some of the tests. Putting it all together, something like this:\n\n```rust\nstruct Miri(bool);\n\n#[throws]\nfn run_tests_for_package(package: Package, miri: Miri) {\n    let mut cmd \u003d Command::with_args(\"cargo\", \u0026[nightly_tc_arg()]);\n    if miri.0 {\n        cmd.add_arg(\"miri\");\n    }\n    cmd.add_args(\u0026[\"test\", \"--package\", package.name()]);\n    cmd.run()?;\n}\n\n#[throws]\nfn run_tests() {\n    run_tests_for_package(Package::Xtask, Miri(false))?;\n\n    run_tests_for_package(Package::Vboot, Miri(false))?;\n    run_tests_for_package(Package::Libcrdy, Miri(false))?;\n\n    run_tests_for_package(Package::Vboot, Miri(true))?;\n    run_tests_for_package(Package::Libcrdy, Miri(true))?;\n}\n```",
+      "revId": "c6df1d18d3360237c7f08427b579a86171fc1f21",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "620b9de4_d26cf07a",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 441,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-17T16:25:47Z",
+      "side": 1,
+      "message": "We should add the `miri` component here",
+      "revId": "c6df1d18d3360237c7f08427b579a86171fc1f21",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
