@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9b382828_7cc8f1ed",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-17T20:04:47Z",
+      "side": 1,
+      "message": "Since we want miri by default, I would change this to `no_miri` (so the CLI option will be `--no-miri`), and then I don\u0027t think you need `default_miri_usage`. That also allows to drop `impl Default for TestAction`, you can just add `Default` to the `derive` list above.",
+      "revId": "1495ebd0d7b351fb03777b9ce34a25bab2100ad8",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7ce86f7e_1ae433b2",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 455,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-17T20:04:47Z",
+      "side": 1,
+      "message": "nit: add `TEST\u003dcargo xtask install-toolchain` to the commit message, since this change is not covered by `cargo xtask check`.",
+      "revId": "1495ebd0d7b351fb03777b9ce34a25bab2100ad8",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
