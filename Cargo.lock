@@ -802,7 +802,6 @@ name = "vboot"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "camino",
  "cc",
  "cty",
  "log",

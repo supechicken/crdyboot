@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
+use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -69,13 +69,22 @@ impl Target {
     }
 }
 
-fn rerun_if_changed<P: AsRef<Utf8Path>>(path: P) {
-    println!("cargo:rerun-if-changed={}", path.as_ref());
+/// Convert a `Path` to a `str`, or panic if the path isn't UTF-8.
+fn path_to_str(path: &Path) -> &str {
+    if let Some(s) = path.to_str() {
+        s
+    } else {
+        panic!("{} is not a UTF-8 path", path.display());
+    }
+}
+
+fn rerun_if_changed<P: AsRef<Path>>(path: P) {
+    println!("cargo:rerun-if-changed={}", path_to_str(path.as_ref()));
 }
 
 /// Build vboot_reference's fwlib.
-fn build_vboot_fwlib(vboot_ref: &Utf8Path, target: Target) {
-    let out_dir = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
+fn build_vboot_fwlib(vboot_ref: &Path, target: Target) {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let vboot_build_dir = out_dir
         .join("vboot_fw_build")
         .join(target.vboot_build_subdir());
@@ -97,7 +106,7 @@ fn build_vboot_fwlib(vboot_ref: &Utf8Path, target: Target) {
         .arg("V=1")
         .arg("CC=clang")
         .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
-        .arg(format!("BUILD={}", vboot_build_dir))
+        .arg(format!("BUILD={}", path_to_str(&vboot_build_dir)))
         .arg("fwlib");
     println!("{:?}", make_cmd);
     let status = make_cmd.status().expect("failed to launch make");
@@ -113,14 +122,17 @@ fn build_vboot_fwlib(vboot_ref: &Utf8Path, target: Target) {
             vboot_build_dir.join("vboot_fw.lib"),
         )
         .unwrap();
-        println!("cargo:rustc-link-lib={}", vboot_build_dir.join("vboot_fw"));
+        println!(
+            "cargo:rustc-link-lib={}",
+            path_to_str(&vboot_build_dir.join("vboot_fw"))
+        );
     } else {
         fs::copy(
             vboot_build_dir.join("vboot_fw.a"),
             vboot_build_dir.join("libvboot_fw.a"),
         )
         .unwrap();
-        println!("cargo:rustc-link-search={}", vboot_build_dir);
+        println!("cargo:rustc-link-search={}", path_to_str(&vboot_build_dir));
         println!("cargo:rustc-link-lib=static=vboot_fw");
     }
 }
@@ -128,8 +140,8 @@ fn build_vboot_fwlib(vboot_ref: &Utf8Path, target: Target) {
 /// Build a small C library to help bridge the Rust code in this crate
 /// with vboot_reference's fwlib.
 fn build_bridge_lib(
-    vboot_ref: &Utf8Path,
-    include_dirs: &[Utf8PathBuf],
+    vboot_ref: &Path,
+    include_dirs: &[PathBuf],
     target: Target,
 ) {
     let firmware = vboot_ref.join("firmware");
@@ -160,7 +172,7 @@ fn build_bridge_lib(
     builder.compile("vboot_bridge");
 }
 
-fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
+fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
     let header_path = "src/bindgen.h";
 
     rerun_if_changed(header_path);
@@ -203,7 +215,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
     }
 
     for include_dir in include_dirs {
-        builder = builder.clang_arg(format!("-I{}", include_dir));
+        builder = builder.clang_arg(format!("-I{}", path_to_str(include_dir)));
     }
 
     // Not sure why, but setting the sysroot is needed for the clang
@@ -215,7 +227,7 @@ fn gen_fwlib_bindings(include_dirs: &[Utf8PathBuf], target: Target) {
 
     let bindings = builder.generate().expect("Unable to generate bindings");
 
-    let out_path = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("vboot_bindgen.rs"))
         .expect("Couldn't write bindings!");
@@ -233,7 +245,7 @@ struct AstNode {
 
 /// Generate a Rust function that converts from a vb2_return_code integer
 /// value to a somewhat human-readable string.
-fn gen_return_code_strings(vboot_ref: &Utf8Path) {
+fn gen_return_code_strings(vboot_ref: &Path) {
     let header_path = vboot_ref.join("firmware/2lib/include/2return_codes.h");
     rerun_if_changed(&header_path);
 
@@ -243,7 +255,7 @@ fn gen_return_code_strings(vboot_ref: &Utf8Path) {
             "-Xclang",
             "-ast-dump=json",
             "-fsyntax-only",
-            header_path.as_str(),
+            path_to_str(&header_path),
         ])
         .output()
         .expect("failed to get AST (clang not found)");
@@ -283,17 +295,17 @@ fn gen_return_code_strings(vboot_ref: &Utf8Path) {
     lines.push("}".to_string());
 
     // Write to a file.
-    let out_dir = Utf8PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out_path = out_dir.join("vboot_return_codes.rs");
     fs::write(&out_path, lines.join("\n")).unwrap();
 }
 
 fn main() {
-    let vboot_ref = Utf8Path::new("../third_party/vboot_reference");
+    let vboot_ref = Path::new("../third_party/vboot_reference");
 
     let include_dirs = vec![
-        Utf8PathBuf::from("src"),
-        Utf8PathBuf::from("src/libc"),
+        PathBuf::from("src"),
+        PathBuf::from("src/libc"),
         vboot_ref.to_path_buf(),
         vboot_ref.join("firmware/2lib/include"),
         vboot_ref.join("firmware/include"),
