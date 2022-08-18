@@ -16,6 +16,24 @@
       "message": "The compat entry point wouldn\u0027t be needed if booting on a 64bit EFI implementation right?\n\nWould this introduce a failure in a previously working case?\nThat is, if booting on 64bit and there isn\u0027t a compat entry point.\n\nI suspect we won\u0027t have cases where there isn\u0027t the compat entry point so it shouldn\u0027t matter.",
       "revId": "6768a61cc72820338da27a8dd64e705ebd054af9",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "83a5ca9e_c0c940ff",
+        "filename": "libcrdy/src/linux.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 190,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-18T15:50:22Z",
+      "side": 1,
+      "message": "Correct, it\u0027s not needed in the 64-\u003e64 case.\n\nHowever, in all cases we are booting the same kernel binary, so there should never be a situation where the entry point isn\u0027t available.",
+      "parentUuid": "a63b5e89_e37482eb",
+      "revId": "6768a61cc72820338da27a8dd64e705ebd054af9",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
