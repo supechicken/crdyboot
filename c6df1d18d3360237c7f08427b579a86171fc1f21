@@ -92,6 +92,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "50b75d75_6f89e800",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 283,
+      "author": {
+        "id": 1548047
+      },
+      "writtenOn": "2022-08-18T17:57:52Z",
+      "side": 1,
+      "message": "Okay, I\u0027ve warmed up to the newtype wrapper. The only thing I don\u0027t like is the .0 syntax but I see that you can also use `from` and `into` with a little bit of boilerplate.",
+      "parentUuid": "b33142ea_887c3099",
+      "revId": "c6df1d18d3360237c7f08427b579a86171fc1f21",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "620b9de4_d26cf07a",
         "filename": "xtask/src/main.rs",
         "patchSetId": 2

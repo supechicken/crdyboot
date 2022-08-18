@@ -18,6 +18,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "8f802f04_6d372806",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1548047
+      },
+      "writtenOn": "2022-08-18T17:57:52Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "9b382828_7cc8f1ed",
+      "revId": "1495ebd0d7b351fb03777b9ce34a25bab2100ad8",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "7ce86f7e_1ae433b2",
@@ -31,6 +49,24 @@
       "writtenOn": "2022-08-17T20:04:47Z",
       "side": 1,
       "message": "nit: add `TEST\u003dcargo xtask install-toolchain` to the commit message, since this change is not covered by `cargo xtask check`.",
+      "revId": "1495ebd0d7b351fb03777b9ce34a25bab2100ad8",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "035a957f_2d1597a1",
+        "filename": "xtask/src/main.rs",
+        "patchSetId": 4
+      },
+      "lineNbr": 455,
+      "author": {
+        "id": 1548047
+      },
+      "writtenOn": "2022-08-18T17:57:52Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "7ce86f7e_1ae433b2",
       "revId": "1495ebd0d7b351fb03777b9ce34a25bab2100ad8",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
