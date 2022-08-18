@@ -781,9 +781,9 @@ dependencies = [
 
 [[package]]
 name = "uguid"
-version = "0.7.0"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8aea592525653a073645fed93e85808511dce9134a08bfda10940262fb17b5d"
+checksum = "0b8c124baa3e26db8e2aaaf70656b695601eef3b653cc3f8baa4668cdb794c95"
 
 [[package]]
 name = "unicode-ident"
