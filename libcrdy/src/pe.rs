@@ -16,10 +16,10 @@
 //!    efi/x86: Implement mixed mode boot without the handover protocol
 
 use crate::{Error, Result};
+use core::mem;
 use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::PeFile64;
 use object::{LittleEndian, Object, ObjectSection};
-use scroll::Pread;
 
 /// Info about a PE executable.
 pub struct PeInfo {
@@ -78,6 +78,27 @@ impl<'a> CompatEntryIter<'a> {
             offset: 0,
         }
     }
+
+    fn read_bytes<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let bytes = self.data.get(self.offset..self.offset + N)?;
+        self.offset += N;
+        bytes.try_into().ok()
+    }
+
+    fn read_u8(&mut self) -> Option<u8> {
+        let bytes = self.read_bytes::<{ mem::size_of::<u8>() }>()?;
+        Some(bytes[0])
+    }
+
+    fn read_u16le(&mut self) -> Option<u16> {
+        let bytes = self.read_bytes::<{ mem::size_of::<u16>() }>()?;
+        Some(u16::from_le_bytes(bytes))
+    }
+
+    fn read_u32le(&mut self) -> Option<u32> {
+        let bytes = self.read_bytes::<{ mem::size_of::<u32>() }>()?;
+        Some(u32::from_le_bytes(bytes))
+    }
 }
 
 impl<'a> Iterator for CompatEntryIter<'a> {
@@ -87,32 +108,26 @@ impl<'a> Iterator for CompatEntryIter<'a> {
         const ENTRY_TYPE_END_OF_LIST: u8 = 0;
         const ENTRY_TYPE_V1: u8 = 1;
 
-        let mut offset = self.offset;
-        let ctx = scroll::LE;
+        let orig_offset = self.offset;
 
         // Get the entry_type type, end iteration if at the end of the
         // entries.
-        let entry_type: u8 = self.data.gread_with(&mut offset, ctx).ok()?;
+        let entry_type = self.read_u8()?;
         if entry_type == ENTRY_TYPE_END_OF_LIST {
             return None;
         }
 
         // Get the entry size in bytes. End iteration if this is zero to
         // prevent a potential infinite loop.
-        let entry_size: u8 = self.data.gread_with(&mut offset, ctx).ok()?;
+        let entry_size = self.read_u8()?;
         if entry_size == 0 {
             return None;
         }
 
-        // Update iterator offset.
-        self.offset += usize::from(entry_size);
-
         let entry_v1 = if entry_type == ENTRY_TYPE_V1 {
             // Known entry type, read machine type and entry point.
-            let machine_type: u16 =
-                self.data.gread_with(&mut offset, ctx).ok()?;
-            let entry_point: u32 =
-                self.data.gread_with(&mut offset, ctx).ok()?;
+            let machine_type = self.read_u16le()?;
+            let entry_point = self.read_u32le()?;
 
             Some(CompatEntryV1 {
                 machine_type,
@@ -122,6 +137,9 @@ impl<'a> Iterator for CompatEntryIter<'a> {
             // Otherwise return an empty entry.
             None
         };
+
+        // Update iterator offset to point at the next entry.
+        self.offset = orig_offset + usize::from(entry_size);
 
         Some(CompatEntry {
             entry_type,
