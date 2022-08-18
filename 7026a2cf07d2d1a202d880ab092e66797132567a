@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3e960cc9_b9e30793",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-08-18T18:39:14Z",
+      "side": 1,
+      "message": "Oops, I missed that there\u0027s a formatting error -- `cargo fmt --all`",
+      "revId": "7026a2cf07d2d1a202d880ab092e66797132567a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
