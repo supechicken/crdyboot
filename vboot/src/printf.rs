@@ -105,7 +105,7 @@ mod tests {
                 snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
-                    b"%d %d".as_ptr().cast(),
+                    b"%d %d\0".as_ptr().cast(),
                     1,
                     2
                 ),
@@ -121,7 +121,7 @@ mod tests {
                 snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
-                    b"%d %d %d".as_ptr().cast(),
+                    b"%d %d %d\0".as_ptr().cast(),
                     1,
                     2,
                     3
