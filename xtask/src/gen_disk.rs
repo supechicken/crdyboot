@@ -471,8 +471,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
     #[rustfmt::skip]
     Command::with_args(futility, &["vbutil_kernel",
         "--pack", signed_kernel_partition.as_str(),
-        "--keyblock", kernel_data_key.keyblock().as_str(),
-        "--signprivate", kernel_data_key.vbprivk().as_str(),
+        "--keyblock", kernel_data_key.keyblock.as_ref().unwrap().as_str(),
+        "--signprivate", kernel_data_key.vbprivk.as_str(),
         "--version", &version.to_string(),
         "--vmlinuz", vmlinuz.as_str(),
         "--bootloader", bootloader.as_str(),
@@ -490,7 +490,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
             "--verify",
             signed_kernel_partition.as_str(),
             "--signpubkey",
-            kernel_key.vbpubk().as_str(),
+            kernel_key.vbpubk.as_str(),
         ],
     )
     .run()?;
