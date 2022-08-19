@@ -4,7 +4,7 @@
 
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::sign::{self, KeyPaths};
+use crate::sign::{self, SecureBootKeyPaths};
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -352,7 +352,7 @@ pub struct SignAndUpdateBootloader<'a> {
     pub disk_path: &'a Utf8Path,
 
     /// Keys to sign with.
-    pub key_paths: KeyPaths,
+    pub key_paths: SecureBootKeyPaths,
 
     /// Mapping from source file path (an unsigned bootloader
     /// executable) to the destination file name (within the EFI/BOOT

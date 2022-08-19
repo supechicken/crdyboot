@@ -6,7 +6,7 @@ use crate::arch::Arch;
 use crate::build_mode::BuildMode;
 use crate::package::Package;
 use crate::qemu::OvmfPaths;
-use crate::sign::KeyPaths;
+use crate::sign::{SecureBootKeyPaths, VbootKeyPaths};
 use anyhow::Error;
 use camino::{Utf8Path, Utf8PathBuf};
 use fehler::throws;
@@ -144,25 +144,29 @@ impl Config {
 
     /// Key used to sign the kernel keyblock which contains the public
     /// part of the kernel_data_key.
-    pub fn kernel_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("test_kernel_key"))
+    pub fn kernel_key_paths(&self) -> VbootKeyPaths {
+        VbootKeyPaths::new(self.workspace_path().join("test_kernel_key"))
     }
 
     /// Key used to sign the kernel data.
-    pub fn kernel_data_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("test_kernel_data_key"))
+    pub fn kernel_data_key_paths(&self) -> VbootKeyPaths {
+        VbootKeyPaths::new(self.workspace_path().join("test_kernel_data_key"))
     }
 
     /// This cert will be enrolled as the PK, first KEK, and first DB
     /// entry. The private key is used to sign shim.
-    pub fn secure_boot_root_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("secure_boot_root_key"))
+    pub fn secure_boot_root_key_paths(&self) -> SecureBootKeyPaths {
+        SecureBootKeyPaths::new(
+            self.workspace_path().join("secure_boot_root_key"),
+        )
     }
 
     /// This cert is embedded in shim and the private key is used to
     /// sign crdyboot.
-    pub fn secure_boot_shim_key_paths(&self) -> KeyPaths {
-        KeyPaths::new(self.workspace_path().join("secure_boot_shim_key"))
+    pub fn secure_boot_shim_key_paths(&self) -> SecureBootKeyPaths {
+        SecureBootKeyPaths::new(
+            self.workspace_path().join("secure_boot_shim_key"),
+        )
     }
 
     pub fn shim_build_path(&self) -> Utf8PathBuf {
