@@ -1,12 +1,12 @@
 use crate::config::Config;
-use crate::sign::KeyPaths;
+use crate::sign::VbootKeyPaths;
 use anyhow::{Context, Error};
 use camino::Utf8Path;
 use command_run::Command;
 use fehler::throws;
 
 #[throws]
-fn gen_key(key_paths: &KeyPaths) {
+fn gen_key(key_paths: &VbootKeyPaths) {
     let path = key_paths.priv_pem();
     // Key generation takes a while, so don't do it if the key
     // already exists.
@@ -35,7 +35,7 @@ fn gen_key(key_paths: &KeyPaths) {
 
 /// Generate .vbprivk and .vbpubk files from a .pem file.
 #[throws]
-fn gen_keypair(futility_path: &Utf8Path, key_paths: &KeyPaths) {
+fn gen_keypair(futility_path: &Utf8Path, key_paths: &VbootKeyPaths) {
     Command::with_args(
         futility_path,
         &[
@@ -55,8 +55,8 @@ fn gen_keypair(futility_path: &Utf8Path, key_paths: &KeyPaths) {
 #[throws]
 fn gen_keyblock(
     futility_path: &Utf8Path,
-    kernel_key: &KeyPaths,
-    kernel_data_key: &KeyPaths,
+    kernel_key: &VbootKeyPaths,
+    kernel_data_key: &VbootKeyPaths,
 ) {
     // Copied from vboot_reference/firmware/2lib/include/2struct.h
     const VB2_KEYBLOCK_FLAG_DEVELOPER_0: u32 = 0x1;

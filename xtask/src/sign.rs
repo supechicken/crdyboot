@@ -8,13 +8,13 @@ use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 
-pub struct KeyPaths {
+pub struct VbootKeyPaths {
     dir: Utf8PathBuf,
 }
 
-impl KeyPaths {
-    pub fn new(dir: Utf8PathBuf) -> KeyPaths {
-        KeyPaths { dir }
+impl VbootKeyPaths {
+    pub fn new(dir: Utf8PathBuf) -> Self {
+        Self { dir }
     }
 
     /// Create the directory if it doesn't exist.
@@ -37,10 +37,6 @@ impl KeyPaths {
         self.dir.join("key.pub.pem")
     }
 
-    pub fn pub_der(&self) -> Utf8PathBuf {
-        self.dir.join("key.pub.der")
-    }
-
     pub fn vbprivk(&self) -> Utf8PathBuf {
         self.dir.join("key.vbprivk")
     }
@@ -51,6 +47,36 @@ impl KeyPaths {
 
     pub fn keyblock(&self) -> Utf8PathBuf {
         self.dir.join("key.keyblock")
+    }
+}
+
+pub struct SecureBootKeyPaths {
+    dir: Utf8PathBuf,
+}
+
+impl SecureBootKeyPaths {
+    pub fn new(dir: Utf8PathBuf) -> Self {
+        Self { dir }
+    }
+
+    /// Create the directory if it doesn't exist.
+    #[throws]
+    pub fn create_dir(&self) {
+        if !self.dir.exists() {
+            fs::create_dir(&self.dir)?;
+        }
+    }
+
+    pub fn priv_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.priv.pem")
+    }
+
+    pub fn pub_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.pub.pem")
+    }
+
+    pub fn pub_der(&self) -> Utf8PathBuf {
+        self.dir.join("key.pub.der")
     }
 
     pub fn pk_and_kek_var(&self) -> Utf8PathBuf {
@@ -63,7 +89,7 @@ impl KeyPaths {
 }
 
 #[throws]
-pub fn generate_key(paths: &KeyPaths, name: &str) {
+pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) {
     paths.create_dir()?;
 
     if paths.priv_pem().exists()
@@ -89,7 +115,7 @@ pub fn generate_key(paths: &KeyPaths, name: &str) {
 }
 
 #[throws]
-pub fn generate_signed_vars(paths: &KeyPaths, var_name: &str) {
+pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let unsigned_var = tmp_path.join("unsigned_var");
@@ -141,7 +167,7 @@ fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
 /// Sign the file at `src` using the keys provided by `key_paths`. The
 /// signed result is written to `dst` (and the `src` is never modified).
 #[throws]
-pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &KeyPaths) {
+pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) {
     #[rustfmt::skip]
     Command::with_args("sbsign", &[
         "--key", key_paths.priv_pem().as_str(),
