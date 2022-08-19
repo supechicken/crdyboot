@@ -83,7 +83,7 @@ fn rerun_if_changed<P: AsRef<Path>>(path: P) {
 }
 
 /// Build vboot_reference's fwlib.
-fn build_vboot_fwlib(vboot_ref: &Path, target: Target) {
+fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let vboot_build_dir = out_dir
         .join("vboot_fw_build")
@@ -104,7 +104,7 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target) {
         .arg("-C")
         .arg(vboot_ref)
         .arg("V=1")
-        .arg("CC=clang")
+        .arg(format!("CC={}", c_compiler))
         .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
         .arg(format!("BUILD={}", path_to_str(&vboot_build_dir)))
         .arg("fwlib");
@@ -143,6 +143,7 @@ fn build_bridge_lib(
     vboot_ref: &Path,
     include_dirs: &[PathBuf],
     target: Target,
+    c_compiler: &str,
 ) {
     let firmware = vboot_ref.join("firmware");
     let source_files = [
@@ -158,7 +159,7 @@ fn build_bridge_lib(
 
     let mut builder = cc::Build::new();
     builder
-        .compiler("clang")
+        .compiler(c_compiler)
         .flag("-Wno-address-of-packed-member")
         .flag("-Wno-int-to-pointer-cast")
         .flag("-Wno-sign-compare")
@@ -245,12 +246,12 @@ struct AstNode {
 
 /// Generate a Rust function that converts from a vb2_return_code integer
 /// value to a somewhat human-readable string.
-fn gen_return_code_strings(vboot_ref: &Path) {
+fn gen_return_code_strings(vboot_ref: &Path, c_compiler: &str) {
     let header_path = vboot_ref.join("firmware/2lib/include/2return_codes.h");
     rerun_if_changed(&header_path);
 
     // Use clang to get an AST in JSON.
-    let output = process::Command::new("clang")
+    let output = process::Command::new(c_compiler)
         .args(&[
             "-Xclang",
             "-ast-dump=json",
@@ -301,6 +302,8 @@ fn gen_return_code_strings(vboot_ref: &Path) {
 }
 
 fn main() {
+    let c_compiler = env::var("CC").unwrap_or_else(|_| "clang".to_owned());
+
     let vboot_ref = Path::new("../third_party/vboot_reference");
 
     let include_dirs = vec![
@@ -314,9 +317,9 @@ fn main() {
 
     let target = Target::from_env();
 
-    build_vboot_fwlib(vboot_ref, target);
-    build_bridge_lib(vboot_ref, &include_dirs, target);
+    build_vboot_fwlib(vboot_ref, target, &c_compiler);
+    build_bridge_lib(vboot_ref, &include_dirs, target, &c_compiler);
 
     gen_fwlib_bindings(&include_dirs, target);
-    gen_return_code_strings(vboot_ref);
+    gen_return_code_strings(vboot_ref, &c_compiler);
 }
