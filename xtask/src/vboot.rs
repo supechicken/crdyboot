@@ -1,9 +1,55 @@
+// Copyright 2022 The ChromiumOS Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 use crate::config::Config;
-use crate::sign::VbootKeyPaths;
 use anyhow::{Context, Error};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fehler::throws;
+use fs_err as fs;
+
+pub struct VbootKeyPaths {
+    dir: Utf8PathBuf,
+}
+
+impl VbootKeyPaths {
+    pub fn new(dir: Utf8PathBuf) -> Self {
+        Self { dir }
+    }
+
+    /// Create the directory if it doesn't exist.
+    #[throws]
+    pub fn create_dir(&self) {
+        if !self.dir.exists() {
+            fs::create_dir(&self.dir)?;
+        }
+    }
+
+    pub fn base_name_path(&self) -> Utf8PathBuf {
+        self.dir.join("key")
+    }
+
+    pub fn priv_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.priv.pem")
+    }
+
+    pub fn pub_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key.pub.pem")
+    }
+
+    pub fn vbprivk(&self) -> Utf8PathBuf {
+        self.dir.join("key.vbprivk")
+    }
+
+    pub fn vbpubk(&self) -> Utf8PathBuf {
+        self.dir.join("key.vbpubk")
+    }
+
+    pub fn keyblock(&self) -> Utf8PathBuf {
+        self.dir.join("key.keyblock")
+    }
+}
 
 #[throws]
 fn gen_key(key_paths: &VbootKeyPaths) {

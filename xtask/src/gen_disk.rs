@@ -4,7 +4,7 @@
 
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::sign::{self, SecureBootKeyPaths};
+use crate::secure_boot::{self, SecureBootKeyPaths};
 use anyhow::{Context, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -371,7 +371,7 @@ impl<'a> SignAndUpdateBootloader<'a> {
 
         for (src, dst_name) in &self.mapping {
             let signed_src = tmp_path.join(dst_name);
-            sign::sign(src, &signed_src, &self.key_paths)?;
+            secure_boot::sign(src, &signed_src, &self.key_paths)?;
         }
 
         update_boot_files(self.disk_path, tmp_path)?;
