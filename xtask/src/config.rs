@@ -123,6 +123,10 @@ impl Config {
         self.vboot_reference_path().join("build/futility/futility")
     }
 
+    fn vboot_devkeys_path(&self) -> Utf8PathBuf {
+        self.vboot_reference_path().join("tests/devkeys")
+    }
+
     pub fn disk_path(&self) -> &Utf8Path {
         &self.disk_path
     }
@@ -146,12 +150,22 @@ impl Config {
     /// Key used to sign the kernel keyblock which contains the public
     /// part of the kernel_data_key.
     pub fn kernel_key_paths(&self) -> VbootKeyPaths {
-        VbootKeyPaths::new(self.workspace_path().join("test_kernel_key"))
+        let devkeys = self.vboot_devkeys_path();
+        VbootKeyPaths {
+            vbprivk: devkeys.join("kernel_subkey.vbprivk"),
+            vbpubk: devkeys.join("kernel_subkey.vbpubk"),
+            keyblock: None,
+        }
     }
 
     /// Key used to sign the kernel data.
     pub fn kernel_data_key_paths(&self) -> VbootKeyPaths {
-        VbootKeyPaths::new(self.workspace_path().join("test_kernel_data_key"))
+        let devkeys = self.vboot_devkeys_path();
+        VbootKeyPaths {
+            vbprivk: devkeys.join("kernel_data_key.vbprivk"),
+            vbpubk: devkeys.join("kernel_data_key.vbpubk"),
+            keyblock: Some(devkeys.join("kernel.keyblock")),
+        }
     }
 
     /// This cert will be enrolled as the PK, first KEK, and first DB
