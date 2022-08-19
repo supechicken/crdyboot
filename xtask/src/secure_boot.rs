@@ -8,48 +8,6 @@ use command_run::Command;
 use fehler::throws;
 use fs_err as fs;
 
-pub struct VbootKeyPaths {
-    dir: Utf8PathBuf,
-}
-
-impl VbootKeyPaths {
-    pub fn new(dir: Utf8PathBuf) -> Self {
-        Self { dir }
-    }
-
-    /// Create the directory if it doesn't exist.
-    #[throws]
-    pub fn create_dir(&self) {
-        if !self.dir.exists() {
-            fs::create_dir(&self.dir)?;
-        }
-    }
-
-    pub fn base_name_path(&self) -> Utf8PathBuf {
-        self.dir.join("key")
-    }
-
-    pub fn priv_pem(&self) -> Utf8PathBuf {
-        self.dir.join("key.priv.pem")
-    }
-
-    pub fn pub_pem(&self) -> Utf8PathBuf {
-        self.dir.join("key.pub.pem")
-    }
-
-    pub fn vbprivk(&self) -> Utf8PathBuf {
-        self.dir.join("key.vbprivk")
-    }
-
-    pub fn vbpubk(&self) -> Utf8PathBuf {
-        self.dir.join("key.vbpubk")
-    }
-
-    pub fn keyblock(&self) -> Utf8PathBuf {
-        self.dir.join("key.keyblock")
-    }
-}
-
 pub struct SecureBootKeyPaths {
     dir: Utf8PathBuf,
 }

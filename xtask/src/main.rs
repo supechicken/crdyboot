@@ -2,11 +2,11 @@ mod arch;
 mod build_mode;
 mod config;
 mod gen_disk;
-mod gen_keys;
 mod package;
 mod qemu;
+mod secure_boot;
 mod shim;
-mod sign;
+mod vboot;
 
 use anyhow::{anyhow, Error};
 use arch::Arch;
@@ -294,19 +294,19 @@ fn run_tests(action: &TestAction) {
 
 #[throws]
 fn generate_secure_boot_keys(conf: &Config) {
-    sign::generate_key(
+    secure_boot::generate_key(
         &conf.secure_boot_root_key_paths(),
         "SecureBootRootTestKey",
     )?;
-    sign::generate_key(
+    secure_boot::generate_key(
         &conf.secure_boot_shim_key_paths(),
         "SecureBootShimTestKey",
     )?;
 
     let root_key_paths = conf.secure_boot_root_key_paths();
     // Generate the PK/KEK and db vars for use with the enroller.
-    sign::generate_signed_vars(&root_key_paths, "PK")?;
-    sign::generate_signed_vars(&root_key_paths, "db")?;
+    secure_boot::generate_signed_vars(&root_key_paths, "PK")?;
+    secure_boot::generate_signed_vars(&root_key_paths, "db")?;
 }
 
 #[throws]
@@ -402,7 +402,7 @@ fn run_setup(conf: &Config, action: &SetupAction) {
 
     build_futility(conf)?;
 
-    gen_keys::generate_test_keys(conf)?;
+    vboot::generate_test_keys(conf)?;
 
     generate_secure_boot_keys(conf)?;
     run_build_enroller(conf)?;
