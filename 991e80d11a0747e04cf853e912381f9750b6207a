@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "474c0889_eba405a3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-08-20T01:20:40Z",
+      "side": 1,
+      "message": "Is this used anywhere or intended to be used anywhere?\n\nIf I `touch vboot/src/bridge.c` and `CC\u003dgcc cargo xtask check` it fails on my system. However, I might be missing some sort of deps and such.",
+      "revId": "991e80d11a0747e04cf853e912381f9750b6207a",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
