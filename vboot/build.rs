@@ -114,27 +114,18 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
         panic!("make failed");
     }
 
-    // Rename the vboot_fw library to match the pattern expected for the
-    // current target, then tell cargo to link that library in.
-    if target.is_uefi() {
-        fs::copy(
-            vboot_build_dir.join("vboot_fw.a"),
-            vboot_build_dir.join("vboot_fw.lib"),
-        )
-        .unwrap();
-        println!(
-            "cargo:rustc-link-lib={}",
-            path_to_str(&vboot_build_dir.join("vboot_fw"))
-        );
-    } else {
-        fs::copy(
-            vboot_build_dir.join("vboot_fw.a"),
-            vboot_build_dir.join("libvboot_fw.a"),
-        )
-        .unwrap();
-        println!("cargo:rustc-link-search={}", path_to_str(&vboot_build_dir));
-        println!("cargo:rustc-link-lib=static=vboot_fw");
-    }
+    // Rename the vboot_fw library to match the pattern expected by the
+    // linker, then tell cargo to link that library in.
+    fs::copy(
+        vboot_build_dir.join("vboot_fw.a"),
+        vboot_build_dir.join("libvboot_fw.a"),
+    )
+    .unwrap();
+    println!(
+        "cargo:rustc-link-search=native={}",
+        path_to_str(&vboot_build_dir)
+    );
+    println!("cargo:rustc-link-lib=static=vboot_fw");
 }
 
 /// Build a small C library to help bridge the Rust code in this crate
