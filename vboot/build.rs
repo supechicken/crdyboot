@@ -140,7 +140,6 @@ fn build_bridge_lib(
     let source_files = [
         "src/bridge.c".into(),
         // Stubs
-        firmware.join("2lib/2stub_hwcrypto.c"),
         firmware.join("stub/vboot_api_stub_stream.c"),
     ];
 
@@ -152,8 +151,6 @@ fn build_bridge_lib(
     builder
         .compiler(c_compiler)
         .flag("-Wno-address-of-packed-member")
-        .flag("-Wno-int-to-pointer-cast")
-        .flag("-Wno-sign-compare")
         .flag("-Wno-unused-parameter")
         .warnings_into_errors(true)
         .includes(include_dirs)
