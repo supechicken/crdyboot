@@ -8,13 +8,12 @@ mod secure_boot;
 mod shim;
 mod vboot;
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Result};
 use arch::Arch;
 use argh::FromArgs;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use config::Config;
-use fehler::throws;
 use fs_err as fs;
 use package::Package;
 use qemu::{Display, Qemu, VarAccess};
@@ -139,8 +138,7 @@ struct WritediskAction {}
 #[argh(subcommand, name = "install-toolchain")]
 struct InstallToolchainAction {}
 
-#[throws]
-fn run_cargo_deny() {
+fn run_cargo_deny() -> Result<()> {
     // Check if cargo-deny is installed, and install it if not.
     if Command::with_args("cargo", &["deny", "--version"])
         .enable_capture()
@@ -153,15 +151,16 @@ fn run_cargo_deny() {
 
     // Run cargo-deny. This uses the config in `.deny.toml`.
     Command::with_args("cargo", &["deny", "check"]).run()?;
+
+    Ok(())
 }
 
-#[throws]
-fn run_check(conf: &Config) {
+fn run_check(conf: &Config) -> Result<()> {
     run_cargo_deny()?;
     run_rustfmt(&FormatAction { check: true })?;
     run_tests(&Default::default())?;
     run_crdyboot_build(conf)?;
-    run_clippy(conf)?;
+    run_clippy(conf)
 }
 
 /// Add cargo features to a command. Does nothing if `features` is empty.
@@ -171,8 +170,7 @@ fn add_cargo_features_args(cmd: &mut Command, features: &[&str]) {
     }
 }
 
-#[throws]
-fn run_uefi_build(conf: &Config, package: Package) {
+fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
     let features = conf.get_package_features(package);
     let build_mode = conf.build_mode();
 
@@ -194,15 +192,15 @@ fn run_uefi_build(conf: &Config, package: Package) {
         cmd.add_args(build_mode.cargo_args());
         cmd.run()?;
     }
+
+    Ok(())
 }
 
-#[throws]
-fn run_crdyboot_build(conf: &Config) {
-    run_uefi_build(conf, Package::Crdyboot)?;
+fn run_crdyboot_build(conf: &Config) -> Result<()> {
+    run_uefi_build(conf, Package::Crdyboot)
 }
 
-#[throws]
-pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
+pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
     // Clone repo if not already cloned, otherwise just fetch.
     if path.exists() {
         Command::with_args("git", &["-C", path.as_str(), "fetch"]).run()?;
@@ -219,17 +217,17 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) {
         &["-C", path.as_str(), "submodule", "update", "--init"],
     )
     .run()?;
+
+    Ok(())
 }
 
-#[throws]
-fn run_build_enroller(conf: &Config) {
+fn run_build_enroller(conf: &Config) -> Result<()> {
     run_uefi_build(conf, Package::Enroller)?;
 
-    gen_disk::gen_enroller_disk(conf)?;
+    gen_disk::gen_enroller_disk(conf)
 }
 
-#[throws]
-fn copy_file<S, D>(src: S, dst: D)
+fn copy_file<S, D>(src: S, dst: D) -> Result<()>
 where
     S: AsRef<Utf8Path>,
     D: AsRef<Utf8Path>,
@@ -238,28 +236,29 @@ where
     let dst = dst.as_ref();
     println!("copy {} to {}", src, dst);
     fs::copy(src, dst)?;
+
+    Ok(())
 }
 
-#[throws]
-fn run_rustfmt(action: &FormatAction) {
+fn run_rustfmt(action: &FormatAction) -> Result<()> {
     let mut cmd = Command::with_args("cargo", &["fmt", "--all"]);
     if action.check {
         cmd.add_args(&["--", "--check"]);
     }
     cmd.run()?;
+
+    Ok(())
 }
 
-#[throws]
-fn run_prep_disk(conf: &Config) {
+fn run_prep_disk(conf: &Config) -> Result<()> {
     shim::update_shim(conf)?;
 
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(conf, "KERN-A")?;
-    gen_disk::sign_kernel_partition(conf, "KERN-B")?;
+    gen_disk::sign_kernel_partition(conf, "KERN-B")
 }
 
-#[throws]
-fn run_clippy(conf: &Config) {
+fn run_clippy(conf: &Config) -> Result<()> {
     for package in Package::all() {
         let mut cmd = Command::with_args(
             "cargo",
@@ -268,20 +267,22 @@ fn run_clippy(conf: &Config) {
         add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
         cmd.run()?;
     }
+
+    Ok(())
 }
 
-#[throws]
-fn run_tests_for_package(package: Package, miri: Miri) {
+fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
     let mut cmd = Command::with_args("cargo", &[nightly_tc_arg()]);
     if miri.0 {
         cmd.add_arg("miri");
     }
     cmd.add_args(&["test", "--package", package.name()]);
     cmd.run()?;
+
+    Ok(())
 }
 
-#[throws]
-fn run_tests(action: &TestAction) {
+fn run_tests(action: &TestAction) -> Result<()> {
     run_tests_for_package(Package::Xtask, Miri(false))?;
     run_tests_for_package(Package::Vboot, Miri(false))?;
     run_tests_for_package(Package::Libcrdy, Miri(false))?;
@@ -290,10 +291,11 @@ fn run_tests(action: &TestAction) {
         run_tests_for_package(Package::Vboot, Miri(true))?;
         run_tests_for_package(Package::Libcrdy, Miri(true))?;
     }
+
+    Ok(())
 }
 
-#[throws]
-fn generate_secure_boot_keys(conf: &Config) {
+fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
     secure_boot::generate_key(
         &conf.secure_boot_root_key_paths(),
         "SecureBootRootTestKey",
@@ -306,11 +308,10 @@ fn generate_secure_boot_keys(conf: &Config) {
     let root_key_paths = conf.secure_boot_root_key_paths();
     // Generate the PK/KEK and db vars for use with the enroller.
     secure_boot::generate_signed_vars(&root_key_paths, "PK")?;
-    secure_boot::generate_signed_vars(&root_key_paths, "db")?;
+    secure_boot::generate_signed_vars(&root_key_paths, "db")
 }
 
-#[throws]
-fn init_submodules(conf: &Config) {
+fn init_submodules(conf: &Config) -> Result<()> {
     Command::with_args(
         "git",
         &[
@@ -322,11 +323,12 @@ fn init_submodules(conf: &Config) {
         ],
     )
     .run()?;
+
+    Ok(())
 }
 
 /// Run the enroller in a VM to set up UEFI variables for secure boot.
-#[throws]
-fn enroll_secure_boot_keys(conf: &Config) {
+fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
     for arch in Arch::all() {
         let ovmf = conf.ovmf_paths(arch);
 
@@ -352,22 +354,24 @@ fn enroll_secure_boot_keys(conf: &Config) {
             Display::None,
         )?;
     }
+
+    Ok(())
 }
 
 /// Fix build errors caused by a vboot upgrade.
-#[throws]
-fn clean_futility_build(conf: &Config) {
+fn clean_futility_build(conf: &Config) -> Result<()> {
     Command::with_args(
         "make",
         &["-C", conf.vboot_reference_path().as_str(), "clean"],
     )
     .run()?;
+
+    Ok(())
 }
 
 /// Build futility, the firmware utility executable that is part of
 /// vboot_reference.
-#[throws]
-fn build_futility(conf: &Config) {
+fn build_futility(conf: &Config) -> Result<()> {
     let mut cmd = Command::with_args(
         "make",
         &[
@@ -381,12 +385,13 @@ fn build_futility(conf: &Config) {
     cmd.env
         .insert("CFLAGS".into(), "-Wno-deprecated-declarations".into());
     cmd.run()?;
+
+    Ok(())
 }
 
 // Run various setup operations. This must be run once before running
 // any other xtask commands.
-#[throws]
-fn run_setup(conf: &Config, action: &SetupAction) {
+fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
     init_submodules(conf)?;
 
     if let Some(disk_image) = &action.disk_image {
@@ -411,11 +416,10 @@ fn run_setup(conf: &Config, action: &SetupAction) {
     run_prep_disk(conf)?;
 
     // Generate a disk image used by the `test_load_kernel` vboot test.
-    gen_disk::gen_vboot_test_disk(conf)?;
+    gen_disk::gen_vboot_test_disk(conf)
 }
 
-#[throws]
-fn run_qemu(conf: &Config, action: &QemuAction) {
+fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
     let disk = conf.disk_path();
 
     let ovmf = if action.ia32 {
@@ -426,16 +430,15 @@ fn run_qemu(conf: &Config, action: &QemuAction) {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = action.secure_boot;
-    qemu.run_disk_image(disk, VarAccess::ReadOnly, action.display)?;
+    qemu.run_disk_image(disk, VarAccess::ReadOnly, action.display)
 }
 
-#[throws]
-fn run_writedisk(conf: &Config) {
+fn run_writedisk(conf: &Config) -> Result<()> {
     Command::with_args("writedisk", &[conf.disk_path()]).run()?;
+    Ok(())
 }
 
-#[throws]
-fn run_install_toolchain() {
+fn run_install_toolchain() -> Result<()> {
     Command::with_args("rustup", &["install", NIGHTLY_TC]).run()?;
     Command::with_args(
         "rustup",
@@ -449,32 +452,32 @@ fn run_install_toolchain() {
         ],
     )
     .run()?;
+    Ok(())
 }
 
-#[throws]
-fn rerun_setup_if_needed(action: &Action, conf: &Config) {
+fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
     let current_version = 3;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
-        return;
+        return Ok(());
     }
 
     // Don't run setup if the user is installing the toolchain.
     if matches!(action, Action::InstallToolchain(_)) {
-        return;
+        return Ok(());
     }
 
     // Don't try to run setup if the workspace doesn't exist yet.
     if !conf.workspace_path().exists() {
-        return;
+        return Ok(());
     }
 
     // Nothing to do if the version is already high enough.
     let existing_version = conf.read_setup_version();
     if existing_version >= current_version {
-        return;
+        return Ok(());
     }
 
     println!(
@@ -491,26 +494,24 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) {
     // End version-specific cleanup operations.
 
     run_setup(conf, &SetupAction { disk_image: None })?;
-    conf.write_setup_version(current_version)?;
+    conf.write_setup_version(current_version)
 }
 
 /// Get the repo root path. This assumes this executable is located at
 /// <repo>/target/<buildmode>/<exe>.
-#[throws]
-fn get_repo_path() -> Utf8PathBuf {
+fn get_repo_path() -> Result<Utf8PathBuf> {
     let exe_path = env::current_exe()?;
     let repo_path = exe_path
         .parent()
         .and_then(|path| path.parent())
         .and_then(|path| path.parent())
         .ok_or_else(|| anyhow!("repo path: not enough parents"))?;
-    Utf8Path::from_path(repo_path)
+    Ok(Utf8Path::from_path(repo_path)
         .ok_or_else(|| anyhow!("repo path: not utf-8"))?
-        .to_path_buf()
+        .to_path_buf())
 }
 
-#[throws]
-fn main() {
+fn main() -> Result<()> {
     let opt: Opt = argh::from_env();
     let repo_root = get_repo_path()?;
 
@@ -538,5 +539,5 @@ fn main() {
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
         Action::InstallToolchain(_) => run_install_toolchain(),
-    }?;
+    }
 }

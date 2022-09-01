@@ -5,14 +5,12 @@
 use crate::arch::Arch;
 use crate::config::Config;
 use crate::{copy_file, gen_disk};
-use anyhow::Error;
+use anyhow::Result;
 use command_run::Command;
-use fehler::throws;
 use fs_err as fs;
 use gen_disk::SignAndUpdateBootloader;
 
-#[throws]
-fn build_shim(conf: &Config) {
+fn build_shim(conf: &Config) -> Result<()> {
     let shim_dir = conf.shim_build_path();
     let shim_url = "https://chromium.googlesource.com/chromiumos/shim-review";
     let shim_rev = "6e743839a611dceafccdf4b592bad1c23ecb20f5";
@@ -53,11 +51,12 @@ fn build_shim(conf: &Config) {
     Command::with_args("make", &["copy"])
         .set_dir(&shim_dir)
         .run()?;
+
+    Ok(())
 }
 
 /// Build shim, sign it, and copy into the disk image.
-#[throws]
-pub fn update_shim(conf: &Config) {
+pub fn update_shim(conf: &Config) -> Result<()> {
     build_shim(conf)?;
 
     SignAndUpdateBootloader {
@@ -73,5 +72,5 @@ pub fn update_shim(conf: &Config) {
             })
             .collect(),
     }
-    .run()?;
+    .run()
 }

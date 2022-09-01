@@ -5,14 +5,13 @@
 use crate::arch::Arch;
 use crate::config::Config;
 use crate::secure_boot::{self, SecureBootKeyPaths};
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fatfs::{
     FileSystem, FormatVolumeOptions, FsOptions, LossyOemCpConverter,
     NullTimeProvider, StdIoWrapper,
 };
-use fehler::throws;
 use fs_err::{self as fs, File, OpenOptions};
 use gpt_disk_types::{
     guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive,
@@ -26,8 +25,7 @@ const SECTOR_SIZE: u64 = 512;
 
 /// Create an empty file with the given size (using the `truncate`
 /// command). This will delete the file first if it already exists.
-#[throws]
-fn create_empty_file_with_size(path: &Utf8Path, size: &str) {
+fn create_empty_file_with_size(path: &Utf8Path, size: &str) -> Result<()> {
     // Delete the file if it already exists.
     if path.exists() {
         fs::remove_file(&path)?;
@@ -35,6 +33,8 @@ fn create_empty_file_with_size(path: &Utf8Path, size: &str) {
 
     // Generate empty image.
     Command::with_args("truncate", &["--size", size, path.as_str()]).run()?;
+
+    Ok(())
 }
 
 struct PartitionSettings<'a> {
@@ -69,13 +69,12 @@ impl<'a> PartitionSettings<'a> {
 
 /// Open `path` in read+write mode, without truncating the existing
 /// file. This will return an error if the file doesn't exist.
-#[throws]
-fn open_rw(path: &Utf8Path) -> File {
-    OpenOptions::new()
+fn open_rw(path: &Utf8Path) -> Result<File> {
+    Ok(OpenOptions::new()
         .read(true)
         .write(true)
         .truncate(false)
-        .open(path)?
+        .open(path)?)
 }
 
 struct DiskSettings<'a> {
@@ -86,8 +85,7 @@ struct DiskSettings<'a> {
 }
 
 impl<'a> DiskSettings<'a> {
-    #[throws]
-    fn create(&self) {
+    fn create(&self) -> Result<()> {
         create_empty_file_with_size(self.path, self.size)?;
 
         let mut disk_file = open_rw(self.path)?;
@@ -117,6 +115,8 @@ impl<'a> DiskSettings<'a> {
         // Write out the protective MBR and GPT headers.
         GPT::write_protective_mbr_into(&mut disk_file, SECTOR_SIZE)?;
         gpt.write_into(&mut disk_file)?;
+
+        Ok(())
     }
 }
 
@@ -161,25 +161,22 @@ impl PartitionDataRange {
             .unwrap()
     }
 
-    #[throws]
-    fn read_bytes_from_file(&self, f: &mut File) -> Vec<u8> {
+    fn read_bytes_from_file(&self, f: &mut File) -> Result<Vec<u8>> {
         let mut v = vec![0; self.num_bytes()];
         f.seek(SeekFrom::Start(*self.to_byte_range().start()))?;
         f.read_exact(&mut v)?;
-        v
+        Ok(v)
     }
 
-    #[throws]
-    fn write_bytes_to_file(&self, f: &mut File, data: &[u8]) {
+    fn write_bytes_to_file(&self, f: &mut File, data: &[u8]) -> Result<()> {
         assert!(data.len() <= self.num_bytes());
         f.seek(SeekFrom::Start(*self.to_byte_range().start()))?;
-        f.write_all(data)?;
+        Ok(f.write_all(data)?)
     }
 }
 
 /// Read data from a reven kernel partition.
-#[throws]
-fn read_real_kernel_partition(conf: &Config) -> Vec<u8> {
+fn read_real_kernel_partition(conf: &Config) -> Result<Vec<u8>> {
     let mut f = File::open(conf.disk_path())?;
     let gpt = gptman::GPT::find_from(&mut f)?;
 
@@ -187,11 +184,10 @@ fn read_real_kernel_partition(conf: &Config) -> Vec<u8> {
     assert_eq!(kern_a.partition_name.as_str(), "KERN-A");
 
     let kern_a_data_range = PartitionDataRange::new(kern_a);
-    kern_a_data_range.read_bytes_from_file(&mut f)?
+    kern_a_data_range.read_bytes_from_file(&mut f)
 }
 
-#[throws]
-pub fn gen_vboot_test_disk(conf: &Config) {
+pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
     let kern_a = read_real_kernel_partition(conf)?;
 
     let disk = DiskSettings {
@@ -216,13 +212,12 @@ pub fn gen_vboot_test_disk(conf: &Config) {
             data: &kern_a,
         }],
     };
-    disk.create()?;
+    disk.create()
 }
 
 /// Generate the EFI system partition FAT file system containing the
 /// enroller executables.
-#[throws]
-fn gen_enroller_fs(conf: &Config) -> Vec<u8> {
+fn gen_enroller_fs(conf: &Config) -> Result<Vec<u8>> {
     let mut sys_part_data = vec![0; mib_to_byte(2).try_into().unwrap()];
 
     {
@@ -250,11 +245,10 @@ fn gen_enroller_fs(conf: &Config) -> Vec<u8> {
         }
     }
 
-    sys_part_data
+    Ok(sys_part_data)
 }
 
-#[throws]
-pub fn gen_enroller_disk(conf: &Config) {
+pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
     let part_data = gen_enroller_fs(conf)?;
 
     let disk = DiskSettings {
@@ -276,7 +270,7 @@ pub fn gen_enroller_disk(conf: &Config) {
             data: &part_data,
         }],
     };
-    disk.create()?;
+    disk.create()
 }
 
 /// Modify data in the EFI system partition FAT file system.
@@ -285,8 +279,7 @@ pub fn gen_enroller_disk(conf: &Config) {
 /// root directory handle is then passed to the `modify` function, and
 /// the caller can update the contents as desired. Then the partition is
 /// written back out to disk.
-#[throws]
-fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F)
+fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F) -> Result<()>
 where
     F: Fn(
         fatfs::Dir<
@@ -318,13 +311,15 @@ where
     }
 
     // Write the entire partition back out.
-    sys_data_range.write_bytes_to_file(&mut disk_file, &sys_part_data)?;
+    sys_data_range.write_bytes_to_file(&mut disk_file, &sys_part_data)
 }
 
 /// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
 /// system partition in the disk image at `disk_path`.
-#[throws]
-pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) {
+pub fn update_boot_files(
+    disk_path: &Utf8Path,
+    src_dir: &Utf8Path,
+) -> Result<()> {
     modify_system_partition(disk_path, |root_dir| {
         let dst_efi_dir = root_dir.open_dir("EFI")?;
         let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
@@ -344,7 +339,7 @@ pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) {
 
         Ok(())
     })
-    .context("failed to update boot files")?;
+    .context("failed to update boot files")
 }
 
 pub struct SignAndUpdateBootloader<'a> {
@@ -364,8 +359,7 @@ impl<'a> SignAndUpdateBootloader<'a> {
     /// Sign each source file (in a temporary directory, source files
     /// are not modified), then copy the signed files into the system
     /// partition of the disk image.
-    #[throws]
-    pub fn run(&self) {
+    pub fn run(&self) -> Result<()> {
         let tmp_dir = TempDir::new()?;
         let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
@@ -374,14 +368,13 @@ impl<'a> SignAndUpdateBootloader<'a> {
             secure_boot::sign(src, &signed_src, &self.key_paths)?;
         }
 
-        update_boot_files(self.disk_path, tmp_path)?;
+        update_boot_files(self.disk_path, tmp_path)
     }
 }
 
 /// Sign crdyboot, then copy it into the disk image under the "grub"
 /// name (since that's what shim currently chains to).
-#[throws]
-pub fn copy_in_crdyboot(conf: &Config) {
+pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
     SignAndUpdateBootloader {
         disk_path: conf.disk_path(),
         key_paths: conf.secure_boot_shim_key_paths(),
@@ -395,11 +388,13 @@ pub fn copy_in_crdyboot(conf: &Config) {
             })
             .collect(),
     }
-    .run()?;
+    .run()
 }
 
-#[throws]
-pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
+pub fn sign_kernel_partition(
+    conf: &Config,
+    partition_name: &str,
+) -> Result<()> {
     let mut disk_file = open_rw(conf.disk_path())?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
     let kern_part = gpt
@@ -497,7 +492,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) {
 
     // Write the updated kernel partition back to the disk image.
     let signed_kern_data = fs::read(signed_kernel_partition)?;
-    kern_data_range.write_bytes_to_file(&mut disk_file, &signed_kern_data)?;
+    kern_data_range.write_bytes_to_file(&mut disk_file, &signed_kern_data)
 }
 
 #[cfg(test)]

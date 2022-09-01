@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
-use fehler::throws;
 use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,16 +143,17 @@ impl Qemu {
         cmd
     }
 
-    #[throws]
     pub fn run_disk_image(
         &self,
         image_path: &Utf8Path,
         var_access: VarAccess,
         display: Display,
-    ) {
+    ) -> Result<()> {
         let mut cmd = self.create_command(var_access, display);
 
         cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
         cmd.run()?;
+
+        Ok(())
     }
 }

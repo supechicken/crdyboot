@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::Error;
+use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
-use fehler::throws;
 use fs_err as fs;
 
 pub struct SecureBootKeyPaths {
@@ -18,11 +17,11 @@ impl SecureBootKeyPaths {
     }
 
     /// Create the directory if it doesn't exist.
-    #[throws]
-    pub fn create_dir(&self) {
+    pub fn create_dir(&self) -> Result<()> {
         if !self.dir.exists() {
             fs::create_dir(&self.dir)?;
         }
+        Ok(())
     }
 
     pub fn priv_pem(&self) -> Utf8PathBuf {
@@ -46,8 +45,7 @@ impl SecureBootKeyPaths {
     }
 }
 
-#[throws]
-pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) {
+pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     paths.create_dir()?;
 
     if paths.priv_pem().exists()
@@ -55,7 +53,7 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) {
         && paths.pub_der().exists()
     {
         println!("using existing {} key", paths.dir);
-        return;
+        return Ok(());
     }
 
     #[rustfmt::skip]
@@ -69,11 +67,13 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) {
         "-nodes",
     ]).run()?;
 
-    convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())?;
+    convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())
 }
 
-#[throws]
-pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) {
+pub fn generate_signed_vars(
+    paths: &SecureBootKeyPaths,
+    var_name: &str,
+) -> Result<()> {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let unsigned_var = tmp_path.join("unsigned_var");
@@ -87,7 +87,7 @@ pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) {
 
     // Skip generation if the signed file already exists.
     if signed_var.exists() {
-        return;
+        return Ok(());
     }
 
     // These two tools are in the efitools package. Might be fun to port them
@@ -109,10 +109,11 @@ pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) {
         unsigned_var.as_str(),
         signed_var.as_str(),
     ]).run()?;
+
+    Ok(())
 }
 
-#[throws]
-fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
+fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) -> Result<()> {
     #[rustfmt::skip]
     Command::with_args("openssl", &[
         "x509",
@@ -120,18 +121,24 @@ fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) {
         "-in", input.as_str(),
         "-out", output.as_str()
     ]).run()?;
+
+    Ok(())
 }
 
 /// Sign the file at `src` using the keys provided by `key_paths`. The
 /// signed result is written to `dst` (and the `src` is never modified).
-#[throws]
-pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) {
+pub fn sign(
+    src: &Utf8Path,
+    dst: &Utf8Path,
+    key_paths: &SecureBootKeyPaths,
+) -> Result<()> {
     #[rustfmt::skip]
     Command::with_args("sbsign", &[
         "--key", key_paths.priv_pem().as_str(),
         "--cert", key_paths.pub_pem().as_str(),
         src.as_str(),
         "--output", dst.as_str(),
-    ])
-    .run()?;
+    ]).run()?;
+
+    Ok(())
 }
