@@ -8,9 +8,8 @@ use crate::package::Package;
 use crate::qemu::OvmfPaths;
 use crate::secure_boot::SecureBootKeyPaths;
 use crate::vboot::VbootKeyPaths;
-use anyhow::Error;
+use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
-use fehler::throws;
 use fs_err as fs;
 use serde::Deserialize;
 
@@ -33,17 +32,15 @@ pub fn config_path(repo_root: &Utf8Path) -> Utf8PathBuf {
 }
 
 impl Config {
-    #[throws]
-    pub fn load(repo_root: &Utf8Path) -> Config {
+    pub fn load(repo_root: &Utf8Path) -> Result<Config> {
         let src = fs::read_to_string(config_path(repo_root))?;
-        Config::parse(&src, repo_root)?
+        Config::parse(&src, repo_root)
     }
 
-    #[throws]
-    fn parse(src: &str, repo: &Utf8Path) -> Config {
+    fn parse(src: &str, repo: &Utf8Path) -> Result<Config> {
         let mut config: Self = toml::de::from_str(src)?;
         config.repo = repo.into();
-        config
+        Ok(config)
     }
 
     /// Get all cargo features to enable while building a package.
@@ -110,9 +107,11 @@ impl Config {
     }
 
     /// Write out the setup-version file.
-    #[throws]
-    pub fn write_setup_version(&self, version: u32) {
-        fs::write(self.setup_version_path(), format!("{}\n", version))?;
+    pub fn write_setup_version(&self, version: u32) -> Result<()> {
+        Ok(fs::write(
+            self.setup_version_path(),
+            format!("{}\n", version),
+        )?)
     }
 
     pub fn vboot_reference_path(&self) -> Utf8PathBuf {
@@ -198,8 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[throws]
-    fn test_parse() {
+    fn test_parse() -> Result<()> {
         let repo = &Utf8PathBuf::new();
 
         // Default config parses OK.
@@ -213,5 +211,7 @@ mod tests {
         // Partial config is invalid.
         let partial = default_cfg.replace("use_test_key = true", "");
         assert!(Config::parse(&partial, repo).is_err());
+
+        Ok(())
     }
 }
