@@ -149,8 +149,6 @@ fn build_bridge_lib(
     let mut builder = cc::Build::new();
     builder
         .compiler(c_compiler)
-        .flag("-Wno-address-of-packed-member")
-        .flag("-Wno-unused-parameter")
         .warnings_into_errors(true)
         .includes(include_dirs)
         .files(source_files);
@@ -168,16 +166,10 @@ fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
     let mut builder = bindgen::Builder::default();
     builder = builder
         .header(header_path)
-        .allowlist_function("crdyboot_set_kernel_key")
-        .allowlist_function("vb2_workbuf_alloc")
-        .allowlist_function("vb2_workbuf_from_ctx")
         .allowlist_function("vb2api_init")
         .allowlist_function("vb2api_inject_kernel_subkey")
         .allowlist_function("vb2api_load_kernel")
-        .allowlist_type("vb2_context")
-        .allowlist_type("vb2_disk_info")
         .allowlist_type("vb2_return_code")
-        .allowlist_type("vb2_workbuf")
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
         .allowlist_var("VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE")
@@ -297,12 +289,10 @@ fn main() {
     rerun_if_changed(vboot_ref);
 
     let include_dirs = vec![
-        PathBuf::from("src"),
         PathBuf::from("src/libc"),
         vboot_ref.to_path_buf(),
         vboot_ref.join("firmware/2lib/include"),
         vboot_ref.join("firmware/include"),
-        vboot_ref.join("firmware/lib/include"),
     ];
 
     let target = Target::from_env();
