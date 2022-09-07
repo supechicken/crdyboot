@@ -294,6 +294,9 @@ fn main() {
 
     let vboot_ref = Path::new("../third_party/vboot_reference");
 
+    // Rebuild if the vboot_reference submodule changes.
+    rerun_if_changed(vboot_ref);
+
     let include_dirs = vec![
         PathBuf::from("src"),
         PathBuf::from("src/libc"),
