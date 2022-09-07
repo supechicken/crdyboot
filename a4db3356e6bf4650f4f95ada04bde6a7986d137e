@@ -20,6 +20,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "ec543f52_fc3e4021",
+        "filename": "README.md",
+        "patchSetId": 1
+      },
+      "lineNbr": 90,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-07T19:29:58Z",
+      "side": 1,
+      "message": "It felt overly specific in a slightly misleading way. First, because it\u0027s incomplete: libcrdy gets built too. And I wouldn\u0027t want to spell out each thing that gets built for both the `check` and `built` commands. Second, it\u0027s ambiguous: vboot the C library or vboot the Rust package? Third, the `check` and `build` commands don\u0027t run `cargo build -p vboot` directly, they just run `cargo build -p crdyboot ...` and let Cargo work out the dependencies.",
+      "parentUuid": "c193e060_42a7020c",
+      "revId": "a4db3356e6bf4650f4f95ada04bde6a7986d137e",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "0caeb2a0_bdb3c63b",
         "filename": "README.md",
         "patchSetId": 1
@@ -31,6 +49,24 @@
       "writtenOn": "2022-09-07T19:19:43Z",
       "side": 1,
       "message": "nit: refs/heads/main -\u003e HEAD",
+      "revId": "a4db3356e6bf4650f4f95ada04bde6a7986d137e",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1557c0d5_ef234143",
+        "filename": "README.md",
+        "patchSetId": 1
+      },
+      "lineNbr": 137,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-07T19:29:58Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "0caeb2a0_bdb3c63b",
       "revId": "a4db3356e6bf4650f4f95ada04bde6a7986d137e",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
