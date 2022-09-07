@@ -127,36 +127,6 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
     println!("cargo:rustc-link-lib=static=vboot_fw");
 }
 
-/// Build a small C library to help bridge the Rust code in this crate
-/// with vboot_reference's fwlib.
-fn build_bridge_lib(
-    vboot_ref: &Path,
-    include_dirs: &[PathBuf],
-    target: Target,
-    c_compiler: &str,
-) {
-    let firmware = vboot_ref.join("firmware");
-    let source_files = [
-        // Stubs
-        firmware.join("stub/vboot_api_stub_stream.c"),
-    ];
-
-    for path in &source_files {
-        rerun_if_changed(path);
-    }
-
-    let mut builder = cc::Build::new();
-    builder
-        .compiler(c_compiler)
-        .warnings_into_errors(true)
-        .includes(include_dirs)
-        .files(source_files);
-    if let Some(target) = target.c_target_override() {
-        builder.target(target);
-    }
-    builder.compile("vboot_bridge");
-}
-
 fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
     let header_path = "src/bindgen.h";
 
@@ -223,14 +193,12 @@ fn main() {
     let include_dirs = vec![
         PathBuf::from("src/libc"),
         vboot_ref.to_path_buf(),
-        vboot_ref.join("firmware/2lib/include"),
         vboot_ref.join("firmware/include"),
     ];
 
     let target = Target::from_env();
 
     build_vboot_fwlib(vboot_ref, target, &c_compiler);
-    build_bridge_lib(vboot_ref, &include_dirs, target, &c_compiler);
 
     gen_fwlib_bindings(&include_dirs, target);
 }
