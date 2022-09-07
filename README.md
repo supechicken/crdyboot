@@ -2,27 +2,26 @@
 
 Pronounced CUR-dee-boot.
 
-This is a UEFI bootloader for CloudReady. Crdyboot handles loading,
-verifying, and running the Linux kernel.
+Crdyboot is a UEFI bootloader for ChromeOS Flex. It is not yet in use.
 
-Goals:
+Crdyboot acts as a bridge between UEFI firmware and the Chromebook style
+of booting. It uses [vboot] to select and validate an appropriate
+[kernel partition], then launches that kernel using the Linux [EFI stub].
+
+## Features
 
 * Well documented and as simple as possible.
-* Ensure that when secure boot is enabled, dm-verity is enabled for
-  the rootfs. (Note that this can only be fully verified if using
-  custom Secure Boot keys, otherwise a different OS signed with the
-  Microsoft keys could be used to avoid verifying the rootfs.)
-* Use UEFI features as little as possible. We need to run on a lot of
-  hardware, and not all UEFI implementations work well.
-* Use the ChromeOS GPT-attribute mechanism for determining which
-  kernel to boot.
-* Use the ChromeOS kernel partitions rather than loading the kernel
-  from the EFI partition. The kernel partitions include both the
-  kernel data and command-line, as well as data structures to verify
-  the signature of everything being loaded.
-* Verify the signature of everything loaded from the kernel partition.
-* Only support 64-bit CPUs, but support both 32- and 64-bit UEFI
-  environments.
+* Broad hardware support. Any amd64 machine with UEFI should be able to
+  use crdyboot. This includes 32-bit UEFI environments.
+* Uses vboot to:
+  * Verify that both the kernel and the kernel command-line have been
+    signed with a trusted key, which in turn allows verifying that the
+    rootfs has not been modified. (Note that this can only be fully
+    relied on if using custom Secure Boot keys, otherwise a different OS
+    signed with the Microsoft keys could be used to avoid verifying the
+    rootfs.)
+  * Automatically roll back from a bad OS update by swapping between the
+    A and B partitions.
 
 ## License
 
@@ -30,21 +29,31 @@ Goals:
 
 ## Code layout
 
-The `vboot` subdirectory is a `no_std` library that handles loading and
-verifying the kernel. Internally it uses the `LoadKernel` function from
-`third_party/vboot_reference`. This crate can be built for the host target
-so that tests can run.
+The project is organized as a Rust [workspace] containing several
+packages:
 
-The `crdyboot` subdirectory contains the actual bootloader. It can
-only be built for the `x86_64-unknown-uefi` and `i686-unknown-uefi`
-targets.
-
-The `xtask` subdirectory contains a single binary that is used by the
-various `xtask` commands shown below.
-
-The `enroller` subdirectory contains a small UEFI application that
-enrolls a test key in the `PK`, `KEK`, and `db` variables. This only
-works if the machine is in secure boot custom mode.
+* The `vboot` package is a thin wrapper around the C [vboot] library. It
+  also exposes a `DiskIo` trait through which it can read and write
+  blocks to a disk. This package is `no_std`, and can be built for both
+  the UEFI targets and the host target. Building for the host allows
+  tests to be run on the host.
+* The `libcrdy` package is where most of the bootloader is
+  implemented. It implements the `DiskIo` trait using the [uefi crate],
+  and uses the `vboot` package to load and verify a kernel. It then
+  boots into that kernel using the EFI stub. This package is also
+  `no_std` and can also be built for both UEFI targets and the host
+  target for testing purposes.
+* The `crdyboot` package provides the actual bootloader executable. It
+  contains the embedded key used to verify the kernel data, the SBAT
+  data used for revocation, and sets up logging and allocation. Then it
+  uses `libcrdy` to load, verify, and run the kernel.
+* The `xtask` package contains a host executable that provides the
+  various `xtask` commands shown below. It's like a fancy Makefile for
+  running various dev and test operations.
+* The `enroller` subdirectory contains a small UEFI application that
+  enrolls a test key in the `PK`, `KEK`, and `db` variables. This is
+  used to set up the test VM, and can also be used on real hardware (see
+  the "Testing on real hardware" section).
 
 ## Dependencies
 
@@ -78,11 +87,11 @@ setup commands. The image must have rootfs verification enabled
 `--no-enable-rootfs-verification`). Any kind of image (`base`, `dev`, or
 `test`) is allowed.
 
-To check formatting, lint, test, and build both vboot and crdyboot:
+To check formatting, lint, test, and build crdyboot:
 
     cargo xtask check
 
-To build crdyboot for both 64-bit and 32-bit UEFI targets:
+To just build crdyboot:
 
     cargo xtask build
 
@@ -122,4 +131,9 @@ branch. Since then we have switched to building the C vboot library and
 loading/verifying the kernel through that library.
 
 [BSD]: LICENSE
+[EFI stub]: https://docs.kernel.org/admin-guide/efi-stub.html
+[kernel partition]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/disk_format.md#Kernel-partition-format
+[uefi crate]: https://docs.rs/uefi/latest/uefi/
+[vboot]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/+/HEAD/README
+[workspace]: https://doc.rust-lang.org/cargo/reference/workspaces.html
 [writedisk]: https://crates.io/crates/writedisk
