@@ -138,7 +138,6 @@ fn build_bridge_lib(
 ) {
     let firmware = vboot_ref.join("firmware");
     let source_files = [
-        "src/bridge.c".into(),
         // Stubs
         firmware.join("stub/vboot_api_stub_stream.c"),
     ];
