@@ -159,6 +159,7 @@ impl<'a> GptDisk<'a> {
         {
             let block_io = unsafe { &mut *block_io.interface.get() };
             bytes_per_lba = block_io.media().block_size().into();
+            assert_ne!(bytes_per_lba, 0);
             lba_count = block_io.media().last_block() + 1;
         }
 
