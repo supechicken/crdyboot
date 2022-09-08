@@ -1,0 +1,106 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8557328f_40dcf2d4",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 165,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "This would need to fail if handle is NULL.\n\nIs the from_handle checking this in some what I am not understanding?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "abca94cc_434325bb",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 187,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "I would think NULL for stream must be checked (if it was C). Is it handled somewhere in this stack I am not aware of?\n\nThe stubs return VB2_ERROR_UNKNOWN for a null pointer.",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "5188b474_cd9c35ef",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "can disk.io.bytes_per_lba() return 0?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2b0e3503_58d6888a",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 237,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "C could pass a NULL pointer for the stream handle here. Does the from_handle and/or some other mechanism check for this case that I don\u0027t know of?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "df600745_91fcb632",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 323,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "Why choose the assert_ne instead of asserting a specific error code? (Same Q for all instances, not this specific one)",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "cdc0fbcc_60005d27",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 341,
+      "author": {
+        "id": 1490127
+      },
+      "writtenOn": "2022-09-08T18:52:09Z",
+      "side": 1,
+      "message": "Maybe test the null ptr cases mentioned above?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
