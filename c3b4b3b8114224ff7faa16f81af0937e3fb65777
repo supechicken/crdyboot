@@ -18,6 +18,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "92afedcb_20e74ad7",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 165,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "I don\u0027t entirely agree that NULLs must always be handled -- an unexpected NULL is in some ways the same as any other invalid pointer, in that bad things will happen if you try to use it. There\u0027s no reason why vboot should be passing in invalid pointers to these functions.\n\nHowever, no harm in doing what we can to guard against a bad pointer, so I\u0027ve added in asserts at the top of each `VbEx*` function to check for nulls. Note that regular asserts like this are active in both debug and release builds: https://doc.rust-lang.org/std/macro.assert.html#uses.",
+      "parentUuid": "8557328f_40dcf2d4",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "abca94cc_434325bb",
@@ -31,6 +49,24 @@
       "writtenOn": "2022-09-08T18:52:09Z",
       "side": 1,
       "message": "I would think NULL for stream must be checked (if it was C). Is it handled somewhere in this stack I am not aware of?\n\nThe stubs return VB2_ERROR_UNKNOWN for a null pointer.",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ed5d179b_ae9f2c39",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 187,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "Done (see other comment)",
+      "parentUuid": "abca94cc_434325bb",
       "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
@@ -52,6 +88,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "9cf908e0_af039c4c",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "Not in any reasonable implementation, but it\u0027s probably good to check. I\u0027ve updated the docstring for `bytes_per_lba`, and also added in an assert here and in the actual UEFI implementation in libcrdy.",
+      "parentUuid": "5188b474_cd9c35ef",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "2b0e3503_58d6888a",
@@ -65,6 +119,24 @@
       "writtenOn": "2022-09-08T18:52:09Z",
       "side": 1,
       "message": "C could pass a NULL pointer for the stream handle here. Does the from_handle and/or some other mechanism check for this case that I don\u0027t know of?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4fb253e2_19f0fe22",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 237,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "2b0e3503_58d6888a",
       "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
@@ -86,6 +158,24 @@
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "d76886ae_87f23e64",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 323,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "Stylistic preference -- `VB2_ERROR_UNKNOWN` isn\u0027t a particularly good error code so I don\u0027t want the test to specifically look for that. We mainly just care whether it is success or failure.",
+      "parentUuid": "df600745_91fcb632",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "cdc0fbcc_60005d27",
@@ -99,6 +189,24 @@
       "writtenOn": "2022-09-08T18:52:09Z",
       "side": 1,
       "message": "Maybe test the null ptr cases mentioned above?",
+      "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "433c2a48_257c686f",
+        "filename": "vboot/src/disk.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 341,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:38:00Z",
+      "side": 1,
+      "message": "Since I implemented the checks as asserts, I\u0027ll leave out tests for this.",
+      "parentUuid": "cdc0fbcc_60005d27",
       "revId": "c3b4b3b8114224ff7faa16f81af0937e3fb65777",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
