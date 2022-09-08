@@ -50,6 +50,7 @@ enum Action {
     BuildEnroller(BuildEnrollerAction),
     Writedisk(WritediskAction),
     InstallToolchain(InstallToolchainAction),
+    GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
 }
 
 /// Build crdyboot.
@@ -137,6 +138,11 @@ struct WritediskAction {}
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "install-toolchain")]
 struct InstallToolchainAction {}
+
+/// Regenerate vboot/src/return_codes.rs.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "gen-vboot-return-code-strings")]
+struct GenVbootReturnCodeStringsAction {}
 
 fn run_cargo_deny() -> Result<()> {
     // Check if cargo-deny is installed, and install it if not.
@@ -540,5 +546,8 @@ fn main() -> Result<()> {
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
         Action::InstallToolchain(_) => run_install_toolchain(),
+        Action::GenVbootReturnCodeStrings(_) => {
+            vboot::gen_return_code_strings(&conf)
+        }
     }
 }
