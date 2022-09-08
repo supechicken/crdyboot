@@ -702,8 +702,6 @@ dependencies = [
  "log",
  "printf-compat",
  "regex",
- "serde",
- "serde_json",
  "simple_logger",
  "uguid",
 ]
@@ -763,6 +761,7 @@ dependencies = [
  "gpt_disk_types",
  "gptman",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]
