@@ -61,10 +61,6 @@ Install nightly Rust:
 
     cargo xtask install-toolchain
 
-Headers needed for compiling vboot_reference:
-
-    sudo apt install libflashrom-dev
-
 Other tools used for image signing and running in a VM:
 
     sudo apt install efitools gdisk ovmf ovmf-ia32 qemu-system-x86 sbsigntool
