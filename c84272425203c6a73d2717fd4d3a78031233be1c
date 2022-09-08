@@ -33,6 +33,24 @@
       "message": "Still learning rust here: why `mut push`? To ensure only one borrow of lines?",
       "revId": "c84272425203c6a73d2717fd4d3a78031233be1c",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8865ef0e_25582998",
+        "filename": "xtask/src/vboot.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 1481202
+      },
+      "writtenOn": "2022-09-08T19:59:47Z",
+      "side": 1,
+      "message": "The compiler enforces it. If you try to modify a captured value but the closure is not bound to a `mut` variable, you\u0027ll get an error. Example: https://play.rust-lang.org/?version\u003dstable\u0026mode\u003ddebug\u0026edition\u003d2021\u0026gist\u003d859ebcfc189837e30f20445ab8e686ff",
+      "parentUuid": "b3cb2741_c8259c5e",
+      "revId": "c84272425203c6a73d2717fd4d3a78031233be1c",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
