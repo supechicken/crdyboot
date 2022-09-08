@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6bdd282a_23451897",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1479707
+      },
+      "writtenOn": "2022-09-08T19:48:54Z",
+      "side": 1,
+      "message": "Looks good. Logic behind moving make sense to me.\n\nLeft a comment at the one bit that had me scratching my head. ",
+      "revId": "c84272425203c6a73d2717fd4d3a78031233be1c",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b3cb2741_c8259c5e",
+        "filename": "xtask/src/vboot.rs",
+        "patchSetId": 2
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 1479707
+      },
+      "writtenOn": "2022-09-08T19:48:54Z",
+      "side": 1,
+      "message": "Still learning rust here: why `mut push`? To ensure only one borrow of lines?",
+      "revId": "c84272425203c6a73d2717fd4d3a78031233be1c",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
