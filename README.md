@@ -57,11 +57,9 @@ packages:
 
 ## Dependencies
 
-Install nightly Rust:
+Install Rust: <https://rustup.rs>
 
-    cargo xtask install-toolchain
-
-Other tools used for image signing and running in a VM:
+Install tools used for image signing and running in a VM:
 
     sudo apt install efitools gdisk ovmf ovmf-ia32 qemu-system-x86 sbsigntool
 

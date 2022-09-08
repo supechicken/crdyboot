@@ -19,14 +19,6 @@ use package::Package;
 use qemu::{Display, Qemu, VarAccess};
 use std::{env, process};
 
-const NIGHTLY_TC: &str = "nightly-2022-02-06";
-
-/// Get a toolchain arg for compiling with nightly Rust. This just
-/// prepends a `+` to `NIGHTLY_TC`.
-fn nightly_tc_arg() -> String {
-    format!("+{}", NIGHTLY_TC)
-}
-
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 pub struct Opt {
@@ -49,7 +41,6 @@ enum Action {
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     Writedisk(WritediskAction),
-    InstallToolchain(InstallToolchainAction),
     GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
 }
 
@@ -134,11 +125,6 @@ struct QemuAction {
 #[argh(subcommand, name = "writedisk")]
 struct WritediskAction {}
 
-/// Install the appropriate Rust nightly toolchain.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "install-toolchain")]
-struct InstallToolchainAction {}
-
 /// Regenerate vboot/src/return_codes.rs.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "gen-vboot-return-code-strings")]
@@ -184,7 +170,6 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
         let mut cmd = Command::with_args(
             "cargo",
             &[
-                &nightly_tc_arg(),
                 "build",
                 "--package",
                 package.name(),
@@ -268,7 +253,7 @@ fn run_clippy(conf: &Config) -> Result<()> {
     for package in Package::all() {
         let mut cmd = Command::with_args(
             "cargo",
-            &[&nightly_tc_arg(), "clippy", "--package", package.name()],
+            &["clippy", "--package", package.name()],
         );
         add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
         cmd.run()?;
@@ -278,7 +263,7 @@ fn run_clippy(conf: &Config) -> Result<()> {
 }
 
 fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
-    let mut cmd = Command::with_args("cargo", &[nightly_tc_arg()]);
+    let mut cmd = Command::new("cargo");
     if miri.0 {
         cmd.add_arg("miri");
     }
@@ -445,34 +430,12 @@ fn run_writedisk(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-fn run_install_toolchain() -> Result<()> {
-    Command::with_args("rustup", &["install", NIGHTLY_TC]).run()?;
-    Command::with_args(
-        "rustup",
-        &[
-            "component",
-            "add",
-            "rust-src",
-            "miri",
-            "--toolchain",
-            NIGHTLY_TC,
-        ],
-    )
-    .run()?;
-    Ok(())
-}
-
 fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
     let current_version = 4;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
-        return Ok(());
-    }
-
-    // Don't run setup if the user is installing the toolchain.
-    if matches!(action, Action::InstallToolchain(_)) {
         return Ok(());
     }
 
@@ -545,7 +508,6 @@ fn main() -> Result<()> {
         Action::Test(action) => run_tests(action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
-        Action::InstallToolchain(_) => run_install_toolchain(),
         Action::GenVbootReturnCodeStrings(_) => {
             vboot::gen_return_code_strings(&conf)
         }

@@ -1,0 +1,10 @@
+[toolchain]
+# TODO: upgrade to a newer release.
+channel = "nightly-2022-02-06"
+
+components = [
+    # Needed for `-Zbuild-std`.
+    "rust-src",
+
+    "miri",
+]
