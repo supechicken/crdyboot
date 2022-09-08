@@ -377,6 +377,7 @@ fn build_futility(conf: &Config) -> Result<()> {
         &[
             "-C",
             conf.vboot_reference_path().as_str(),
+            "USE_FLASHROM=0",
             conf.futility_executable_path().as_str(),
         ],
     );
@@ -457,7 +458,7 @@ fn run_install_toolchain() -> Result<()> {
 
 fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 3;
+    let current_version = 4;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
@@ -487,7 +488,7 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
 
     // Put any version-specific cleanup operations here.
 
-    if conf.read_setup_version() < 2 {
+    if conf.read_setup_version() < 4 {
         clean_futility_build(conf)?;
     }
 
