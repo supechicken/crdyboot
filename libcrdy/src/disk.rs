@@ -18,20 +18,20 @@ fn device_paths_for_handle(
     crdyboot_image: Handle,
     handle: Handle,
     bt: &BootServices,
-) -> Result<&DevicePath> {
-    let device_path = bt
-        .open_protocol::<DevicePath>(
+) -> Result<ScopedProtocol<DevicePath>> {
+    // Safety: this protocol cannot be opened in exclusive mode. This
+    // should be fine here as device paths are immutable.
+    let device_path = unsafe {
+        bt.open_protocol::<DevicePath>(
             OpenProtocolParams {
                 handle,
                 agent: crdyboot_image,
                 controller: None,
             },
-            // TODO: Figure out why using `Exclusive` here fails with
-            // `InvalidParameter`.
             OpenProtocolAttributes::GetProtocol,
         )
-        .map_err(|err| Error::DevicePathProtocolMissing(err.status()))?;
-    let device_path = unsafe { &*device_path.interface.get() };
+        .map_err(|err| Error::DevicePathProtocolMissing(err.status()))
+    }?;
     Ok(device_path)
 }
 
@@ -47,14 +47,16 @@ fn is_parent_disk(
     partition: Handle,
     bt: &BootServices,
 ) -> Result<bool> {
-    let potential_parent_paths_iter =
-        device_paths_for_handle(crdyboot_image, potential_parent, bt)?
-            .node_iter();
-    let mut partition_paths_iter =
-        device_paths_for_handle(crdyboot_image, partition, bt)?.node_iter();
+    let potential_parent_device_path =
+        device_paths_for_handle(crdyboot_image, potential_parent, bt)?;
+    let potential_parent_device_path_node_iter =
+        potential_parent_device_path.node_iter();
+    let partition_device_path =
+        device_paths_for_handle(crdyboot_image, partition, bt)?;
+    let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
-    for (parent_path, partition_path) in
-        potential_parent_paths_iter.zip(&mut partition_paths_iter)
+    for (parent_path, partition_path) in potential_parent_device_path_node_iter
+        .zip(&mut partition_device_path_node_iter)
     {
         if parent_path != partition_path {
             return Ok(false);
@@ -63,11 +65,12 @@ fn is_parent_disk(
 
     // After the zip operation we expect there to be one remaining path for the
     // partition device; validate that this expectation is met.
-    let final_partition_path = if let Some(path) = partition_paths_iter.next() {
-        path
-    } else {
-        return Ok(false);
-    };
+    let final_partition_path =
+        if let Some(path) = partition_device_path_node_iter.next() {
+            path
+        } else {
+            return Ok(false);
+        };
 
     // That final path should be a Hard Drive Media Device Path.
     if final_partition_path.full_type()
@@ -104,16 +107,8 @@ fn find_disk_block_io(
     // device handle which should correspond to the disk that the image was
     // loaded from.
     let loaded_image = bt
-        .open_protocol::<LoadedImage>(
-            OpenProtocolParams {
-                handle: crdyboot_image,
-                agent: crdyboot_image,
-                controller: None,
-            },
-            OpenProtocolAttributes::Exclusive,
-        )
+        .open_protocol_exclusive::<LoadedImage>(crdyboot_image)
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
-    let loaded_image = unsafe { &*loaded_image.interface.get() };
     let partition_handle = loaded_image.device();
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -130,15 +125,8 @@ fn find_disk_block_io(
         bt,
     )?;
 
-    bt.open_protocol::<BlockIO>(
-        OpenProtocolParams {
-            handle: disk_handle,
-            agent: crdyboot_image,
-            controller: None,
-        },
-        OpenProtocolAttributes::Exclusive,
-    )
-    .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
+    bt.open_protocol_exclusive::<BlockIO>(disk_handle)
+        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
 }
 
 pub struct GptDisk<'a> {
@@ -154,14 +142,9 @@ impl<'a> GptDisk<'a> {
     ) -> Result<GptDisk<'a>> {
         let block_io = find_disk_block_io(crdyboot_image, bt)?;
 
-        let bytes_per_lba;
-        let lba_count;
-        {
-            let block_io = unsafe { &mut *block_io.interface.get() };
-            bytes_per_lba = block_io.media().block_size().into();
-            assert_ne!(bytes_per_lba, 0);
-            lba_count = block_io.media().last_block() + 1;
-        }
+        let bytes_per_lba = block_io.media().block_size().into();
+        assert_ne!(bytes_per_lba, 0);
+        let lba_count = block_io.media().last_block() + 1;
 
         Ok(GptDisk {
             block_io,
@@ -181,13 +164,8 @@ impl<'a> DiskIo for GptDisk<'a> {
     }
 
     fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-        let block_io = unsafe { &mut *self.block_io.interface.get() };
-
-        match block_io.read_blocks(
-            block_io.media().media_id(),
-            lba_start,
-            buffer,
-        ) {
+        let media_id = self.block_io.media().media_id();
+        match self.block_io.read_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
@@ -200,13 +178,8 @@ impl<'a> DiskIo for GptDisk<'a> {
     }
 
     fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
-        let block_io = unsafe { &mut *self.block_io.interface.get() };
-
-        match block_io.write_blocks(
-            block_io.media().media_id(),
-            lba_start,
-            buffer,
-        ) {
+        let media_id = self.block_io.media().media_id();
+        match self.block_io.write_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
                 error!("disk write failed: lba_start={}, size in bytes: {}, err: {:?}",

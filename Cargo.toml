@@ -4,3 +4,8 @@ resolver = "2"
 
 [profile.release]
 overflow-checks = true
+
+[patch.crates-io]
+uefi-macros = { path = "/home/nicholasbishop/src/uefi-rs/uefi-macros" }
+uefi-services = { path = "/home/nicholasbishop/src/uefi-rs/uefi-services" }
+uefi = { path = "/home/nicholasbishop/src/uefi-rs" }
