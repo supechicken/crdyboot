@@ -33,8 +33,10 @@ unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
     // Write `AllocInfo` immediately prior to the pointer we return.
     // This way, we always know where to get it for passing to
     // `underlying_dealloc`.
+    // `write_unaligned` is used, so unaligned ptr is OK.
+    #[allow(clippy::cast_ptr_alignment)]
     let info_ptr =
-        result_ptr.sub(mem::size_of::<AllocInfo>()) as *mut AllocInfo;
+        result_ptr.sub(mem::size_of::<AllocInfo>()).cast::<AllocInfo>();
     info_ptr.write_unaligned(AllocInfo {
         layout: to_request,
         ptr: orig_ptr,
@@ -46,6 +48,8 @@ unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
 unsafe extern "C" fn free(ptr: *mut u8) {
     assert!(!ptr.is_null());
     // Read the `AllocInfo` we wrote in `malloc`, and pass it into `dealloc`.
+    // `read_unaligned` is used, so unaligned ptr is OK.
+    #[allow(clippy::cast_ptr_alignment)]
     let info_ptr = ptr.sub(mem::size_of::<AllocInfo>()) as *const AllocInfo;
     let info = info_ptr.read_unaligned();
     alloc::alloc::dealloc(info.ptr, info.layout);
