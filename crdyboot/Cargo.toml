@@ -7,7 +7,7 @@ version = "1.0.0"
 
 [dependencies]
 log = "0.4.0"
-uefi = { version = "0.16.0", features = ["exts", "ignore-logger-errors"] }
+uefi = { version = "0.16.0", features = ["exts"] }
 uefi-services = "0.13.0"
 
 libcrdy = { path = "../libcrdy" }
