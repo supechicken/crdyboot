@@ -9,9 +9,7 @@ use core::ffi::c_void;
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::{
-    BootServices, OpenProtocolAttributes, OpenProtocolParams,
-};
+use uefi::table::boot::BootServices;
 use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16, Handle};
 use vboot::LoadedKernel;
@@ -104,17 +102,9 @@ fn modify_loaded_image(
 ) -> Result<()> {
     let bt = system_table.boot_services();
 
-    let li = bt
-        .open_protocol::<LoadedImage>(
-            OpenProtocolParams {
-                handle: image,
-                agent: image,
-                controller: None,
-            },
-            OpenProtocolAttributes::Exclusive,
-        )
+    let mut li = bt
+        .open_protocol_exclusive::<LoadedImage>(image)
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
-    let li: &mut LoadedImage = unsafe { &mut *li.interface.get() };
 
     // Set kernel command line.
     let load_options_size = cmdline_ucs2.num_bytes();
