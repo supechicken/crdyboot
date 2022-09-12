@@ -36,20 +36,11 @@ impl Target {
     /// Get a target triple to override the default C compiler
     /// target. Returns None if this is a host build so that the default
     /// target is used in that case.
+    ///
+    /// The targets chosen here match those in the `cc` crate:
+    /// https://github.com/rust-lang/cc-rs/pull/623/files
     fn c_target_override(self) -> Option<&'static str> {
         match self {
-            // UEFI target builds. There are a couple reasons why these are
-            // "-windows-gnu" rather than just "-windows":
-            //
-            // 1. The 32-bit target must be i686-unknown-windows-gnu rather than
-            //    just i686-unknown-windows due to a missing intrinsic. See the
-            //    long comment in
-            //    compiler/rustc_target/src/spec/i686_unknown_uefi.rs in the
-            //    rustlang repo for details.
-            //
-            // 2. It's easier to get the appropriate standard C headers for
-            //    these targets with "-windows-gnu", see README.md for the apt
-            //    packages containing these headers.
             Self::UefiI686 => Some("i686-unknown-windows-gnu"),
             Self::UefiX86_64 => Some("x86_64-unknown-windows-gnu"),
             Self::Host => None,
