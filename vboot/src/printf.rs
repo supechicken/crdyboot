@@ -7,7 +7,7 @@ use alloc::string::String;
 use core::cmp::min;
 use core::{slice, str};
 use cty::{c_char, c_int, size_t};
-use log::info;
+use log::{Level, Record};
 use printf_compat as printf;
 
 unsafe fn c_str_len(mut s: *const c_char) -> usize {
@@ -32,11 +32,9 @@ unsafe extern "C" fn vb2ex_printf(
     fmt: *const c_char,
     mut args: ...
 ) {
-    // TODO: could set the function into the log record directly
-    // instead of formatting it as part of the message.
-    let mut output = String::new();
-
     let func = str_from_c_str(func);
+
+    let mut output = String::new();
     printf::format(
         fmt,
         args.as_va_list(),
@@ -48,7 +46,17 @@ unsafe extern "C" fn vb2ex_printf(
     // desired but is OK since this is just for debug output.
     let stripped = output.strip_suffix('\n').unwrap_or(&output);
 
-    info!("{} {}", func, stripped);
+    // The log format we're using (from uefi-rs) prints the file, but
+    // vboot just tells us the function name. The function name is more
+    // useful than outputing "printf.rs", so place the function name
+    // into the file path here.
+    log::logger().log(
+        &Record::builder()
+            .args(format_args!("{}", stripped))
+            .level(Level::Info)
+            .file(Some(&func))
+            .build(),
+    );
 }
 
 /// Implement the C `snprintf` function.
