@@ -15,7 +15,6 @@ use vboot::{DiskIo, ReturnCode};
 
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
-    crdyboot_image: Handle,
     handle: Handle,
     bt: &BootServices,
 ) -> Result<ScopedProtocol<DevicePath>> {
@@ -25,7 +24,7 @@ fn device_paths_for_handle(
         bt.open_protocol::<DevicePath>(
             OpenProtocolParams {
                 handle,
-                agent: crdyboot_image,
+                agent: bt.image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -42,17 +41,15 @@ fn device_paths_for_handle(
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
 fn is_parent_disk(
-    crdyboot_image: Handle,
     potential_parent: Handle,
     partition: Handle,
     bt: &BootServices,
 ) -> Result<bool> {
     let potential_parent_device_path =
-        device_paths_for_handle(crdyboot_image, potential_parent, bt)?;
+        device_paths_for_handle(potential_parent, bt)?;
     let potential_parent_device_path_node_iter =
         potential_parent_device_path.node_iter();
-    let partition_device_path =
-        device_paths_for_handle(crdyboot_image, partition, bt)?;
+    let partition_device_path = device_paths_for_handle(partition, bt)?;
     let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
     for (parent_path, partition_path) in potential_parent_device_path_node_iter
@@ -85,13 +82,12 @@ fn is_parent_disk(
 /// Search `block_io_handles` for the device that is a parent of
 /// `partition_handle`. See `is_parent_disk` for details.
 fn find_parent_disk(
-    crdyboot_image: Handle,
     block_io_handles: &[Handle],
     partition_handle: Handle,
     bt: &BootServices,
 ) -> Result<Handle> {
     for handle in block_io_handles {
-        if is_parent_disk(crdyboot_image, *handle, partition_handle, bt)? {
+        if is_parent_disk(*handle, partition_handle, bt)? {
             return Ok(*handle);
         }
     }
@@ -99,15 +95,12 @@ fn find_parent_disk(
     Err(Error::ParentDiskNotFound)
 }
 
-fn find_disk_block_io(
-    crdyboot_image: Handle,
-    bt: &BootServices,
-) -> Result<ScopedProtocol<BlockIO>> {
+fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>> {
     // Get the LoadedImage protocol for the image handle. This provides a
     // device handle which should correspond to the disk that the image was
     // loaded from.
     let loaded_image = bt
-        .open_protocol_exclusive::<LoadedImage>(crdyboot_image)
+        .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
     let partition_handle = loaded_image.device();
 
@@ -118,12 +111,8 @@ fn find_disk_block_io(
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle = find_parent_disk(
-        crdyboot_image,
-        &block_io_handles,
-        partition_handle,
-        bt,
-    )?;
+    let disk_handle =
+        find_parent_disk(&block_io_handles, partition_handle, bt)?;
 
     bt.open_protocol_exclusive::<BlockIO>(disk_handle)
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
@@ -136,11 +125,8 @@ pub struct GptDisk<'a> {
 }
 
 impl<'a> GptDisk<'a> {
-    pub fn new(
-        crdyboot_image: Handle,
-        bt: &'a BootServices,
-    ) -> Result<GptDisk<'a>> {
-        let block_io = find_disk_block_io(crdyboot_image, bt)?;
+    pub fn new(bt: &'a BootServices) -> Result<GptDisk<'a>> {
+        let block_io = find_disk_block_io(bt)?;
 
         let bytes_per_lba = block_io.media().block_size().into();
         assert_ne!(bytes_per_lba, 0);

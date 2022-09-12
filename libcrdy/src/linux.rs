@@ -95,15 +95,12 @@ fn entry_point_from_offset(
 }
 
 fn modify_loaded_image(
-    image: Handle,
-    system_table: &SystemTable<Boot>,
+    bt: &BootServices,
     kernel_data: &[u8],
     cmdline_ucs2: &CStr16,
 ) -> Result<()> {
-    let bt = system_table.boot_services();
-
     let mut li = bt
-        .open_protocol_exclusive::<LoadedImage>(image)
+        .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
 
     // Set kernel command line.
@@ -144,7 +141,6 @@ fn modify_loaded_image(
 fn execute_linux_efi_stub(
     kernel_data: &[u8],
     entry_point: Entrypoint,
-    crdyboot_image: Handle,
     system_table: SystemTable<Boot>,
     cmdline: &str,
 ) -> Result<()> {
@@ -159,14 +155,16 @@ fn execute_linux_efi_stub(
     // can't do due to secure boot. This is the same method shim uses:
     // modify the existing image's parameters.
     modify_loaded_image(
-        crdyboot_image,
-        &system_table,
+        system_table.boot_services(),
         kernel_data,
         &cmdline_ucs2,
     )?;
 
     unsafe {
-        (entry_point)(crdyboot_image, system_table);
+        (entry_point)(
+            system_table.boot_services().image_handle(),
+            system_table,
+        );
     }
 
     Err(Error::KernelDidNotTakeControl)
@@ -174,7 +172,6 @@ fn execute_linux_efi_stub(
 
 pub fn execute_linux_kernel(
     kernel: &LoadedKernel,
-    crdyboot_image: Handle,
     system_table: SystemTable<Boot>,
 ) -> Result<()> {
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
@@ -186,7 +183,6 @@ pub fn execute_linux_kernel(
         execute_linux_efi_stub(
             kernel.data(),
             entry_point_from_offset(kernel.data(), entry_point_offset)?,
-            crdyboot_image,
             system_table,
             &cmdline,
         )
@@ -201,11 +197,10 @@ pub fn execute_linux_kernel(
 
 /// Use vboot to load the kernel from the appropriate kernel partition.
 pub fn load_kernel(
-    crdyboot_image: Handle,
     boot_services: &BootServices,
     kernel_verification_key: &[u8],
 ) -> Result<LoadedKernel> {
-    let mut gpt_disk = GptDisk::new(crdyboot_image, boot_services)?;
+    let mut gpt_disk = GptDisk::new(boot_services)?;
 
     let kernel = vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
         .map_err(Error::LoadKernelFailed)?;

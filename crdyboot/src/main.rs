@@ -42,25 +42,21 @@ fn get_kernel_verification_key() -> &'static [u8] {
     key
 }
 
-fn run(crdyboot_image: Handle, mut st: SystemTable<Boot>) -> Result<()> {
+fn run(mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
     set_log_level();
 
     let kernel_verification_key = get_kernel_verification_key();
-    let kernel = load_kernel(
-        crdyboot_image,
-        st.boot_services(),
-        kernel_verification_key,
-    )?;
-    execute_linux_kernel(&kernel, crdyboot_image, st)?;
+    let kernel = load_kernel(st.boot_services(), kernel_verification_key)?;
+    execute_linux_kernel(&kernel, st)?;
 
     Err(Error::KernelDidNotTakeControl)
 }
 
 #[entry]
 fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
-    match run(image, st) {
+    match run(st) {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
             panic!("boot failed: {}", err);
