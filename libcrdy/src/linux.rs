@@ -3,14 +3,14 @@
 // found in the LICENSE file.
 
 use crate::disk::GptDisk;
+use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::PeInfo;
 use crate::{Error, Result};
-use alloc::vec;
 use core::ffi::c_void;
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::BootServices;
+use uefi::table::boot::{AllocateType, BootServices, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16, Handle};
 use vboot::{LoadKernelInputs, LoadedKernel};
@@ -202,7 +202,16 @@ pub fn load_and_execute_kernel(
     system_table: SystemTable<Boot>,
     kernel_verification_key: &[u8],
 ) -> Result<()> {
-    let mut workbuf = vec![0u8; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
+    let mut workbuf = ScopedPageAllocation::new(
+        // Safety: this system table clone will remain valid until
+        // ExitBootServices is called. That won't happen until after the
+        // kernel is executed, at which point crdyboot code is no longer
+        // running.
+        unsafe { system_table.unsafe_clone() },
+        AllocateType::AnyPages,
+        MemoryType::LOADER_DATA,
+        LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
+    )?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot, but should also be big
@@ -214,7 +223,16 @@ pub fn load_and_execute_kernel(
     //
     // This buffer will never be freed, unless loading or executing the
     // kernel fails.
-    let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
+    let mut kernel_buffer = ScopedPageAllocation::new(
+        // Safety: this system table clone will remain valid until
+        // ExitBootServices is called. That won't happen until after the
+        // kernel is executed, at which point crdyboot code is no longer
+        // running.
+        unsafe { system_table.unsafe_clone() },
+        AllocateType::AnyPages,
+        MemoryType::LOADER_CODE,
+        64 * 1024 * 1024,
+    )?;
 
     let kernel = vboot::load_kernel(
         LoadKernelInputs {

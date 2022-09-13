@@ -10,6 +10,9 @@ pub enum Error {
     /// An arithmetic operation or a numeric conversion overflowed.
     Overflow(&'static str),
 
+    /// Failed to allocate memory.
+    Allocation(Status),
+
     UefiServicesInitFailed(Status),
 
     GetCommandLineFailed,
@@ -57,6 +60,10 @@ impl fmt::Display for Error {
         match self {
             Overflow(info) => {
                 write!(f, "overflow: {}", info)
+            }
+
+            Allocation(status) => {
+                write_with_status("failed to allocate memory", status)
             }
 
             UefiServicesInitFailed(status) => {
