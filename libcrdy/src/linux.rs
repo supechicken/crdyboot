@@ -5,6 +5,7 @@
 use crate::disk::GptDisk;
 use crate::pe::PeInfo;
 use crate::{Error, Result};
+use alloc::vec;
 use core::ffi::c_void;
 use core::mem;
 use log::info;
@@ -12,7 +13,7 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
 use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16, Handle};
-use vboot::LoadedKernel;
+use vboot::{LoadKernelInputs, LoadedKernel};
 
 type Entrypoint = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
 
@@ -201,11 +202,32 @@ pub fn load_and_execute_kernel(
     system_table: SystemTable<Boot>,
     kernel_verification_key: &[u8],
 ) -> Result<()> {
+    let mut workbuf = vec![0u8; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
+
+    // Allocate a fairly large buffer. This buffer must be big enough to
+    // hold the kernel data loaded by vboot, but should also be big
+    // enough for the kernel to successfully run without relocation. The
+    // latter requirement is checked below with
+    // `validate_kernel_buffer_size`. The actual required size is
+    // currently around 35 MiB, so 64 MiB should be plenty for the
+    // forseeable future.
+    //
+    // This buffer will never be freed, unless loading or executing the
+    // kernel fails.
+    let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
+
     let kernel = vboot::load_kernel(
-        kernel_verification_key,
+        LoadKernelInputs {
+            workbuf: &mut workbuf,
+            kernel_buffer: &mut kernel_buffer,
+            packed_pubkey: kernel_verification_key,
+        },
         &mut GptDisk::new(system_table.boot_services())?,
     )
     .map_err(Error::LoadKernelFailed)?;
+
+    // Go ahead and free the workbuf, not needed anymore.
+    drop(workbuf);
 
     // Ensure the buffer is large enough to actually run the
     // kernel. We could just allocate a bigger buffer here, but it
