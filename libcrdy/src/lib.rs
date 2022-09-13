@@ -15,5 +15,5 @@ mod linux;
 mod pe;
 mod result;
 
-pub use linux::{execute_linux_kernel, load_kernel};
+pub use linux::load_and_execute_kernel;
 pub use result::{Error, Result};
