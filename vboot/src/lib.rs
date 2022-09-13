@@ -45,6 +45,8 @@ mod vboot_sys {
 }
 
 pub use disk::DiskIo;
-pub use load_kernel::{load_kernel, LoadKernelError, LoadedKernel};
+pub use load_kernel::{
+    load_kernel, LoadKernelError, LoadKernelInputs, LoadedKernel,
+};
 pub use return_codes::return_code_to_str;
 pub use vboot_sys::vb2_return_code as ReturnCode;

@@ -5,16 +5,14 @@
 use crate::disk::{Disk, DiskIo};
 use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
-use alloc::vec;
-use alloc::vec::Vec;
 use core::{fmt, ptr, str};
 use cty::c_void;
 use log::{error, info};
 use uguid::Guid;
 
 /// Fully verified kernel loaded into memory.
-pub struct LoadedKernel {
-    data: Vec<u8>,
+pub struct LoadedKernel<'a> {
+    data: &'a [u8],
     bootloader_address: u64,
     unique_partition_guid: Guid,
 }
@@ -74,7 +72,7 @@ fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
 }
 
-impl LoadedKernel {
+impl<'a> LoadedKernel<'a> {
     fn command_line_with_placeholders(&self) -> Option<&str> {
         // TODO: would be nice if the command line location was returned in
         // the output parameters of vb2_kernel_params, might be
@@ -116,7 +114,7 @@ impl LoadedKernel {
     /// Raw kernel data.
     #[must_use]
     pub fn data(&self) -> &[u8] {
-        &self.data
+        self.data
     }
 }
 
@@ -156,31 +154,41 @@ unsafe fn init_vb2_context(
     Ok(ctx_ptr)
 }
 
+/// Inputs for [`load_kernel`].
+pub struct LoadKernelInputs<'kernel, 'other> {
+    /// Big buffer used by vboot for most of its data. Should be at
+    /// least [`Self::RECOMMENDED_WORKBUF_SIZE`] bytes in size.
+    pub workbuf: &'other mut [u8],
+
+    /// Big buffer used to store the kernel loaded by vboot from the
+    /// kernel partition.
+    pub kernel_buffer: &'kernel mut [u8],
+
+    /// Kernel verification key in the vbpubk format.
+    pub packed_pubkey: &'other [u8],
+}
+
+impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
+    /// Recommended size in bytes of [`LoadKernelInputs::workbuf`].
+    pub const RECOMMENDED_WORKBUF_SIZE: usize =
+        vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE as usize;
+}
+
 /// Find the best kernel. The details are up to the firmware library in
 /// `vboot_reference`. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
-pub fn load_kernel(
-    packed_pubkey: &[u8],
+#[allow(clippy::needless_pass_by_value)]
+pub fn load_kernel<'kernel>(
+    inputs: LoadKernelInputs<'kernel, '_>,
     disk_io: &mut dyn DiskIo,
-) -> Result<LoadedKernel, LoadKernelError> {
-    let mut workbuf =
-        vec![0u8; u32_to_usize(vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE)];
-
-    // Allocate a fairly large buffer. This buffer must be big enough to
-    // hold the kernel data loaded by vboot, but also big enough for the
-    // kernel to successfully run without relocation. The latter requirement
-    // is checked below with `validate_kernel_buffer_size`. The actual
-    // required size is currently around 35 MiB, so 64 MiB should be plenty
-    // for the forseeable future.
-    let mut kernel_buffer = vec![0u8; 64 * 1024 * 1024];
-
+) -> Result<LoadedKernel<'kernel>, LoadKernelError> {
     unsafe {
-        let ctx_ptr = init_vb2_context(packed_pubkey, &mut workbuf)?;
+        let ctx_ptr = init_vb2_context(inputs.packed_pubkey, inputs.workbuf)?;
 
         let mut params = vboot_sys::vb2_kernel_params {
             // Initialize inputs.
-            kernel_buffer: kernel_buffer.as_mut_ptr().cast::<c_void>(),
-            kernel_buffer_size: kernel_buffer.len().try_into().map_err(
+            kernel_buffer: inputs.kernel_buffer.as_mut_ptr().cast::<c_void>(),
+            kernel_buffer_size: inputs.kernel_buffer.len().try_into().map_err(
                 |_| LoadKernelError::BadNumericConversion("kernel buffer size"),
             )?,
 
@@ -206,7 +214,7 @@ pub fn load_kernel(
             info!("LoadKernel success");
 
             Ok(LoadedKernel {
-                data: kernel_buffer,
+                data: inputs.kernel_buffer,
                 bootloader_address: params.bootloader_address,
                 unique_partition_guid: Guid::from_bytes(params.partition_guid),
             })
@@ -292,7 +300,14 @@ mod tests {
             data: include_bytes!("../../workspace/vboot_test_disk.bin"),
         };
 
-        match load_kernel(test_key_vbpubk, &mut disk) {
+        let mut workbuf = vec![0; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
+        let mut kernel_buffer = vec![0; 16 * 1024 * 1024];
+        let inputs = LoadKernelInputs {
+            workbuf: &mut workbuf,
+            kernel_buffer: &mut kernel_buffer,
+            packed_pubkey: test_key_vbpubk,
+        };
+        match load_kernel(inputs, &mut disk) {
             Ok(loaded_kernel) => {
                 assert_eq!(
                     loaded_kernel.unique_partition_guid,
