@@ -170,7 +170,7 @@ fn execute_linux_efi_stub(
     Err(Error::KernelDidNotTakeControl)
 }
 
-pub fn execute_linux_kernel(
+fn execute_linux_kernel(
     kernel: &LoadedKernel,
     system_table: SystemTable<Boot>,
 ) -> Result<()> {
@@ -195,20 +195,22 @@ pub fn execute_linux_kernel(
     }
 }
 
-/// Use vboot to load the kernel from the appropriate kernel partition.
-pub fn load_kernel(
-    boot_services: &BootServices,
+/// Use vboot to load the kernel from the appropriate kernel partition,
+/// then execute it. If successful, this function will never return.
+pub fn load_and_execute_kernel(
+    system_table: SystemTable<Boot>,
     kernel_verification_key: &[u8],
-) -> Result<LoadedKernel> {
-    let mut gpt_disk = GptDisk::new(boot_services)?;
-
-    let kernel = vboot::load_kernel(kernel_verification_key, &mut gpt_disk)
-        .map_err(Error::LoadKernelFailed)?;
+) -> Result<()> {
+    let kernel = vboot::load_kernel(
+        kernel_verification_key,
+        &mut GptDisk::new(system_table.boot_services())?,
+    )
+    .map_err(Error::LoadKernelFailed)?;
 
     // Ensure the buffer is large enough to actually run the
     // kernel. We could just allocate a bigger buffer here, but it
     // shouldn't be needed unless something has gone wrong anyway.
     validate_kernel_buffer_size(kernel.data())?;
 
-    Ok(kernel)
+    execute_linux_kernel(&kernel, system_table)
 }

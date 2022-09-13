@@ -7,9 +7,7 @@
 #![no_main]
 #![feature(abi_efiapi)]
 
-extern crate alloc;
-
-use libcrdy::{execute_linux_kernel, load_kernel, Error, Result};
+use libcrdy::{load_and_execute_kernel, Error, Result};
 use log::LevelFilter;
 use uefi::prelude::*;
 
@@ -47,11 +45,7 @@ fn run(mut st: SystemTable<Boot>) -> Result<()> {
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
     set_log_level();
 
-    let kernel_verification_key = get_kernel_verification_key();
-    let kernel = load_kernel(st.boot_services(), kernel_verification_key)?;
-    execute_linux_kernel(&kernel, st)?;
-
-    Err(Error::KernelDidNotTakeControl)
+    load_and_execute_kernel(st, get_kernel_verification_key())
 }
 
 #[entry]
