@@ -63,11 +63,11 @@ impl<'a> DiskInfo<'a> {
 /// Wrap `DiskIo` into a new struct so that we can convert it to a thin pointer
 /// and cast that to a `vb2ex_disk_handle_t`.
 ///
-/// Also contains an optional `DiskStream` handle. Only one stream is
+/// Also contains an optional `DiskStreamState`. Only one stream is
 /// allowed to exist at a time.
 pub struct Disk<'a> {
     io: &'a mut dyn DiskIo,
-    stream: Option<DiskStream>,
+    stream: Option<DiskStreamState>,
 }
 
 impl<'a> Disk<'a> {
@@ -96,6 +96,80 @@ impl<'a> Disk<'a> {
             phantom: PhantomData,
         }
     }
+
+    /// Convert `num_bytes` to number of blocks. Fails if the input is
+    /// not an even multiple of the block size.
+    fn bytes_to_blocks(&self, num_bytes: u64) -> Option<u64> {
+        let bytes_per_lba = self.io.bytes_per_lba().get();
+
+        if num_bytes % bytes_per_lba != 0 {
+            error!(
+                "stream read size is not a multiple of the block size: {}",
+                num_bytes
+            );
+            return None;
+        }
+
+        Some(num_bytes / bytes_per_lba)
+    }
+
+    /// Convert `num_blocks` (`u64`) to number of bytes (`usize`). Fails
+    /// if overflow occurs.
+    fn blocks_to_bytes_usize(&self, num_blocks: u64) -> Option<usize> {
+        let num_bytes =
+            self.io.bytes_per_lba().get().checked_mul(num_blocks)?;
+        num_bytes.try_into().ok()
+    }
+
+    /// Read `lba_count` blocks starting at `lba_start` into `buffer`.
+    ///
+    /// # Safety
+    ///
+    /// The `buffer` must be at least `lba_count` blocks in size.
+    unsafe fn read(
+        &self,
+        lba_start: u64,
+        lba_count: u64,
+        buffer: *mut u8,
+    ) -> ReturnCode {
+        assert!(!buffer.is_null());
+
+        let buffer_len =
+            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+                buffer_len
+            } else {
+                error!("invalid read size: {}", lba_count);
+                return ReturnCode::VB2_ERROR_UNKNOWN;
+            };
+        let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
+
+        self.io.read(lba_start, buffer)
+    }
+
+    /// Write `lba_count` blocks starting at `lba_start` from `buffer`.
+    ///
+    /// # Safety
+    ///
+    /// The `buffer` must be at least `lba_count` blocks in size.
+    unsafe fn write(
+        &mut self,
+        lba_start: u64,
+        lba_count: u64,
+        buffer: *const u8,
+    ) -> ReturnCode {
+        assert!(!buffer.is_null());
+
+        let buffer_len =
+            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+                buffer_len
+            } else {
+                error!("invalid write size: {}", lba_count);
+                return ReturnCode::VB2_ERROR_UNKNOWN;
+            };
+        let buffer = slice::from_raw_parts(buffer, buffer_len);
+
+        self.io.write(lba_start, buffer)
+    }
 }
 
 #[no_mangle]
@@ -109,14 +183,7 @@ unsafe extern "C" fn VbExDiskRead(
     assert!(!buffer.is_null());
 
     let disk = Disk::from_handle(handle);
-
-    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
-        .try_into()
-        .expect("invalid read size");
-
-    let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
-
-    disk.io.read(lba_start, buffer)
+    disk.read(lba_start, lba_count, buffer)
 }
 
 #[no_mangle]
@@ -130,19 +197,15 @@ unsafe extern "C" fn VbExDiskWrite(
     assert!(!buffer.is_null());
 
     let disk = Disk::from_handle(handle);
-
-    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
-        .try_into()
-        .expect("invalid write size");
-
-    let buffer = slice::from_raw_parts(buffer, buffer_len);
-
-    disk.io.write(lba_start, buffer)
+    disk.write(lba_start, lba_count, buffer)
 }
 
+/// Pointer to a stream. We only allow one open stream per disk, so this
+/// is actually just a pointer to a disk.
+type DiskStreamHandle = vb2ex_disk_handle_t;
+
 /// Stateful stream handle for reading blocks from disk in order.
-struct DiskStream {
-    disk: vb2ex_disk_handle_t,
+struct DiskStreamState {
     cur_lba: u64,
     remaining_blocks: u64,
 }
@@ -152,7 +215,7 @@ unsafe extern "C" fn VbExStreamOpen(
     handle: vb2ex_disk_handle_t,
     lba_start: u64,
     lba_count: u64,
-    stream: *mut *mut DiskStream,
+    stream: *mut DiskStreamHandle,
 ) -> ReturnCode {
     assert!(!handle.is_null());
     assert!(!stream.is_null());
@@ -166,77 +229,80 @@ unsafe extern "C" fn VbExStreamOpen(
         return ReturnCode::VB2_ERROR_UNKNOWN;
     }
 
-    disk.stream = Some(DiskStream {
-        disk: handle,
+    disk.stream = Some(DiskStreamState {
         cur_lba: lba_start,
         remaining_blocks: lba_count,
     });
-    // OK to unwrap, we just set the option to a value.
-    *stream = disk.stream.as_mut().unwrap();
+
+    // Write out the stream handle, which is the same as the disk
+    // handle. We only allow one open stream per disk, so having the
+    // disk pointer is sufficient to get the stream.
+    //
+    // Making these pointers one and the same makes it easier to avoid
+    // running afoul of Miri checks, because we don't need a pointer to
+    // the disk inside of the stream state. That would be a problem
+    // because the stream data is inside the disk data, so you can't
+    // mutably borrow both at the same time.
+    *stream = handle;
 
     ReturnCode::VB2_SUCCESS
 }
 
 #[no_mangle]
 unsafe extern "C" fn VbExStreamRead(
-    stream: *mut DiskStream,
+    stream_handle: DiskStreamHandle,
     num_bytes: u32,
     buffer: *mut u8,
 ) -> ReturnCode {
-    assert!(!stream.is_null());
+    assert!(!stream_handle.is_null());
     assert!(!buffer.is_null());
 
-    // Our implementation assumes that vboot will always try to read in
-    // multiples of the LBA size. Get the number of blocks to read, or
-    // fail if not an even multiple.
-    let num_blocks = {
-        let disk = Disk::from_handle((*stream).disk);
-        let num_bytes = u64::from(num_bytes);
+    let disk = Disk::from_handle(stream_handle);
 
-        let bytes_per_lba = disk.io.bytes_per_lba().get();
+    // Get the number of blocks to read.
+    let num_blocks =
+        if let Some(num_blocks) = disk.bytes_to_blocks(u64::from(num_bytes)) {
+            num_blocks
+        } else {
+            return ReturnCode::VB2_ERROR_UNKNOWN;
+        };
 
-        // Our implementation assumes that vboot will always try to read in
-        // multiples of the LBA size.
-        if num_bytes % bytes_per_lba != 0 {
+    // Scope access to the stream so that we can call `disk.read` below.
+    let cur_lba = {
+        let stream = disk.stream.as_mut().expect("no open stream");
+
+        // Check that we aren't reading past the allowed number of blocks.
+        if num_blocks > stream.remaining_blocks {
             error!(
-                "stream read size is not a multiple of the block size: {}",
-                num_bytes
+                "stream read requested too many blocks: {} > {}",
+                num_blocks,
+                (*stream).remaining_blocks
             );
             return ReturnCode::VB2_ERROR_UNKNOWN;
         }
 
-        num_bytes / bytes_per_lba
+        stream.cur_lba
     };
 
-    // Check that we aren't reading past the allowed number of blocks.
-    if num_blocks > (*stream).remaining_blocks {
-        error!(
-            "stream read requested too many blocks: {} > {}",
-            num_blocks,
-            (*stream).remaining_blocks
-        );
-        return ReturnCode::VB2_ERROR_UNKNOWN;
-    }
-
     // Use the block reader to actually read from the disk.
-    let rc =
-        VbExDiskRead((*stream).disk, (*stream).cur_lba, num_blocks, buffer);
+    let rc = disk.read(cur_lba, num_blocks, buffer);
     if rc != ReturnCode::VB2_SUCCESS {
         error!("VbExDiskRead failed: {}", crate::return_code_to_str(rc));
         return rc;
     }
 
-    (*stream).cur_lba += num_blocks;
-    (*stream).remaining_blocks -= num_blocks;
+    let stream = disk.stream.as_mut().expect("no open stream");
+    stream.cur_lba += num_blocks;
+    stream.remaining_blocks -= num_blocks;
 
     ReturnCode::VB2_SUCCESS
 }
 
 #[no_mangle]
-unsafe extern "C" fn VbExStreamClose(stream: *mut DiskStream) {
+unsafe extern "C" fn VbExStreamClose(stream: DiskStreamHandle) {
     assert!(!stream.is_null());
 
-    let disk = Disk::from_handle((*stream).disk);
+    let disk = Disk::from_handle(stream);
 
     assert!(disk.stream.is_some());
     disk.stream = None;
@@ -273,6 +339,18 @@ mod tests {
     }
 
     #[test]
+    fn test_bytes_to_blocks() {
+        let mut disk_io = MemDisk { data: Vec::new() };
+        let disk = Disk::new(&mut disk_io);
+
+        assert_eq!(disk.bytes_to_blocks(4), Some(1));
+        assert_eq!(disk.bytes_to_blocks(8), Some(2));
+        assert_eq!(disk.bytes_to_blocks(12), Some(3));
+
+        assert_eq!(disk.bytes_to_blocks(3), None);
+    }
+
+    #[test]
     fn test_stream_api() {
         let mut disk_io = MemDisk { data: Vec::new() };
         // Block 0.
@@ -306,7 +384,7 @@ mod tests {
 
         /// Use VbExStreamRead to fill `buf`.
         fn stream_read(
-            disk_stream: *mut DiskStream,
+            disk_stream: DiskStreamHandle,
             buf: &mut [u8],
         ) -> ReturnCode {
             unsafe {
