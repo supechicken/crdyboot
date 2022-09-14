@@ -262,32 +262,83 @@ mod tests {
         fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
             let start = (lba_start * self.bytes_per_lba().get()) as usize;
             let end = start + buffer.len();
-            buffer.copy_from_slice(&self.data[start..end]);
-            ReturnCode::VB2_SUCCESS
+            if let Some(src) = self.data.get(start..end) {
+                buffer.copy_from_slice(src);
+                ReturnCode::VB2_SUCCESS
+            } else {
+                ReturnCode::VB2_ERROR_UNKNOWN
+            }
         }
 
-        fn write(&mut self, _lba_start: u64, _buffer: &[u8]) -> ReturnCode {
-            // The stream API does not support writing.
-            panic!("write called");
+        fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
+            let start = (lba_start * self.bytes_per_lba().get()) as usize;
+            let end = start + buffer.len();
+            if let Some(dst) = self.data.get_mut(start..end) {
+                dst.copy_from_slice(buffer);
+                ReturnCode::VB2_SUCCESS
+            } else {
+                ReturnCode::VB2_ERROR_UNKNOWN
+            }
         }
+    }
+
+    /// Make a `MemDisk` with five 4-byte blocks of data.
+    fn make_test_mem_disk() -> MemDisk {
+        #[rustfmt::skip]
+        let data = vec![
+             1,  2,  3,  4,
+             5,  6,  7,  8,
+             9, 10, 11, 12,
+            13, 14, 15, 16,
+            17, 18, 19, 20,
+        ];
+        MemDisk { data }
+    }
+
+    #[test]
+    fn test_disk_api() {
+        let mut disk_io = make_test_mem_disk();
+        let mut disk = Disk::new(&mut disk_io);
+        let disk_handle = disk.as_handle();
+
+        // Read two blocks at an offset of one block.
+        let mut buffer = [0; 8];
+        assert_eq!(
+            unsafe { VbExDiskRead(disk_handle, 1, 2, buffer.as_mut_ptr()) },
+            ReturnCode::VB2_SUCCESS
+        );
+        assert_eq!(buffer, [5, 6, 7, 8, 9, 10, 11, 12]);
+
+        // Attempt to read six blocks, check that it fails.
+        let mut buffer = [0; 24];
+        assert_ne!(
+            unsafe { VbExDiskRead(disk_handle, 0, 6, buffer.as_mut_ptr()) },
+            ReturnCode::VB2_SUCCESS
+        );
+
+        // Write two blocks at an offset of one block.
+        let buffer = [21, 22, 23, 24, 25, 26, 27, 28];
+        assert_eq!(
+            unsafe { VbExDiskWrite(disk_handle, 1, 2, buffer.as_ptr()) },
+            ReturnCode::VB2_SUCCESS
+        );
+        #[rustfmt::skip]
+        assert_eq!(
+            disk_io.data,
+            [
+                1, 2, 3, 4,
+                21, 22, 23, 24,
+                25, 26, 27, 28,
+                13, 14, 15, 16,
+                17, 18, 19, 20,
+            ]
+        );
     }
 
     #[test]
     fn test_stream_api() {
-        let mut disk_io = MemDisk { data: Vec::new() };
-        // Block 0.
-        disk_io.data.extend([1, 2, 3, 4]);
-        // Block 1.
-        disk_io.data.extend([5, 6, 7, 8]);
-        // Block 2.
-        disk_io.data.extend([9, 10, 11, 12]);
-        // Block 3.
-        disk_io.data.extend([13, 14, 15, 16]);
-        // Block 4.
-        disk_io.data.extend([17, 18, 19, 20]);
-
+        let mut disk_io = make_test_mem_disk();
         let mut disk = Disk::new(&mut disk_io);
-
         let disk_handle = disk.as_handle();
 
         // Open the stream.
