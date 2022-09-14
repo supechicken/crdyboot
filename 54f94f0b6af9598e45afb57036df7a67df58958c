@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "6a2378bc_e8dcbff5",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1479707
+      },
+      "writtenOn": "2022-09-14T17:42:05Z",
+      "side": 1,
+      "message": "Looking at the commit message I would expect that this was purely the addition of tests, I wouldn\u0027t expect there to also be an implementation of `write` added.\n\nCan you make this clearer?",
+      "revId": "54f94f0b6af9598e45afb57036df7a67df58958c",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    }
+  ]
+}
