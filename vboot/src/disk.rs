@@ -87,32 +87,14 @@ impl<'a> Disk<'a> {
         DiskInfo {
             info: vb2_disk_info {
                 handle: self.as_handle(),
-                bytes_per_lba: self.bytes_per_lba().get(),
-                lba_count: self.lba_count(),
+                bytes_per_lba: self.io.bytes_per_lba().get(),
+                lba_count: self.io.lba_count(),
                 streaming_lba_count: 0,
                 flags: 0,
                 name: ptr::null(),
             },
             phantom: PhantomData,
         }
-    }
-}
-
-impl<'a> DiskIo for Disk<'a> {
-    fn bytes_per_lba(&self) -> NonZeroU64 {
-        self.io.bytes_per_lba()
-    }
-
-    fn lba_count(&self) -> u64 {
-        self.io.lba_count()
-    }
-
-    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-        self.io.read(lba_start, buffer)
-    }
-
-    fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
-        self.io.write(lba_start, buffer)
     }
 }
 
@@ -128,13 +110,13 @@ unsafe extern "C" fn VbExDiskRead(
 
     let disk = Disk::from_handle(handle);
 
-    let buffer_len = (disk.bytes_per_lba().get() * lba_count)
+    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
         .try_into()
         .expect("invalid read size");
 
     let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
 
-    disk.read(lba_start, buffer)
+    disk.io.read(lba_start, buffer)
 }
 
 #[no_mangle]
@@ -149,13 +131,13 @@ unsafe extern "C" fn VbExDiskWrite(
 
     let disk = Disk::from_handle(handle);
 
-    let buffer_len = (disk.bytes_per_lba().get() * lba_count)
+    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
         .try_into()
         .expect("invalid write size");
 
     let buffer = slice::from_raw_parts(buffer, buffer_len);
 
-    disk.write(lba_start, buffer)
+    disk.io.write(lba_start, buffer)
 }
 
 /// Stateful stream handle for reading blocks from disk in order.
