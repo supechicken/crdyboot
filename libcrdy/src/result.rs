@@ -21,6 +21,9 @@ pub enum Error {
 
     ParentDiskNotFound,
 
+    /// The disk block size is zero.
+    InvalidBlockSize,
+
     LoadKernelFailed(LoadKernelError),
 
     /// Attempted to access out-of-bounds data.
@@ -81,6 +84,10 @@ impl fmt::Display for Error {
 
             ParentDiskNotFound => {
                 write!(f, "failed to get parent disk")
+            }
+
+            InvalidBlockSize => {
+                write!(f, "disk block size is zero")
             }
 
             LoadKernelFailed(err) => {

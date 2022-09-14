@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::result::{Error, Result};
+use core::num::NonZeroU64;
 use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
@@ -120,7 +121,7 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>> {
 
 pub struct GptDisk<'a> {
     block_io: ScopedProtocol<'a, BlockIO>,
-    bytes_per_lba: u64,
+    bytes_per_lba: NonZeroU64,
     lba_count: u64,
 }
 
@@ -128,8 +129,9 @@ impl<'a> GptDisk<'a> {
     pub fn new(bt: &'a BootServices) -> Result<GptDisk<'a>> {
         let block_io = find_disk_block_io(bt)?;
 
-        let bytes_per_lba = block_io.media().block_size().into();
-        assert_ne!(bytes_per_lba, 0);
+        let bytes_per_lba =
+            NonZeroU64::new(block_io.media().block_size().into())
+                .ok_or(Error::InvalidBlockSize)?;
         let lba_count = block_io.media().last_block() + 1;
 
         Ok(GptDisk {
@@ -141,7 +143,7 @@ impl<'a> GptDisk<'a> {
 }
 
 impl<'a> DiskIo for GptDisk<'a> {
-    fn bytes_per_lba(&self) -> u64 {
+    fn bytes_per_lba(&self) -> NonZeroU64 {
         self.bytes_per_lba
     }
 
