@@ -26,6 +26,7 @@
 use crate::vboot_sys::{vb2_disk_info, vb2ex_disk_handle_t};
 use crate::ReturnCode;
 use core::marker::PhantomData;
+use core::num::NonZeroU64;
 use core::{ptr, slice};
 use cty::c_void;
 use log::error;
@@ -36,7 +37,7 @@ pub trait DiskIo {
     ///
     /// The value returned by this function is not allowed to change
     /// from one call to the next, and must be greater than zero.
-    fn bytes_per_lba(&self) -> u64;
+    fn bytes_per_lba(&self) -> NonZeroU64;
 
     /// Number of random-access LBA sectors on the device.
     fn lba_count(&self) -> u64;
@@ -86,7 +87,7 @@ impl<'a> Disk<'a> {
         DiskInfo {
             info: vb2_disk_info {
                 handle: self.as_handle(),
-                bytes_per_lba: self.bytes_per_lba(),
+                bytes_per_lba: self.bytes_per_lba().get(),
                 lba_count: self.lba_count(),
                 streaming_lba_count: 0,
                 flags: 0,
@@ -98,7 +99,7 @@ impl<'a> Disk<'a> {
 }
 
 impl<'a> DiskIo for Disk<'a> {
-    fn bytes_per_lba(&self) -> u64 {
+    fn bytes_per_lba(&self) -> NonZeroU64 {
         self.io.bytes_per_lba()
     }
 
@@ -127,7 +128,7 @@ unsafe extern "C" fn VbExDiskRead(
 
     let disk = Disk::from_handle(handle);
 
-    let buffer_len = (disk.bytes_per_lba() * lba_count)
+    let buffer_len = (disk.bytes_per_lba().get() * lba_count)
         .try_into()
         .expect("invalid read size");
 
@@ -148,7 +149,7 @@ unsafe extern "C" fn VbExDiskWrite(
 
     let disk = Disk::from_handle(handle);
 
-    let buffer_len = (disk.bytes_per_lba() * lba_count)
+    let buffer_len = (disk.bytes_per_lba().get() * lba_count)
         .try_into()
         .expect("invalid write size");
 
@@ -210,8 +211,7 @@ unsafe extern "C" fn VbExStreamRead(
         let disk = Disk::from_handle((*stream).disk);
         let num_bytes = u64::from(num_bytes);
 
-        let bytes_per_lba = disk.io.bytes_per_lba();
-        assert_ne!(bytes_per_lba, 0);
+        let bytes_per_lba = disk.io.bytes_per_lba().get();
 
         // Our implementation assumes that vboot will always try to read in
         // multiples of the LBA size.
@@ -269,8 +269,8 @@ mod tests {
     }
 
     impl DiskIo for MemDisk {
-        fn bytes_per_lba(&self) -> u64 {
-            4
+        fn bytes_per_lba(&self) -> NonZeroU64 {
+            NonZeroU64::new(4).unwrap()
         }
 
         fn lba_count(&self) -> u64 {
@@ -278,7 +278,7 @@ mod tests {
         }
 
         fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-            let start = (lba_start * self.bytes_per_lba()) as usize;
+            let start = (lba_start * self.bytes_per_lba().get()) as usize;
             let end = start + buffer.len();
             buffer.copy_from_slice(&self.data[start..end]);
             ReturnCode::VB2_SUCCESS

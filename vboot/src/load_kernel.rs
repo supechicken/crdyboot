@@ -220,6 +220,7 @@ pub fn load_kernel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::num::NonZeroU64;
     use regex::Regex;
     use uguid::guid;
 
@@ -228,8 +229,8 @@ mod tests {
     }
 
     impl DiskIo for MemDisk {
-        fn bytes_per_lba(&self) -> u64 {
-            512
+        fn bytes_per_lba(&self) -> NonZeroU64 {
+            NonZeroU64::new(512).unwrap()
         }
 
         fn lba_count(&self) -> u64 {
@@ -237,7 +238,7 @@ mod tests {
         }
 
         fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-            let start = (lba_start * self.bytes_per_lba()) as usize;
+            let start = (lba_start * self.bytes_per_lba().get()) as usize;
             let end = start + buffer.len();
             buffer.copy_from_slice(&self.data[start..end]);
             ReturnCode::VB2_SUCCESS
