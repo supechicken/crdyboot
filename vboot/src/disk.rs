@@ -96,6 +96,64 @@ impl<'a> Disk<'a> {
             phantom: PhantomData,
         }
     }
+
+    /// Convert `num_blocks` (`u64`) to number of bytes (`usize`). Fails
+    /// if overflow occurs.
+    fn blocks_to_bytes_usize(&self, num_blocks: u64) -> Option<usize> {
+        let num_bytes =
+            self.io.bytes_per_lba().get().checked_mul(num_blocks)?;
+        num_bytes.try_into().ok()
+    }
+
+    /// Read `lba_count` blocks starting at `lba_start` into `buffer`.
+    ///
+    /// # Safety
+    ///
+    /// The `buffer` must be at least `lba_count` blocks in size.
+    unsafe fn read(
+        &self,
+        lba_start: u64,
+        lba_count: u64,
+        buffer: *mut u8,
+    ) -> ReturnCode {
+        assert!(!buffer.is_null());
+
+        let buffer_len =
+            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+                buffer_len
+            } else {
+                error!("invalid read size: {}", lba_count);
+                return ReturnCode::VB2_ERROR_UNKNOWN;
+            };
+        let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
+
+        self.io.read(lba_start, buffer)
+    }
+
+    /// Write `lba_count` blocks starting at `lba_start` from `buffer`.
+    ///
+    /// # Safety
+    ///
+    /// The `buffer` must be at least `lba_count` blocks in size.
+    unsafe fn write(
+        &mut self,
+        lba_start: u64,
+        lba_count: u64,
+        buffer: *const u8,
+    ) -> ReturnCode {
+        assert!(!buffer.is_null());
+
+        let buffer_len =
+            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+                buffer_len
+            } else {
+                error!("invalid write size: {}", lba_count);
+                return ReturnCode::VB2_ERROR_UNKNOWN;
+            };
+        let buffer = slice::from_raw_parts(buffer, buffer_len);
+
+        self.io.write(lba_start, buffer)
+    }
 }
 
 #[no_mangle]
@@ -109,14 +167,7 @@ unsafe extern "C" fn VbExDiskRead(
     assert!(!buffer.is_null());
 
     let disk = Disk::from_handle(handle);
-
-    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
-        .try_into()
-        .expect("invalid read size");
-
-    let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
-
-    disk.io.read(lba_start, buffer)
+    disk.read(lba_start, lba_count, buffer)
 }
 
 #[no_mangle]
@@ -130,14 +181,7 @@ unsafe extern "C" fn VbExDiskWrite(
     assert!(!buffer.is_null());
 
     let disk = Disk::from_handle(handle);
-
-    let buffer_len = (disk.io.bytes_per_lba().get() * lba_count)
-        .try_into()
-        .expect("invalid write size");
-
-    let buffer = slice::from_raw_parts(buffer, buffer_len);
-
-    disk.io.write(lba_start, buffer)
+    disk.write(lba_start, lba_count, buffer)
 }
 
 /// Stateful stream handle for reading blocks from disk in order.
@@ -219,8 +263,8 @@ unsafe extern "C" fn VbExStreamRead(
     }
 
     // Use the block reader to actually read from the disk.
-    let rc =
-        VbExDiskRead((*stream).disk, (*stream).cur_lba, num_blocks, buffer);
+    let disk = Disk::from_handle((*stream).disk);
+    let rc = disk.read((*stream).cur_lba, num_blocks, buffer);
     if rc != ReturnCode::VB2_SUCCESS {
         error!("VbExDiskRead failed: {}", crate::return_code_to_str(rc));
         return rc;
