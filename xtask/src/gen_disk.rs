@@ -472,10 +472,7 @@ pub fn sign_kernel_partition(
         "--vmlinuz", vmlinuz.as_str(),
         "--bootloader", bootloader.as_str(),
         "--config", config.as_str(),
-        // TODO: the kernel is actually amd64, but pass in
-        // arm64 so that vbutil won't do all the kernel
-        // munging stuff it wants to.
-        "--arch", "arm64"]).run()?;
+        "--arch", "amd64"]).run()?;
 
     // Verify it.
     Command::with_args(
