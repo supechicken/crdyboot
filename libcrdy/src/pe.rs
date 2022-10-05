@@ -4,16 +4,8 @@
 
 //! PE executable parsing.
 //!
-//! This uses the [`object`] library to parse a PE executable and find
-//! its entry point.
-//!
-//! When booting from a 64-bit UEFI environment, the normal PE entry point
-//! in the PE header can be used.
-//!
-//! When booting from a 32-bit UEFI environment, newer kernels can provide a
-//! compatibility entry point. This requires a kernel with this commit:
-//!
-//!    efi/x86: Implement mixed mode boot without the handover protocol
+//! This uses the [`object`] library to parse a PE executable and
+//! extract data.
 
 use crate::{Error, Result};
 use core::mem;
@@ -21,7 +13,7 @@ use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::PeFile64;
 use object::{LittleEndian, Object, ObjectSection};
 
-/// Info about a PE executable.
+/// Info about a PE executable's entry points.
 pub struct PeInfo {
     /// Primary entry point (as an offset).
     pub entry_point: u32,
@@ -31,6 +23,16 @@ pub struct PeInfo {
 }
 
 impl PeInfo {
+    /// Parse a PE executable and find its entry point.
+    ///
+    /// When booting from a 64-bit UEFI environment, the normal PE entry
+    /// point in the PE header can be used.
+    ///
+    /// When booting from a 32-bit UEFI environment, newer kernels can
+    /// provide a compatibility entry point. This requires a kernel with
+    /// this commit:
+    ///
+    ///    efi/x86: Implement mixed mode boot without the handover protocol
     pub fn parse(data: &[u8]) -> Result<Self> {
         let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
 
