@@ -195,6 +195,7 @@ impl Config {
 #[derive(Clone, Copy)]
 pub enum EfiExe {
     Crdyboot,
+    CrdybootWithPubkey,
     Enroller,
 }
 
@@ -202,6 +203,7 @@ impl EfiExe {
     fn as_str(self) -> &'static str {
         match self {
             EfiExe::Crdyboot => "crdyboot.efi",
+            EfiExe::CrdybootWithPubkey => "crdyboot_with_pubkey.efi",
             EfiExe::Enroller => "enroller.efi",
         }
     }

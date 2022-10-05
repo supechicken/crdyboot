@@ -382,7 +382,7 @@ pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
             .iter()
             .map(|arch| {
                 (
-                    conf.target_exec_path(*arch, EfiExe::Crdyboot),
+                    conf.target_exec_path(*arch, EfiExe::CrdybootWithPubkey),
                     arch.efi_file_name("grub"),
                 )
             })
