@@ -78,11 +78,11 @@ impl Config {
     /// For example, this might return a path like:
     ///
     ///     <repo>/target/x86_64-unknown-uefi/release/enroller.efi
-    pub fn target_exec_path(&self, arch: Arch, file_name: &str) -> Utf8PathBuf {
+    pub fn target_exec_path(&self, arch: Arch, exe: EfiExe) -> Utf8PathBuf {
         self.target_path()
             .join(arch.uefi_target())
             .join(self.build_mode().dir_name())
-            .join(file_name)
+            .join(exe.as_str())
     }
 
     pub fn workspace_path(&self) -> Utf8PathBuf {
@@ -189,6 +189,21 @@ impl Config {
 
     pub fn build_mode(&self) -> BuildMode {
         BuildMode::Release
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum EfiExe {
+    Crdyboot,
+    Enroller,
+}
+
+impl EfiExe {
+    fn as_str(self) -> &'static str {
+        match self {
+            EfiExe::Crdyboot => "crdyboot.efi",
+            EfiExe::Enroller => "enroller.efi",
+        }
     }
 }
 

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use crate::arch::Arch;
-use crate::config::Config;
+use crate::config::{Config, EfiExe};
 use crate::secure_boot::{self, SecureBootKeyPaths};
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -235,7 +235,7 @@ fn gen_enroller_fs(conf: &Config) -> Result<Vec<u8>> {
 
         // Copy in the two enroller executables.
         for arch in Arch::all() {
-            let src_path = conf.target_exec_path(arch, "enroller.efi");
+            let src_path = conf.target_exec_path(arch, EfiExe::Enroller);
             let src_data = fs::read(src_path)?;
 
             let dst_file_name = arch.efi_file_name("boot");
@@ -382,7 +382,7 @@ pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
             .iter()
             .map(|arch| {
                 (
-                    conf.target_exec_path(*arch, "crdyboot.efi"),
+                    conf.target_exec_path(*arch, EfiExe::Crdyboot),
                     arch.efi_file_name("grub"),
                 )
             })
