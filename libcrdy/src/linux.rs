@@ -198,10 +198,7 @@ fn execute_linux_kernel(
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel(
-    system_table: SystemTable<Boot>,
-    _kernel_verification_key: &[u8],
-) -> Result<()> {
+pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
     let mut workbuf = ScopedPageAllocation::new(
         // Safety: this system table clone will remain valid until
         // ExitBootServices is called. That won't happen until after the

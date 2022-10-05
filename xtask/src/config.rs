@@ -17,13 +17,16 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     enable_verbose_logging: bool,
-    use_test_key: bool,
     disk_path: Utf8PathBuf,
 
     /// Absolute path of the crdyboot repo. This is passed in to
     /// [`Config::load`], not part of the input config file.
     #[serde(skip)]
     repo: Utf8PathBuf,
+
+    // Deprecated field. Keep in the config to avoid breaking existing
+    // workspaces.
+    use_test_key: Option<bool>,
 }
 
 /// Path of the config file relative to the repo root directory.
@@ -53,9 +56,6 @@ impl Config {
             Crdyboot => {
                 if self.enable_verbose_logging {
                     features.push("verbose");
-                }
-                if self.use_test_key {
-                    features.push("use_test_key");
                 }
             }
             Enroller | Libcrdy | Vboot | Xtask => {}
@@ -226,7 +226,7 @@ mod tests {
         assert!(Config::parse(&unknown_key, repo).is_err());
 
         // Partial config is invalid.
-        let partial = default_cfg.replace("use_test_key = true", "");
+        let partial = default_cfg.replace("enable_verbose_logging = true", "");
         assert!(Config::parse(&partial, repo).is_err());
 
         Ok(())

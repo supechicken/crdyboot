@@ -3,11 +3,6 @@
 # logging, not build logging.
 enable_verbose_logging = true
 
-# If true, crdyboot is built with a test key in the repo. To embed a
-# different key, place it in `keys/kernel_key.vbpubk` (relative to the
-# repo root) and set this to false.
-use_test_key = true
-
 # Path of the reven disk (relative to the repo root) to modify for boot
 # testing.
 disk_path = "workspace/disk.bin"

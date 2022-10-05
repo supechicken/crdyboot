@@ -96,8 +96,7 @@ Then run it in QEMU:
 Some additional build options can be set in `crdyboot.toml` (in the root of
 the repo). This file will be created automatically if it doesn't already
 exist by copying `xtask/default.toml`. The defaults are appropriate for
-development. In a release build, verbose logging and the test key should be
-turned off.
+development. In a release build, verbose logging should be turned off.
 
 ## Testing on real hardware
 

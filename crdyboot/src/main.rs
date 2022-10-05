@@ -20,32 +20,12 @@ fn set_log_level() {
     log::set_max_level(level);
 }
 
-/// Get the public key used to verify the kernel. By default the key is read
-/// from `keys/kernel_key.vbpubk`. If the `use_test_key` feature is enabled
-/// then the key is read from a test file in the repo instead.
-fn get_kernel_verification_key() -> &'static [u8] {
-    let key;
-
-    #[cfg(feature = "use_test_key")]
-    {
-        log::warn!("using test key for kernel verification");
-        key = include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk");
-    }
-
-    #[cfg(not(feature = "use_test_key"))]
-    {
-        key = include_bytes!("../../keys/kernel_key.vbpubk");
-    }
-
-    key
-}
-
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
     set_log_level();
 
-    load_and_execute_kernel(st, get_kernel_verification_key())
+    load_and_execute_kernel(st)
 }
 
 #[entry]
