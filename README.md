@@ -81,17 +81,13 @@ setup commands. The image must have rootfs verification enabled
 `--no-enable-rootfs-verification`). Any kind of image (`base`, `dev`, or
 `test`) is allowed.
 
-To check formatting, lint, test, and build crdyboot:
+To check formatting, lint, test, build crdyboot, and install to the image:
 
     cargo xtask check
 
-To just build crdyboot:
+To just build crdyboot and install to the image (a quicker subset of `check`):
 
     cargo xtask build
-
-To copy the latest crdyboot build to the image:
-
-    cargo xtask update-disk
 
 Then run it in QEMU:
 

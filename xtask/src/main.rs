@@ -37,7 +37,6 @@ enum Action {
     Test(TestAction),
     Build(BuildAction),
     PrepDisk(PrepDiskAction),
-    UpdateDisk(UpdateDiskAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     Writedisk(WritediskAction),
@@ -67,11 +66,6 @@ struct FormatAction {
     #[argh(switch)]
     check: bool,
 }
-
-/// Modify an existing CloudReady build to insert crdyboot.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "update-disk")]
-struct UpdateDiskAction {}
 
 /// Run "cargo clippy" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -233,7 +227,8 @@ fn run_crdyboot_build(conf: &Config) -> Result<()> {
         )?;
     }
 
-    Ok(())
+    // Update the disk image with the new executable.
+    gen_disk::copy_in_crdyboot(conf)
 }
 
 pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
@@ -566,7 +561,6 @@ fn main() -> Result<()> {
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Format(action) => run_rustfmt(action),
-        Action::UpdateDisk(_) => gen_disk::copy_in_crdyboot(&conf),
         Action::Lint(_) => run_clippy(&conf),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
