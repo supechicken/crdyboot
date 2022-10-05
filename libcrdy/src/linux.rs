@@ -4,7 +4,7 @@
 
 use crate::disk::GptDisk;
 use crate::page_alloc::ScopedPageAllocation;
-use crate::pe::PeInfo;
+use crate::pe::{get_vbpubk_from_image, PeInfo};
 use crate::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
@@ -200,7 +200,7 @@ fn execute_linux_kernel(
 /// then execute it. If successful, this function will never return.
 pub fn load_and_execute_kernel(
     system_table: SystemTable<Boot>,
-    kernel_verification_key: &[u8],
+    _kernel_verification_key: &[u8],
 ) -> Result<()> {
     let mut workbuf = ScopedPageAllocation::new(
         // Safety: this system table clone will remain valid until
@@ -234,13 +234,21 @@ pub fn load_and_execute_kernel(
         64 * 1024 * 1024,
     )?;
 
+    let boot_services = system_table.boot_services();
+
+    let kernel_verification_key = get_vbpubk_from_image(boot_services)?;
+    info!(
+        "kernel_verification_key len={}",
+        kernel_verification_key.len()
+    );
+
     let kernel = vboot::load_kernel(
         LoadKernelInputs {
             workbuf: &mut workbuf,
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new(system_table.boot_services())?,
+        &mut GptDisk::new(boot_services)?,
     )
     .map_err(Error::LoadKernelFailed)?;
 

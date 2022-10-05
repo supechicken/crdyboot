@@ -8,10 +8,86 @@
 //! extract data.
 
 use crate::{Error, Result};
-use core::mem;
+use core::{mem, slice};
+use log::info;
 use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::PeFile64;
 use object::{LittleEndian, Object, ObjectSection};
+use uefi::proto::loaded_image::LoadedImage;
+use uefi::table::boot::BootServices;
+
+fn u32_to_usize(v: u32) -> usize {
+    v.try_into().expect("size of usize is smaller than u32")
+}
+
+/// Use the `LoadedImage` protocol to get a pointer to the data of the
+/// currently-executing image.
+fn get_current_exe_image_ptr(
+    boot_services: &BootServices,
+) -> Result<*const u8> {
+    // Use the `LoadedImage` protocol to get a pointer to the data of
+    // the currently-executing image.
+    let li = boot_services
+        .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
+        .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
+    let (image_ptr, _) = li.info();
+    Ok(image_ptr.cast())
+}
+
+/// Read the packed public key data from the `.vbpubk` section of the
+/// currently-executing image.
+///
+/// The returned slice is valid for as long as boot services are active
+/// (as enforced by the lifetime).
+pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
+    // The PE layout is different between the 32-bit and 64-bit targets;
+    // make a `PeFile` type alias to the appropriate type.
+    #[cfg(target_pointer_width = "32")]
+    type PeFile<'a> = object::read::pe::PeFile32<'a>;
+    #[cfg(target_pointer_width = "64")]
+    type PeFile<'a> = object::read::pe::PeFile64<'a>;
+
+    let image_ptr = get_current_exe_image_ptr(boot_services)?;
+    info!("image base: {:x?}", image_ptr);
+
+    // On the IA32 target we can't rely on the image length provided by
+    // `LoadedImage`. This is due to a shim ABI issue. See
+    // https://github.com/rhboot/shim/issues/515 for more details.
+    //
+    // To work around this, assume that the image headers fit within the
+    // first kilobyte of data. Parse that partial data into a `PeFile`.
+    //
+    // Note that we could avoid this hack on X86_64, but let's keep the
+    // code paths the same on both targets to keep things consistent.
+    let estimated_pe_header_len = 1024;
+    let image_data =
+        unsafe { slice::from_raw_parts(image_ptr, estimated_pe_header_len) };
+    let pe = PeFile::parse(image_data).map_err(Error::InvalidPe)?;
+
+    // Find the target section.
+    let section_name = ".vbpubk";
+    let section = pe
+        .section_table()
+        .iter()
+        .find(|section| section.raw_name() == section_name.as_bytes())
+        .ok_or(Error::MissingPubkey)?;
+
+    // Get the section's data range (relative to the image_ptr).
+    let (section_addr, section_len) = section.pe_address_range();
+    let section_addr = u32_to_usize(section_addr);
+    let section_len = u32_to_usize(section_len);
+    info!(
+        "{} section: offset={:#x}, len={:#x}",
+        section_name, section_addr, section_len
+    );
+
+    // Get the section's data as a slice.
+    let section_data: &[u8] = unsafe {
+        slice::from_raw_parts(image_ptr.add(section_addr), section_len)
+    };
+
+    Ok(section_data)
+}
 
 /// Info about a PE executable's entry points.
 pub struct PeInfo {

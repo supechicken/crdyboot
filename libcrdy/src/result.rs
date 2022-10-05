@@ -41,6 +41,9 @@ pub enum Error {
     /// Parse error from the [`object`] crate.
     InvalidPe(object::Error),
 
+    /// The boot image is missing the ".vbpubk" section.
+    MissingPubkey,
+
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.
     MissingIa32CompatEntryPoint,
@@ -117,6 +120,9 @@ impl fmt::Display for Error {
 
             InvalidPe(err) => {
                 write!(f, "invalid PE: {}", err)
+            }
+            MissingPubkey => {
+                write!(f, "missing .vbpubk section")
             }
             MissingIa32CompatEntryPoint => {
                 write!(f, "missing ia32 compatibility entry point")
