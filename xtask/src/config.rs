@@ -4,7 +4,6 @@
 
 use crate::arch::Arch;
 use crate::build_mode::BuildMode;
-use crate::package::Package;
 use crate::qemu::OvmfPaths;
 use crate::secure_boot::SecureBootKeyPaths;
 use crate::vboot::VbootKeyPaths;
@@ -49,24 +48,6 @@ impl Config {
     /// Whether to enable verbose logging at runtime in crdyboot.
     pub fn is_verbose_logging_enabled(&self) -> bool {
         self.enable_verbose_logging
-    }
-
-    /// Get all cargo features to enable while building a package.
-    pub fn get_package_features(&self, package: Package) -> Vec<&'static str> {
-        use Package::*;
-
-        let mut features = Vec::new();
-
-        match package {
-            Crdyboot => {
-                if self.enable_verbose_logging {
-                    features.push("verbose");
-                }
-            }
-            Enroller | Libcrdy | Vboot | Xtask => {}
-        }
-
-        features
     }
 
     pub fn repo_path(&self) -> &Utf8Path {

@@ -10,8 +10,3 @@ uefi = { version = "0.17.0", default-features = false, features = ["exts"] }
 uefi-services = "0.14.0"
 
 libcrdy = { path = "../libcrdy" }
-
-[features]
-# If enabled, the max log level is set to Debug. If disabled (the default),
-# the max log level is set to Warn.
-verbose = []

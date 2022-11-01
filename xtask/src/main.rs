@@ -146,18 +146,10 @@ fn run_check(conf: &Config) -> Result<()> {
     run_rustfmt(&FormatAction { check: true })?;
     run_tests(&Default::default())?;
     run_crdyboot_build(conf)?;
-    run_clippy(conf)
-}
-
-/// Add cargo features to a command. Does nothing if `features` is empty.
-fn add_cargo_features_args(cmd: &mut Command, features: &[&str]) {
-    if !features.is_empty() {
-        cmd.add_args(&["--features", &features.join(",")]);
-    }
+    run_clippy()
 }
 
 fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
-    let features = conf.get_package_features(package);
     let build_mode = conf.build_mode();
 
     for target in Arch::all_targets() {
@@ -173,7 +165,6 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
                 target,
             ],
         );
-        add_cargo_features_args(&mut cmd, &features);
         cmd.add_args(build_mode.cargo_args());
         cmd.run()?;
     }
@@ -292,7 +283,7 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
     gen_disk::sign_kernel_partition(conf, "KERN-B")
 }
 
-fn run_clippy_for_package(conf: &Config, package: Package) -> Result<()> {
+fn run_clippy_for_package(package: Package) -> Result<()> {
     let mut cmd =
         Command::with_args("cargo", &["clippy", "--package", package.name()]);
 
@@ -309,15 +300,14 @@ fn run_clippy_for_package(conf: &Config, package: Package) -> Result<()> {
             Arch::X64.uefi_target(),
         ]);
     }
-    add_cargo_features_args(&mut cmd, &conf.get_package_features(package));
     cmd.run()?;
 
     Ok(())
 }
 
-fn run_clippy(conf: &Config) -> Result<()> {
+fn run_clippy() -> Result<()> {
     for package in Package::all() {
-        run_clippy_for_package(conf, package)?;
+        run_clippy_for_package(package)?;
     }
 
     Ok(())
@@ -564,7 +554,7 @@ fn main() -> Result<()> {
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(_) => run_check(&conf),
         Action::Format(action) => run_rustfmt(action),
-        Action::Lint(_) => run_clippy(&conf),
+        Action::Lint(_) => run_clippy(),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
         Action::Test(action) => run_tests(action),
