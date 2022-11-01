@@ -228,7 +228,10 @@ fn run_crdyboot_build(conf: &Config) -> Result<()> {
     }
 
     // Update the disk image with the new executable.
-    gen_disk::copy_in_crdyboot(conf)
+    gen_disk::copy_in_crdyboot(conf)?;
+
+    // Add or remove the `crdyboot_verbose` file.
+    gen_disk::update_verbose_boot_file(conf)
 }
 
 pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {

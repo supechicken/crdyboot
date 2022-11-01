@@ -372,6 +372,24 @@ impl<'a> SignAndUpdateBootloader<'a> {
     }
 }
 
+/// Add or remove the `crdyboot_verbose` file from the ESP.
+pub fn update_verbose_boot_file(conf: &Config) -> Result<()> {
+    modify_system_partition(conf.disk_path(), |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+        let verbose_name = "crdyboot_verbose";
+
+        // Unconditionally delete the file (ignore any errors since it
+        // might not exist).
+        let _ = boot_dir.remove(verbose_name);
+        // Create the file if needed.
+        if conf.is_verbose_logging_enabled() {
+            boot_dir.create_file(verbose_name)?;
+        }
+        Ok(())
+    })
+}
+
 /// Sign crdyboot, then copy it into the disk image under the "grub"
 /// name (since that's what shim currently chains to).
 pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {

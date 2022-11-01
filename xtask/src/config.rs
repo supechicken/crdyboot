@@ -46,6 +46,11 @@ impl Config {
         Ok(config)
     }
 
+    /// Whether to enable verbose logging at runtime in crdyboot.
+    pub fn is_verbose_logging_enabled(&self) -> bool {
+        self.enable_verbose_logging
+    }
+
     /// Get all cargo features to enable while building a package.
     pub fn get_package_features(&self, package: Package) -> Vec<&'static str> {
         use Package::*;
