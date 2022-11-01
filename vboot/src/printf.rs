@@ -49,14 +49,18 @@ unsafe extern "C" fn vb2ex_printf(
     // The log format we're using (from uefi-rs) prints the file, but
     // vboot just tells us the function name. The function name is more
     // useful than outputing "printf.rs", so place the function name
-    // into the file path here.
-    log::logger().log(
-        &Record::builder()
-            .args(format_args!("{}", stripped))
-            .level(Level::Info)
-            .file(Some(&func))
-            .build(),
-    );
+    // into the file path here. Only send this log if the runtime log
+    // level is high enough.
+    let level = Level::Info;
+    if level <= log::max_level() {
+        log::logger().log(
+            &Record::builder()
+                .args(format_args!("{}", stripped))
+                .level(level)
+                .file(Some(&func))
+                .build(),
+        );
+    }
 }
 
 /// Implement the C `snprintf` function.
