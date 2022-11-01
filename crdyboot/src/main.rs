@@ -7,23 +7,13 @@
 #![no_main]
 #![feature(abi_efiapi)]
 
-use libcrdy::{load_and_execute_kernel, Error, Result};
-use log::LevelFilter;
+use libcrdy::{load_and_execute_kernel, set_log_level, Error, Result};
 use uefi::prelude::*;
-
-fn set_log_level() {
-    #[cfg(feature = "verbose")]
-    let level = LevelFilter::Debug;
-    #[cfg(not(feature = "verbose"))]
-    let level = LevelFilter::Warn;
-
-    log::set_max_level(level);
-}
 
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st)
         .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
-    set_log_level();
+    set_log_level(st.boot_services());
 
     load_and_execute_kernel(st)
 }

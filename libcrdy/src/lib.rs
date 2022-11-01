@@ -12,9 +12,11 @@
 
 mod disk;
 mod linux;
+mod logging;
 mod page_alloc;
 mod pe;
 mod result;
 
 pub use linux::load_and_execute_kernel;
+pub use logging::set_log_level;
 pub use result::{Error, Result};
