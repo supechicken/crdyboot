@@ -1,8 +1,0 @@
-# If true, the max log level will be Debug. If false, the max log
-# level will be Warn. Note that this controls crdyboot's runtime
-# logging, not build logging.
-enable_verbose_logging = true
-
-# Path of the reven disk (relative to the repo root) to modify for boot
-# testing.
-disk_path = "workspace/disk.bin"

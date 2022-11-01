@@ -10,39 +10,20 @@ use crate::vboot::VbootKeyPaths;
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_err as fs;
-use serde::Deserialize;
 
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct Config {
-    enable_verbose_logging: bool,
     disk_path: Utf8PathBuf,
 
-    /// Absolute path of the crdyboot repo. This is passed in to
-    /// [`Config::load`], not part of the input config file.
-    #[serde(skip)]
+    /// Absolute path of the crdyboot repo.
     repo: Utf8PathBuf,
-
-    // Deprecated field. Keep in the config to avoid breaking existing
-    // workspaces.
-    use_test_key: Option<bool>,
-}
-
-/// Path of the config file relative to the repo root directory.
-pub fn config_path(repo_root: &Utf8Path) -> Utf8PathBuf {
-    repo_root.join("crdyboot.toml")
 }
 
 impl Config {
-    pub fn load(repo_root: &Utf8Path) -> Result<Config> {
-        let src = fs::read_to_string(config_path(repo_root))?;
-        Config::parse(&src, repo_root)
-    }
-
-    fn parse(src: &str, repo: &Utf8Path) -> Result<Config> {
-        let mut config: Self = toml::de::from_str(src)?;
-        config.repo = repo.into();
-        Ok(config)
+    pub fn new(repo_root: Utf8PathBuf) -> Self {
+        Self {
+            disk_path: repo_root.join("workspace/disk.bin"),
+            repo: repo_root,
+        }
     }
 
     pub fn repo_path(&self) -> &Utf8Path {
@@ -187,29 +168,5 @@ impl EfiExe {
             EfiExe::CrdybootWithPubkey => "crdyboot_with_pubkey.efi",
             EfiExe::Enroller => "enroller.efi",
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse() -> Result<()> {
-        let repo = &Utf8PathBuf::new();
-
-        // Default config parses OK.
-        let default_cfg = include_str!("../default.toml");
-        Config::parse(default_cfg, repo)?;
-
-        // Config with unknown key is invalid.
-        let unknown_key = format!("{}\n unknown_key = true", default_cfg);
-        assert!(Config::parse(&unknown_key, repo).is_err());
-
-        // Partial config is invalid.
-        let partial = default_cfg.replace("enable_verbose_logging = true", "");
-        assert!(Config::parse(&partial, repo).is_err());
-
-        Ok(())
     }
 }

@@ -562,13 +562,7 @@ fn main() -> Result<()> {
     let opt: Opt = argh::from_env();
     let repo_root = get_repo_path()?;
 
-    // Create the config file from the default if it doesn't already exist.
-    let conf_path = config::config_path(&repo_root);
-    let default_conf_path = repo_root.join("xtask/default.toml");
-    if !conf_path.exists() {
-        copy_file(&default_conf_path, &conf_path)?;
-    }
-    let conf = Config::load(&repo_root)?;
+    let conf = Config::new(repo_root);
 
     // Re-run setup if something has changed that requires it.
     rerun_setup_if_needed(&opt.action, &conf)?;
