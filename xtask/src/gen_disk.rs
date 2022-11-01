@@ -372,8 +372,14 @@ impl<'a> SignAndUpdateBootloader<'a> {
     }
 }
 
+/// Whether to enable verbose runtime logs in crdyboot.
+pub struct VerboseRuntimeLogs(pub bool);
+
 /// Add or remove the `crdyboot_verbose` file from the ESP.
-pub fn update_verbose_boot_file(conf: &Config) -> Result<()> {
+pub fn update_verbose_boot_file(
+    conf: &Config,
+    verbose: VerboseRuntimeLogs,
+) -> Result<()> {
     modify_system_partition(conf.disk_path(), |root_dir| {
         let efi_dir = root_dir.open_dir("EFI")?;
         let boot_dir = efi_dir.open_dir("BOOT")?;
@@ -383,7 +389,7 @@ pub fn update_verbose_boot_file(conf: &Config) -> Result<()> {
         // might not exist).
         let _ = boot_dir.remove(verbose_name);
         // Create the file if needed.
-        if conf.is_verbose_logging_enabled() {
+        if verbose.0 {
             boot_dir.create_file(verbose_name)?;
         }
         Ok(())

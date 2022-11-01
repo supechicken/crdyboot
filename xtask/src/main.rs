@@ -15,6 +15,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use config::{Config, EfiExe};
 use fs_err as fs;
+use gen_disk::VerboseRuntimeLogs;
 use package::Package;
 use qemu::{Display, Qemu, VarAccess};
 use std::{env, process};
@@ -46,7 +47,17 @@ enum Action {
 /// Build crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "build")]
-struct BuildAction {}
+struct BuildAction {
+    /// only log warnings and errors
+    #[argh(switch)]
+    disable_verbose_logs: bool,
+}
+
+impl BuildAction {
+    fn verbose(&self) -> VerboseRuntimeLogs {
+        VerboseRuntimeLogs(!self.disable_verbose_logs)
+    }
+}
 
 /// Build enroller.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -56,7 +67,17 @@ struct BuildEnrollerAction {}
 /// Check formating, lint, test, and build.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "check")]
-struct CheckAction {}
+struct CheckAction {
+    /// only log warnings and errors
+    #[argh(switch)]
+    disable_verbose_logs: bool,
+}
+
+impl CheckAction {
+    fn verbose(&self) -> VerboseRuntimeLogs {
+        VerboseRuntimeLogs(!self.disable_verbose_logs)
+    }
+}
 
 /// Run "cargo fmt" on all the code.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -141,11 +162,11 @@ fn run_cargo_deny() -> Result<()> {
     Ok(())
 }
 
-fn run_check(conf: &Config) -> Result<()> {
+fn run_check(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_cargo_deny()?;
     run_rustfmt(&FormatAction { check: true })?;
     run_tests(&Default::default())?;
-    run_crdyboot_build(conf)?;
+    run_crdyboot_build(conf, verbose)?;
     run_clippy()
 }
 
@@ -207,7 +228,10 @@ fn add_vbpubk_section(
     Ok(())
 }
 
-fn run_crdyboot_build(conf: &Config) -> Result<()> {
+fn run_crdyboot_build(
+    conf: &Config,
+    verbose: VerboseRuntimeLogs,
+) -> Result<()> {
     run_uefi_build(conf, Package::Crdyboot)?;
 
     for arch in Arch::all() {
@@ -222,7 +246,7 @@ fn run_crdyboot_build(conf: &Config) -> Result<()> {
     gen_disk::copy_in_crdyboot(conf)?;
 
     // Add or remove the `crdyboot_verbose` file.
-    gen_disk::update_verbose_boot_file(conf)
+    gen_disk::update_verbose_boot_file(conf, verbose)
 }
 
 pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
@@ -550,9 +574,9 @@ fn main() -> Result<()> {
     rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
-        Action::Build(_) => run_crdyboot_build(&conf),
+        Action::Build(action) => run_crdyboot_build(&conf, action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
-        Action::Check(_) => run_check(&conf),
+        Action::Check(action) => run_check(&conf, action.verbose()),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
         Action::PrepDisk(_) => run_prep_disk(&conf),

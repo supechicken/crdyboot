@@ -45,11 +45,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Whether to enable verbose logging at runtime in crdyboot.
-    pub fn is_verbose_logging_enabled(&self) -> bool {
-        self.enable_verbose_logging
-    }
-
     pub fn repo_path(&self) -> &Utf8Path {
         &self.repo
     }
