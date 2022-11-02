@@ -211,14 +211,14 @@ fn add_vbpubk_section(
         "llvm-objcopy",
         &[
             "--add-section",
-            &format!("{}={}", section_name, vbpubk_path),
+            &format!("{section_name}={vbpubk_path}"),
             "--set-section-flags",
             // Setting the `data` flag is necessary to make the section
             // go in a sensible place (otherwise it may be placed in a
             // way that prevents the executable from booting). Also set
             // readonly since there's no reason to write to this
             // section again.
-            &format!("{}=data,readonly", section_name),
+            &format!("{section_name}=data,readonly"),
             src_path.as_str(),
             dst_path.as_str(),
         ],
@@ -283,7 +283,7 @@ where
 {
     let src = src.as_ref();
     let dst = dst.as_ref();
-    println!("copy {} to {}", src, dst);
+    println!("copy {src} to {dst}");
     fs::copy(src, dst)?;
 
     Ok(())

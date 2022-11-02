@@ -17,7 +17,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
     {
         Ok(sfs) => sfs,
         Err(err) => {
-            error!("failed to open SimpleFileSystem: {:?}", err);
+            error!("failed to open SimpleFileSystem: {err:?}");
             return false;
         }
     };
@@ -25,7 +25,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
     let mut root = match sfs.open_volume() {
         Ok(root) => root,
         Err(err) => {
-            error!("failed to open volume: {:?}", err);
+            error!("failed to open volume: {err:?}");
             return false;
         }
     };
@@ -35,7 +35,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
         Ok(_) => true,
         Err(err) => {
             if err.status() != Status::NOT_FOUND {
-                error!("unexpected error when opening {}: {:?}", path, err);
+                error!("unexpected error when opening {path}: {err:?}");
             }
             false
         }

@@ -103,10 +103,7 @@ impl<'a> Disk<'a> {
         let bytes_per_lba = self.io.bytes_per_lba().get();
 
         if num_bytes % bytes_per_lba != 0 {
-            error!(
-                "stream read size is not a multiple of the block size: {}",
-                num_bytes
-            );
+            error!("stream read size is not a multiple of the block size: {num_bytes}");
             return None;
         }
 
@@ -138,7 +135,7 @@ impl<'a> Disk<'a> {
             if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
                 buffer_len
             } else {
-                error!("invalid read size: {}", lba_count);
+                error!("invalid read size: {lba_count}");
                 return ReturnCode::VB2_ERROR_UNKNOWN;
             };
         let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
@@ -163,7 +160,7 @@ impl<'a> Disk<'a> {
             if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
                 buffer_len
             } else {
-                error!("invalid write size: {}", lba_count);
+                error!("invalid write size: {lba_count}");
                 return ReturnCode::VB2_ERROR_UNKNOWN;
             };
         let buffer = slice::from_raw_parts(buffer, buffer_len);
@@ -274,8 +271,7 @@ unsafe extern "C" fn VbExStreamRead(
         // Check that we aren't reading past the allowed number of blocks.
         if num_blocks > stream.remaining_blocks {
             error!(
-                "stream read requested too many blocks: {} > {}",
-                num_blocks,
+                "stream read requested too many blocks: {num_blocks} > {}",
                 (*stream).remaining_blocks
             );
             return ReturnCode::VB2_ERROR_UNKNOWN;

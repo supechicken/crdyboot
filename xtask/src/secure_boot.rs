@@ -62,7 +62,7 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
         "-newkey", "rsa:2048",
         "-keyout", paths.priv_pem().as_str(),
         "-out", paths.pub_pem().as_str(),
-        "-subj", &format!("/CN={}/", name),
+        "-subj", &format!("/CN={name}/"),
         // Don't encrypt the key. This avoids needing to set a password.
         "-nodes",
     ]).run()?;

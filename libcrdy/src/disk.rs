@@ -156,8 +156,8 @@ impl<'a> DiskIo for GptDisk<'a> {
         match self.block_io.read_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!("disk read failed: lba_start={}, size in bytes: {}, err: {:?}",
-                       lba_start, buffer.len(), err);
+                error!("disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
+                       buffer.len());
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN
@@ -170,8 +170,8 @@ impl<'a> DiskIo for GptDisk<'a> {
         match self.block_io.write_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!("disk write failed: lba_start={}, size in bytes: {}, err: {:?}",
-                       lba_start, buffer.len(), err);
+                error!("disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
+                       buffer.len());
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN

@@ -55,7 +55,7 @@ unsafe extern "C" fn vb2ex_printf(
     if level <= log::max_level() {
         log::logger().log(
             &Record::builder()
-                .args(format_args!("{}", stripped))
+                .args(format_args!("{stripped}"))
                 .level(level)
                 .file(Some(&func))
                 .build(),

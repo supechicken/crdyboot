@@ -58,11 +58,11 @@ impl fmt::Display for Error {
         use Error::*;
 
         let mut write_with_status =
-            |msg, status| write!(f, "{}: {:?}", msg, status);
+            |msg, status| write!(f, "{msg}: {status:?}");
 
         match self {
             Overflow(info) => {
-                write!(f, "overflow: {}", info)
+                write!(f, "overflow: {info}")
             }
 
             Allocation(status) => {
@@ -101,11 +101,11 @@ impl fmt::Display for Error {
             }
 
             LoadKernelFailed(err) => {
-                write!(f, "failed to load kernel: {}", err)
+                write!(f, "failed to load kernel: {err}")
             }
 
             OutOfBounds(info) => {
-                write!(f, "out of bounds: {}", info)
+                write!(f, "out of bounds: {info}")
             }
             InvalidKernelMagic => {
                 write!(f, "invalid magic in the kernel setup header")
@@ -113,13 +113,12 @@ impl fmt::Display for Error {
             KernelBufferTooSmall(required, allocated) => {
                 write!(
                     f,
-                    "allocated kernel buffer not big enough: {}b > {}b",
-                    required, allocated
+                    "allocated kernel buffer not big enough: {required}b > {allocated}b",
                 )
             }
 
             InvalidPe(err) => {
-                write!(f, "invalid PE: {}", err)
+                write!(f, "invalid PE: {err}")
             }
             MissingPubkey => {
                 write!(f, "missing .vbpubk section")
@@ -129,7 +128,7 @@ impl fmt::Display for Error {
             }
 
             CommandLineTooBig(size) => {
-                write!(f, "kernel command line is too large: {}", size)
+                write!(f, "kernel command line is too large: {size}")
             }
 
             KernelDidNotTakeControl => {

@@ -21,7 +21,7 @@ fn is_64bit() -> bool {
     match mem::size_of::<usize>() {
         8 => true,
         4 => false,
-        other => panic!("invalid size of usize: {}", other),
+        other => panic!("invalid size of usize: {other}"),
     }
 }
 
@@ -57,7 +57,7 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
 
     // Get the `init_size` field.
     let init_size = get_u32_field(kernel_buffer, INIT_SIZE_OFFSET)?;
-    info!("minimum required size: {}", init_size);
+    info!("minimum required size: {init_size}");
 
     let init_size =
         usize::try_from(init_size).map_err(|_| Error::Overflow("init_size"))?;
@@ -176,7 +176,7 @@ fn execute_linux_kernel(
     system_table: SystemTable<Boot>,
 ) -> Result<()> {
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
-    info!("command line: {}", cmdline);
+    info!("command line: {cmdline}");
 
     let pe = PeInfo::parse(kernel.data())?;
 

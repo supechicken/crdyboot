@@ -72,7 +72,7 @@ impl Config {
     pub fn write_setup_version(&self, version: u32) -> Result<()> {
         Ok(fs::write(
             self.setup_version_path(),
-            format!("{}\n", version),
+            format!("{version}\n"),
         )?)
     }
 

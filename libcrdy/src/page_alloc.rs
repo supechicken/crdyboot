@@ -44,21 +44,20 @@ impl<'a> ScopedPageAllocation<'a> {
     ) -> Result<Self> {
         // Reject the allocation if it's not a multiple of the page size.
         if num_bytes % Self::PAGE_SIZE != 0 {
-            error!("{} is not an even multiple of page size", num_bytes);
+            error!("{num_bytes} is not an even multiple of page size");
             return Err(Error::Allocation(Status::UNSUPPORTED));
         }
 
         let num_pages = num_bytes / Self::PAGE_SIZE;
 
         info!(
-            "allocating {} pages ({:?}, {:?})",
-            num_pages, allocate_type, memory_type
+            "allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})"
         );
         let addr = system_table
             .boot_services()
             .allocate_pages(allocate_type, memory_type, num_pages)
             .map_err(|err| Error::Allocation(err.status()))?;
-        info!("allocation address: {:#x}", addr);
+        info!("allocation address: {addr:#x}");
 
         // Convert the physical address to a pointer.
         let ptr = addr as *mut u8;
@@ -86,7 +85,7 @@ impl<'a> ScopedPageAllocation<'a> {
 impl<'a> Drop for ScopedPageAllocation<'a> {
     fn drop(&mut self) {
         let addr = self.allocation.as_mut_ptr() as u64;
-        info!("freeing {} pages at {:#x}", self.num_pages, addr);
+        info!("freeing {} pages at {addr:#x}", self.num_pages);
 
         // Can't propagate an error from here, so just log it.
         if let Err(err) = self

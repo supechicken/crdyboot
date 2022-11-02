@@ -23,7 +23,7 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
     match run(st) {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
-            panic!("boot failed: {}", err);
+            panic!("boot failed: {err}");
         }
     }
 }

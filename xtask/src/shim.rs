@@ -41,7 +41,7 @@ fn build_shim(conf: &Config) -> Result<()> {
     let dockerfile_path = shim_dir.join("Dockerfile");
     let orig_dockerfile = fs::read_to_string(&dockerfile_path)?;
     let orig_str = "TOPDIR=.. -f ../Makefile";
-    let new_str = format!("DISABLE_EBS_PROTECTION=y {}", orig_str);
+    let new_str = format!("DISABLE_EBS_PROTECTION=y {orig_str}");
     let new_dockerfile = orig_dockerfile.replace(orig_str, &new_str);
     fs::write(&dockerfile_path, new_dockerfile)?;
 

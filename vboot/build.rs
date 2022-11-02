@@ -81,12 +81,12 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
 
     let mut cflags = "-I../../vboot/src/libc".to_string();
     if let Some(target) = target.c_target_override() {
-        cflags = format!("{} --target={}", cflags, target);
+        cflags = format!("{cflags} --target={target}");
     }
     if target == Target::Host {
         cflags += " -fPIC";
     }
-    println!("CFLAGS={}", cflags);
+    println!("CFLAGS={cflags}");
 
     let mut make_cmd = process::Command::new("make");
     make_cmd
@@ -94,11 +94,11 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
         .arg("-C")
         .arg(vboot_ref)
         .arg("V=1")
-        .arg(format!("CC={}", c_compiler))
+        .arg(format!("CC={c_compiler}"))
         .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
         .arg(format!("BUILD={}", path_to_str(&vboot_build_dir)))
         .arg("fwlib");
-    println!("{:?}", make_cmd);
+    println!("{make_cmd:?}");
     let status = make_cmd.status().expect("failed to launch make");
     if !status.success() {
         panic!("make failed");
@@ -151,7 +151,7 @@ fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks));
 
     if let Some(target) = target.c_target_override() {
-        builder = builder.clang_arg(format!("--target={}", target));
+        builder = builder.clang_arg(format!("--target={target}"));
     }
 
     for include_dir in include_dirs {

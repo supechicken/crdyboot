@@ -151,7 +151,7 @@ impl Qemu {
     ) -> Result<()> {
         let mut cmd = self.create_command(var_access, display);
 
-        cmd.add_args(&["-drive", &format!("format=raw,file={}", image_path)]);
+        cmd.add_args(&["-drive", &format!("format=raw,file={image_path}")]);
         cmd.run()?;
 
         Ok(())

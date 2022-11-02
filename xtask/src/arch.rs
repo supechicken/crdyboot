@@ -31,6 +31,6 @@ impl Arch {
             Arch::Ia32 => "ia32",
             Arch::X64 => "x64",
         };
-        format!("{}{}.efi", base_name, arch_name)
+        format!("{base_name}{arch_name}.efi")
     }
 }

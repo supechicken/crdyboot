@@ -40,15 +40,15 @@ impl fmt::Display for LoadKernelError {
         use LoadKernelError::*;
 
         let mut write_with_rc = |msg, rc: &ReturnCode| {
-            write!(f, "{}: 0x{:x} ({})", msg, rc.0, return_code_to_str(*rc))
+            write!(f, "{msg}: 0x{:x} ({})", rc.0, return_code_to_str(*rc))
         };
 
         match self {
             BadNumericConversion(info) => {
-                write!(f, "failed to convert numeric type: {}", info)
+                write!(f, "failed to convert numeric type: {info}")
             }
             PubkeyTooSmall(size) => {
-                write!(f, "packed pubkey buffer is too small: {}", size)
+                write!(f, "packed pubkey buffer is too small: {size}")
             }
             ApiInitFailed(rc) => {
                 write_with_rc("call to vb2api_init failed", rc)
@@ -329,7 +329,7 @@ mod tests {
                 );
             }
             Err(err) => {
-                panic!("load_kernel failed: {}", err);
+                panic!("load_kernel failed: {err}");
             }
         }
     }

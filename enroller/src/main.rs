@@ -21,7 +21,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),
         8 => info!("64-bit UEFI"),
-        size => info!("Weird UEFI: usize is {} bytes", size),
+        size => info!("Weird UEFI: usize is {size} bytes"),
     }
 
     let pk_and_kek_var = include_bytes!(
@@ -67,7 +67,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
     info!("Successfully set custom db, KEK, and PK variables");
 
     let delay_in_s = 2;
-    info!("shutting down in {} seconds", delay_in_s);
+    info!("shutting down in {delay_in_s} seconds");
 
     let bt = st.boot_services();
     bt.stall(delay_in_s * 1_000_000);

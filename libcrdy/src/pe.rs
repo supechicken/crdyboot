@@ -76,10 +76,7 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     let (section_addr, section_len) = section.pe_address_range();
     let section_addr = u32_to_usize(section_addr);
     let section_len = u32_to_usize(section_len);
-    info!(
-        "{} section: offset={:#x}, len={:#x}",
-        section_name, section_addr, section_len
-    );
+    info!("{section_name} section: offset={section_addr:#x}, len={section_len:#x}");
 
     // Get the section's data as a slice.
     let section_data: &[u8] = unsafe {
