@@ -147,17 +147,17 @@ struct GenVbootReturnCodeStringsAction {}
 
 fn run_cargo_deny() -> Result<()> {
     // Check if cargo-deny is installed, and install it if not.
-    if Command::with_args("cargo", &["deny", "--version"])
+    if Command::with_args("cargo", ["deny", "--version"])
         .enable_capture()
         .run()
         .is_err()
     {
-        Command::with_args("cargo", &["install", "--locked", "cargo-deny"])
+        Command::with_args("cargo", ["install", "--locked", "cargo-deny"])
             .run()?;
     }
 
     // Run cargo-deny. This uses the config in `.deny.toml`.
-    Command::with_args("cargo", &["deny", "check"]).run()?;
+    Command::with_args("cargo", ["deny", "check"]).run()?;
 
     Ok(())
 }
@@ -176,7 +176,7 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
     for target in Arch::all_targets() {
         let mut cmd = Command::with_args(
             "cargo",
-            &[
+            [
                 "build",
                 "--package",
                 package.name(),
@@ -209,7 +209,7 @@ fn add_vbpubk_section(
 
     Command::with_args(
         "llvm-objcopy",
-        &[
+        [
             "--add-section",
             &format!("{section_name}={vbpubk_path}"),
             "--set-section-flags",
@@ -252,18 +252,18 @@ fn run_crdyboot_build(
 pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
     // Clone repo if not already cloned, otherwise just fetch.
     if path.exists() {
-        Command::with_args("git", &["-C", path.as_str(), "fetch"]).run()?;
+        Command::with_args("git", ["-C", path.as_str(), "fetch"]).run()?;
     } else {
-        Command::with_args("git", &["clone", url, path.as_str()]).run()?;
+        Command::with_args("git", ["clone", url, path.as_str()]).run()?;
     }
 
     // Check out a known-working commit.
-    Command::with_args("git", &["-C", path.as_str(), "checkout", rev]).run()?;
+    Command::with_args("git", ["-C", path.as_str(), "checkout", rev]).run()?;
 
     // Init/update submodules.
     Command::with_args(
         "git",
-        &["-C", path.as_str(), "submodule", "update", "--init"],
+        ["-C", path.as_str(), "submodule", "update", "--init"],
     )
     .run()?;
 
@@ -290,9 +290,9 @@ where
 }
 
 fn run_rustfmt(action: &FormatAction) -> Result<()> {
-    let mut cmd = Command::with_args("cargo", &["fmt", "--all"]);
+    let mut cmd = Command::with_args("cargo", ["fmt", "--all"]);
     if action.check {
-        cmd.add_args(&["--", "--check"]);
+        cmd.add_args(["--", "--check"]);
     }
     cmd.run()?;
 
@@ -309,14 +309,14 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
 
 fn run_clippy_for_package(package: Package) -> Result<()> {
     let mut cmd =
-        Command::with_args("cargo", &["clippy", "--package", package.name()]);
+        Command::with_args("cargo", ["clippy", "--package", package.name()]);
 
     // Use a UEFI target for everything but xtask. This gives slightly
     // better coverage (for example, third_party/malloc.rs is not
     // included on the host target), and is required in newer versions
     // of uefi-rs due to `eh_personality` no longer being set.
     if package != Package::Xtask {
-        cmd.add_args(&[
+        cmd.add_args([
             "-Zbuild-std=core,compiler_builtins,alloc",
             "-Zbuild-std-features=compiler-builtins-mem",
             "--target",
@@ -344,7 +344,7 @@ fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
         cmd.env
             .insert("MIRIFLAGS".into(), "-Zmiri-tag-raw-pointers".into());
     }
-    cmd.add_args(&["test", "--package", package.name()]);
+    cmd.add_args(["test", "--package", package.name()]);
     cmd.run()?;
 
     Ok(())
@@ -382,7 +382,7 @@ fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
 fn init_submodules(conf: &Config) -> Result<()> {
     Command::with_args(
         "git",
-        &[
+        [
             "-C",
             conf.repo_path().as_str(),
             "submodule",
@@ -430,7 +430,7 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
 fn clean_futility_build(conf: &Config) -> Result<()> {
     Command::with_args(
         "make",
-        &["-C", conf.vboot_reference_path().as_str(), "clean"],
+        ["-C", conf.vboot_reference_path().as_str(), "clean"],
     )
     .run()?;
 
@@ -442,7 +442,7 @@ fn clean_futility_build(conf: &Config) -> Result<()> {
 fn build_futility(conf: &Config) -> Result<()> {
     let mut cmd = Command::with_args(
         "make",
-        &[
+        [
             "-C",
             conf.vboot_reference_path().as_str(),
             "USE_FLASHROM=0",
@@ -503,7 +503,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
 }
 
 fn run_writedisk(conf: &Config) -> Result<()> {
-    Command::with_args("writedisk", &[conf.disk_path()]).run()?;
+    Command::with_args("writedisk", [conf.disk_path()]).run()?;
     Ok(())
 }
 

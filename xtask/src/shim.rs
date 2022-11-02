@@ -20,7 +20,7 @@ fn build_shim(conf: &Config) -> Result<()> {
         // modification below doesn't keep inserting the same change,
         // and so that the checked-out revision can be changed without
         // conflicts.
-        Command::with_args("git", &["-C", shim_dir.as_str(), "checkout", "-f"])
+        Command::with_args("git", ["-C", shim_dir.as_str(), "checkout", "-f"])
             .run()?;
     }
 
@@ -45,10 +45,10 @@ fn build_shim(conf: &Config) -> Result<()> {
     let new_dockerfile = orig_dockerfile.replace(orig_str, &new_str);
     fs::write(&dockerfile_path, new_dockerfile)?;
 
-    Command::with_args("make", &["build"])
+    Command::with_args("make", ["build"])
         .set_dir(&shim_dir)
         .run()?;
-    Command::with_args("make", &["copy"])
+    Command::with_args("make", ["copy"])
         .set_dir(&shim_dir)
         .run()?;
 

@@ -35,7 +35,7 @@ pub fn parse_return_codes(conf: &Config) -> Result<Vec<String>> {
     // Use clang to get an AST in JSON.
     let output = Command::with_args(
         "clang",
-        &["-Xclang", "-ast-dump=json", "-fsyntax-only"],
+        ["-Xclang", "-ast-dump=json", "-fsyntax-only"],
     )
     .add_arg(header_path)
     .enable_capture()

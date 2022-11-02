@@ -91,39 +91,39 @@ impl Qemu {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
-        cmd.add_args(&["-vga", "virtio"]);
-        cmd.add_args(&["-serial", "stdio"]);
-        cmd.add_args(&["-display", display.as_arg_str()]);
+        cmd.add_args(["-vga", "virtio"]);
+        cmd.add_args(["-serial", "stdio"]);
+        cmd.add_args(["-display", display.as_arg_str()]);
 
         // Give it a small but reasonable amount of memory (the
         // default of 128M is too small).
-        cmd.add_args(&["-m", "1G"]);
+        cmd.add_args(["-m", "1G"]);
 
         // These options are needed for SMM as described in
         // edk2/OvmfPkg/README.
-        cmd.add_args(&["-machine", "q35,smm=on,accel=kvm"]);
-        cmd.add_args(&["-global", "ICH9-LPC.disable_s3=1"]);
+        cmd.add_args(["-machine", "q35,smm=on,accel=kvm"]);
+        cmd.add_args(["-global", "ICH9-LPC.disable_s3=1"]);
 
         // Send OVMF debug logging to a file.
-        cmd.add_args(&[
+        cmd.add_args([
             "-debugcon",
             &format!("file:{}", self.ovmf.qemu_log()),
             "-global",
             "isa-debugcon.iobase=0x402",
         ]);
 
-        cmd.add_args(&[
+        cmd.add_args([
             "-global",
             "driver=cfi.pflash01,property=secure,value=on",
         ]);
-        cmd.add_args(&[
+        cmd.add_args([
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=0,readonly=on,file={}",
                 self.ovmf.code()
             ),
         ]);
-        cmd.add_args(&[
+        cmd.add_args([
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=1,readonly={},file={}",
@@ -151,7 +151,7 @@ impl Qemu {
     ) -> Result<()> {
         let mut cmd = self.create_command(var_access, display);
 
-        cmd.add_args(&["-drive", &format!("format=raw,file={image_path}")]);
+        cmd.add_args(["-drive", &format!("format=raw,file={image_path}")]);
         cmd.run()?;
 
         Ok(())

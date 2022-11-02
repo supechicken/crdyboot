@@ -30,5 +30,5 @@ static SBAT: [u8; {}] = *b"{}";
     let dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out_path = dir.join("sbat_section.rs");
 
-    fs::write(&out_path, &code).unwrap();
+    fs::write(out_path, code).unwrap();
 }

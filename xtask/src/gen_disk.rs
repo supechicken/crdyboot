@@ -28,11 +28,11 @@ const SECTOR_SIZE: u64 = 512;
 fn create_empty_file_with_size(path: &Utf8Path, size: &str) -> Result<()> {
     // Delete the file if it already exists.
     if path.exists() {
-        fs::remove_file(&path)?;
+        fs::remove_file(path)?;
     }
 
     // Generate empty image.
-    Command::with_args("truncate", &["--size", size, path.as_str()]).run()?;
+    Command::with_args("truncate", ["--size", size, path.as_str()]).run()?;
 
     Ok(())
 }
@@ -457,7 +457,7 @@ pub fn sign_kernel_partition(
     // Get the kernel command line and write it to a file.
     let output = Command::with_args(
         futility,
-        &[
+        [
             "vbutil_kernel",
             "--verify",
             unsigned_kernel_partition.as_str(),
@@ -473,7 +473,7 @@ pub fn sign_kernel_partition(
     // Extract vmlinuz.
     Command::with_args(
         futility,
-        &[
+        [
             "vbutil_kernel",
             "--get-vmlinuz",
             unsigned_kernel_partition.as_str(),
@@ -488,7 +488,7 @@ pub fn sign_kernel_partition(
 
     // Sign it.
     #[rustfmt::skip]
-    Command::with_args(futility, &["vbutil_kernel",
+    Command::with_args(futility, ["vbutil_kernel",
         "--pack", signed_kernel_partition.as_str(),
         "--keyblock", kernel_data_key.keyblock.as_ref().unwrap().as_str(),
         "--signprivate", kernel_data_key.vbprivk.as_str(),
@@ -501,7 +501,7 @@ pub fn sign_kernel_partition(
     // Verify it.
     Command::with_args(
         futility,
-        &[
+        [
             "vbutil_kernel",
             "--verify",
             signed_kernel_partition.as_str(),

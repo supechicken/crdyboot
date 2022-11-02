@@ -272,7 +272,7 @@ unsafe extern "C" fn VbExStreamRead(
         if num_blocks > stream.remaining_blocks {
             error!(
                 "stream read requested too many blocks: {num_blocks} > {}",
-                (*stream).remaining_blocks
+                stream.remaining_blocks
             );
             return ReturnCode::VB2_ERROR_UNKNOWN;
         }

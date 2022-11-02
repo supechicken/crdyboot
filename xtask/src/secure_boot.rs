@@ -57,7 +57,7 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     }
 
     #[rustfmt::skip]
-    Command::with_args("openssl", &[
+    Command::with_args("openssl", [
         "req", "-x509",
         "-newkey", "rsa:2048",
         "-keyout", paths.priv_pem().as_str(),
@@ -94,12 +94,12 @@ pub fn generate_signed_vars(
     // to Rust at some point...
     Command::with_args(
         "cert-to-efi-sig-list",
-        &[paths.pub_pem().as_str(), unsigned_var.as_str()],
+        [paths.pub_pem().as_str(), unsigned_var.as_str()],
     )
     .run()?;
 
     #[rustfmt::skip]
-    Command::with_args("sign-efi-sig-list", &[
+    Command::with_args("sign-efi-sig-list", [
         "-k", paths.priv_pem().as_str(),
         "-c", paths.pub_pem().as_str(),
         // The var name is used to pick the appropriate vendor GUID
@@ -115,7 +115,7 @@ pub fn generate_signed_vars(
 
 fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) -> Result<()> {
     #[rustfmt::skip]
-    Command::with_args("openssl", &[
+    Command::with_args("openssl", [
         "x509",
         "-outform", "der",
         "-in", input.as_str(),
@@ -133,7 +133,7 @@ pub fn sign(
     key_paths: &SecureBootKeyPaths,
 ) -> Result<()> {
     #[rustfmt::skip]
-    Command::with_args("sbsign", &[
+    Command::with_args("sbsign", [
         "--key", key_paths.priv_pem().as_str(),
         "--cert", key_paths.pub_pem().as_str(),
         src.as_str(),
