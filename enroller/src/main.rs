@@ -6,13 +6,10 @@
 #![no_main]
 #![feature(abi_efiapi)]
 
-extern crate alloc;
-
 use core::mem;
 use log::info;
 use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
-use uefi::CString16;
 
 #[entry]
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
@@ -39,7 +36,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing db var");
     rt.set_variable(
-        &CString16::try_from("db").unwrap(),
+        cstr16!("db"),
         &VariableVendor::IMAGE_SECURITY_DATABASE,
         attrs,
         db_var,
@@ -48,7 +45,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing KEK var");
     rt.set_variable(
-        &CString16::try_from("KEK").unwrap(),
+        cstr16!("KEK"),
         &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,
@@ -57,7 +54,7 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     info!("writing PK var");
     rt.set_variable(
-        &CString16::try_from("PK").unwrap(),
+        cstr16!("PK"),
         &VariableVendor::GLOBAL_VARIABLE,
         attrs,
         pk_and_kek_var,
