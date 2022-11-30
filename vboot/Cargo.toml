@@ -15,4 +15,4 @@ regex = "1.5.0"
 simple_logger = { version = ">=1.13.0", default-features = false }
 
 [build-dependencies]
-bindgen = { version = ">=0.59.0", default-features = false, features = ["logging", "runtime", "which-rustfmt"] }
+bindgen = { version = "0.60.1", default-features = false, features = ["logging", "runtime", "which-rustfmt"] }
