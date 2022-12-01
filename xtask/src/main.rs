@@ -341,8 +341,6 @@ fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
     let mut cmd = Command::new("cargo");
     if miri.0 {
         cmd.add_arg("miri");
-        cmd.env
-            .insert("MIRIFLAGS".into(), "-Zmiri-tag-raw-pointers".into());
     }
     cmd.add_args(["test", "--package", package.name()]);
     cmd.run()?;
