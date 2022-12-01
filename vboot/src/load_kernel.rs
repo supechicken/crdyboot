@@ -5,8 +5,8 @@
 use crate::disk::{Disk, DiskIo};
 use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
+use core::ffi::c_void;
 use core::{fmt, ptr, str};
-use cty::c_void;
 use log::{error, info};
 use uguid::Guid;
 

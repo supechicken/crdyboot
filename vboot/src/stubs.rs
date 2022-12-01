@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use cty::c_char;
+use core::ffi::c_char;
 
 #[no_mangle]
 extern "C" fn vb2ex_abort() {

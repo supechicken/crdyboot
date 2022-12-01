@@ -25,10 +25,10 @@
 
 use crate::vboot_sys::{vb2_disk_info, vb2ex_disk_handle_t};
 use crate::ReturnCode;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::num::NonZeroU64;
 use core::{ptr, slice};
-use cty::c_void;
 use log::error;
 
 /// Interface for random-access disk IO.

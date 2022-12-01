@@ -681,7 +681,6 @@ name = "vboot"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "cty",
  "log",
  "printf-compat",
  "regex",

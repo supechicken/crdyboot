@@ -5,10 +5,15 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use core::cmp::min;
+use core::ffi::{c_char, c_int};
 use core::{slice, str};
-use cty::{c_char, c_int, size_t};
 use log::{Level, Record};
 use printf_compat as printf;
+
+// `core::ffi::c_size_t` is not yet stabilized:
+// https://github.com/rust-lang/rust/issues/88345
+#[allow(non_camel_case_types)]
+type c_size_t = usize;
 
 unsafe fn c_str_len(mut s: *const c_char) -> usize {
     let mut len = 0;
@@ -67,7 +72,7 @@ unsafe extern "C" fn vb2ex_printf(
 #[no_mangle]
 unsafe extern "C" fn snprintf(
     buffer: *mut c_char,
-    bufsz: size_t,
+    bufsz: c_size_t,
     fmt: *const c_char,
     mut args: ...
 ) -> c_int {
