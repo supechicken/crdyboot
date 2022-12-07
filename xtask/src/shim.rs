@@ -13,7 +13,7 @@ use gen_disk::SignAndUpdateBootloader;
 fn build_shim(conf: &Config) -> Result<()> {
     let shim_dir = conf.shim_build_path();
     let shim_url = "https://chromium.googlesource.com/chromiumos/shim-review";
-    let shim_rev = "6e743839a611dceafccdf4b592bad1c23ecb20f5";
+    let shim_rev = "6d201a645d8b5169ea844ddafa7ba7659c3f356c";
 
     if shim_dir.exists() {
         // Remove local modifications so that the Dockerfile
