@@ -9,9 +9,7 @@ use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
-use uefi::table::boot::{
-    OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol,
-};
+use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use vboot::{DiskIo, ReturnCode};
 
 /// Open `DevicePath` protocol for `handle`.
@@ -41,20 +39,14 @@ fn device_paths_for_handle(
 /// This is determined by looking at the Device Paths associated with each
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
-fn is_parent_disk(
-    potential_parent: Handle,
-    partition: Handle,
-    bt: &BootServices,
-) -> Result<bool> {
-    let potential_parent_device_path =
-        device_paths_for_handle(potential_parent, bt)?;
-    let potential_parent_device_path_node_iter =
-        potential_parent_device_path.node_iter();
+fn is_parent_disk(potential_parent: Handle, partition: Handle, bt: &BootServices) -> Result<bool> {
+    let potential_parent_device_path = device_paths_for_handle(potential_parent, bt)?;
+    let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
     let partition_device_path = device_paths_for_handle(partition, bt)?;
     let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
-    for (parent_path, partition_path) in potential_parent_device_path_node_iter
-        .zip(&mut partition_device_path_node_iter)
+    for (parent_path, partition_path) in
+        potential_parent_device_path_node_iter.zip(&mut partition_device_path_node_iter)
     {
         if parent_path != partition_path {
             return Ok(false);
@@ -63,17 +55,14 @@ fn is_parent_disk(
 
     // After the zip operation we expect there to be one remaining path for the
     // partition device; validate that this expectation is met.
-    let final_partition_path =
-        if let Some(path) = partition_device_path_node_iter.next() {
-            path
-        } else {
-            return Ok(false);
-        };
+    let final_partition_path = if let Some(path) = partition_device_path_node_iter.next() {
+        path
+    } else {
+        return Ok(false);
+    };
 
     // That final path should be a Hard Drive Media Device Path.
-    if final_partition_path.full_type()
-        != (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE)
-    {
+    if final_partition_path.full_type() != (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE) {
         return Ok(false);
     }
 
@@ -112,8 +101,7 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>> {
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle =
-        find_parent_disk(&block_io_handles, partition_handle, bt)?;
+    let disk_handle = find_parent_disk(&block_io_handles, partition_handle, bt)?;
 
     bt.open_protocol_exclusive::<BlockIO>(disk_handle)
         .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
@@ -130,8 +118,7 @@ impl<'a> GptDisk<'a> {
         let block_io = find_disk_block_io(bt)?;
 
         let bytes_per_lba =
-            NonZeroU64::new(block_io.media().block_size().into())
-                .ok_or(Error::InvalidBlockSize)?;
+            NonZeroU64::new(block_io.media().block_size().into()).ok_or(Error::InvalidBlockSize)?;
         let lba_count = block_io.media().last_block() + 1;
 
         Ok(GptDisk {
@@ -156,8 +143,10 @@ impl<'a> DiskIo for GptDisk<'a> {
         match self.block_io.read_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!("disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
-                       buffer.len());
+                error!(
+                    "disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
+                    buffer.len()
+                );
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN
@@ -170,8 +159,10 @@ impl<'a> DiskIo for GptDisk<'a> {
         match self.block_io.write_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!("disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
-                       buffer.len());
+                error!(
+                    "disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
+                    buffer.len()
+                );
                 // TODO: is there a more specific vb2 error code that would be
                 // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN

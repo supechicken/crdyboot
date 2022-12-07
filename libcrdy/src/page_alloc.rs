@@ -50,9 +50,7 @@ impl<'a> ScopedPageAllocation<'a> {
 
         let num_pages = num_bytes / Self::PAGE_SIZE;
 
-        info!(
-            "allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})"
-        );
+        info!("allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})");
         let addr = system_table
             .boot_services()
             .allocate_pages(allocate_type, memory_type, num_pages)

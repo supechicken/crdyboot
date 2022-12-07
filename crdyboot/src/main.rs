@@ -11,8 +11,7 @@ use libcrdy::{load_and_execute_kernel, set_log_level, Error, Result};
 use uefi::prelude::*;
 
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
-    uefi_services::init(&mut st)
-        .map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
+    uefi_services::init(&mut st).map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
     set_log_level(st.boot_services());
 
     load_and_execute_kernel(st)

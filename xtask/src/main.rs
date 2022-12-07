@@ -156,8 +156,7 @@ fn run_cargo_deny() -> Result<()> {
         .run()
         .is_err()
     {
-        Command::with_args("cargo", ["install", "--locked", "cargo-deny"])
-            .run()?;
+        Command::with_args("cargo", ["install", "--locked", "cargo-deny"]).run()?;
     }
 
     // Run cargo-deny. This uses the config in `.deny.toml`.
@@ -201,11 +200,7 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
 /// `src_path`. The result will be written to `dst_path` and the
 /// original file is not modified. The new section will contain the
 /// well-known test key in the packed vbpubk format.
-fn add_vbpubk_section(
-    conf: &Config,
-    src_path: &Utf8Path,
-    dst_path: &Utf8Path,
-) -> Result<()> {
+fn add_vbpubk_section(conf: &Config, src_path: &Utf8Path, dst_path: &Utf8Path) -> Result<()> {
     let section_name = ".vbpubk";
     let vbpubk_path = conf
         .vboot_reference_path()
@@ -232,10 +227,7 @@ fn add_vbpubk_section(
     Ok(())
 }
 
-fn run_crdyboot_build(
-    conf: &Config,
-    verbose: VerboseRuntimeLogs,
-) -> Result<()> {
+fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_uefi_build(conf, Package::Crdyboot)?;
 
     for arch in Arch::all() {
@@ -312,8 +304,7 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
 }
 
 fn run_clippy_for_package(package: Package) -> Result<()> {
-    let mut cmd =
-        Command::with_args("cargo", ["clippy", "--package", package.name()]);
+    let mut cmd = Command::with_args("cargo", ["clippy", "--package", package.name()]);
 
     // Use a UEFI target for everything but xtask. This gives slightly
     // better coverage (for example, third_party/malloc.rs is not
@@ -366,14 +357,8 @@ fn run_tests(action: &TestAction) -> Result<()> {
 }
 
 fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
-    secure_boot::generate_key(
-        &conf.secure_boot_root_key_paths(),
-        "SecureBootRootTestKey",
-    )?;
-    secure_boot::generate_key(
-        &conf.secure_boot_shim_key_paths(),
-        "SecureBootShimTestKey",
-    )?;
+    secure_boot::generate_key(&conf.secure_boot_root_key_paths(), "SecureBootRootTestKey")?;
+    secure_boot::generate_key(&conf.secure_boot_shim_key_paths(), "SecureBootShimTestKey")?;
 
     let root_key_paths = conf.secure_boot_root_key_paths();
     // Generate the PK/KEK and db vars for use with the enroller.
@@ -580,8 +565,6 @@ fn main() -> Result<()> {
         Action::Test(action) => run_tests(action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
-        Action::GenVbootReturnCodeStrings(_) => {
-            vboot::gen_return_code_strings(&conf)
-        }
+        Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),
     }
 }

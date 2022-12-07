@@ -39,9 +39,8 @@ impl fmt::Display for LoadKernelError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use LoadKernelError::*;
 
-        let mut write_with_rc = |msg, rc: &ReturnCode| {
-            write!(f, "{msg}: 0x{:x} ({})", rc.0, return_code_to_str(*rc))
-        };
+        let mut write_with_rc =
+            |msg, rc: &ReturnCode| write!(f, "{msg}: 0x{:x} ({})", rc.0, return_code_to_str(*rc));
 
         match self {
             BadNumericConversion(info) => {
@@ -50,16 +49,12 @@ impl fmt::Display for LoadKernelError {
             PubkeyTooSmall(size) => {
                 write!(f, "packed pubkey buffer is too small: {size}")
             }
-            ApiInitFailed(rc) => {
-                write_with_rc("call to vb2api_init failed", rc)
-            }
+            ApiInitFailed(rc) => write_with_rc("call to vb2api_init failed", rc),
             ApiKernelInitFailed(rc) => write_with_rc(
                 "call to vb2api_init_ctx_for_kernel_verification_only failed",
                 rc,
             ),
-            LoadKernelFailed(rc) => {
-                write_with_rc("call to LoadKernel failed", rc)
-            }
+            LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
         }
     }
 }
@@ -89,10 +84,9 @@ impl<'a> LoadedKernel<'a> {
         .ok()?;
 
         // Get the entire command-line area.
-        let command_line_end = command_line_start
-            .checked_add(u32_to_usize(vboot_sys::CROS_CONFIG_SIZE))?;
-        let command_line =
-            self.data.get(command_line_start..command_line_end)?;
+        let command_line_end =
+            command_line_start.checked_add(u32_to_usize(vboot_sys::CROS_CONFIG_SIZE))?;
+        let command_line = self.data.get(command_line_start..command_line_end)?;
 
         // Find the null terminator and narrow the slice to end just before
         // that.
@@ -130,9 +124,10 @@ unsafe fn init_vb2_context(
     info!("vb2api_init");
     let mut status = ReturnCode(vboot_sys::vb2api_init(
         workbuf.as_mut_ptr().cast::<c_void>(),
-        workbuf.len().try_into().map_err(|_| {
-            LoadKernelError::BadNumericConversion("workbuf length")
-        })?,
+        workbuf
+            .len()
+            .try_into()
+            .map_err(|_| LoadKernelError::BadNumericConversion("workbuf length"))?,
         &mut ctx_ptr,
     ));
     if status != ReturnCode::VB2_SUCCESS {
@@ -188,9 +183,11 @@ pub fn load_kernel<'kernel>(
         let mut params = vboot_sys::vb2_kernel_params {
             // Initialize inputs.
             kernel_buffer: inputs.kernel_buffer.as_mut_ptr().cast::<c_void>(),
-            kernel_buffer_size: inputs.kernel_buffer.len().try_into().map_err(
-                |_| LoadKernelError::BadNumericConversion("kernel buffer size"),
-            )?,
+            kernel_buffer_size: inputs
+                .kernel_buffer
+                .len()
+                .try_into()
+                .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?,
 
             // Initialize outputs.
             disk_handle: ptr::null_mut(),
@@ -263,9 +260,7 @@ mod tests {
         assert_eq!(
             format!(
                 "{}",
-                LoadKernelError::LoadKernelFailed(
-                    ReturnCode::VB2_ERROR_LK_NO_KERNEL_FOUND
-                )
+                LoadKernelError::LoadKernelFailed(ReturnCode::VB2_ERROR_LK_NO_KERNEL_FOUND)
             ),
             expected
         );
@@ -277,10 +272,16 @@ mod tests {
     #[must_use]
     fn replace_command_line_verity_args(cmdline: &str) -> String {
         let r = Regex::new("root_hexdigest=[[:xdigit:]]{64}").unwrap();
-        let cmdline = r.replace(&cmdline, "root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630");
+        let cmdline = r.replace(
+            &cmdline,
+            "root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630",
+        );
 
         let r = Regex::new("salt=[[:xdigit:]]{64}").unwrap();
-        let cmdline = r.replace(&cmdline, "salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476");
+        let cmdline = r.replace(
+            &cmdline,
+            "salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476",
+        );
 
         cmdline.into()
     }
@@ -322,9 +323,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    replace_command_line_verity_args(
-                        &loaded_kernel.command_line().unwrap()
-                    ),
+                    replace_command_line_verity_args(&loaded_kernel.command_line().unwrap()),
                     expected_command_line
                 );
             }

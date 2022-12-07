@@ -83,11 +83,7 @@ impl Qemu {
         }
     }
 
-    fn create_command(
-        &self,
-        var_access: VarAccess,
-        display: Display,
-    ) -> Command {
+    fn create_command(&self, var_access: VarAccess, display: Display) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
@@ -112,10 +108,7 @@ impl Qemu {
             "isa-debugcon.iobase=0x402",
         ]);
 
-        cmd.add_args([
-            "-global",
-            "driver=cfi.pflash01,property=secure,value=on",
-        ]);
+        cmd.add_args(["-global", "driver=cfi.pflash01,property=secure,value=on"]);
         cmd.add_args([
             "-drive",
             &format!(

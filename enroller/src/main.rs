@@ -21,11 +21,8 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         size => info!("Weird UEFI: usize is {size} bytes"),
     }
 
-    let pk_and_kek_var = include_bytes!(
-        "../../workspace/secure_boot_root_key/key.pk_and_kek.var"
-    );
-    let db_var =
-        include_bytes!("../../workspace/secure_boot_root_key/key.db.var");
+    let pk_and_kek_var = include_bytes!("../../workspace/secure_boot_root_key/key.pk_and_kek.var");
+    let db_var = include_bytes!("../../workspace/secure_boot_root_key/key.db.var");
 
     let rt = st.runtime_services();
 

@@ -133,9 +133,7 @@ fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
         .allowlist_var("CROS_CONFIG_SIZE")
         .allowlist_var("CROS_PARAMS_SIZE")
         .allowlist_var("VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE")
-        .default_enum_style(bindgen::EnumVariation::NewType {
-            is_bitfield: false,
-        })
+        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
         .translate_enum_integer_types(true)
         // Block-listing these types avoids some unnecessary
         // generation of ctype typedefs.

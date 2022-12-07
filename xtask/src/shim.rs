@@ -20,8 +20,7 @@ fn build_shim(conf: &Config) -> Result<()> {
         // modification below doesn't keep inserting the same change,
         // and so that the checked-out revision can be changed without
         // conflicts.
-        Command::with_args("git", ["-C", shim_dir.as_str(), "checkout", "-f"])
-            .run()?;
+        Command::with_args("git", ["-C", shim_dir.as_str(), "checkout", "-f"]).run()?;
     }
 
     crate::update_local_repo(&shim_dir, shim_url, shim_rev)?;

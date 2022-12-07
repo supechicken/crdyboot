@@ -12,9 +12,7 @@ use uefi::{CStr16, Status};
 /// filesystem. If any error occurs when checking for this file, `false`
 /// is returned.
 fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
-    let mut sfs = match boot_services
-        .get_image_file_system(boot_services.image_handle())
-    {
+    let mut sfs = match boot_services.get_image_file_system(boot_services.image_handle()) {
         Ok(sfs) => sfs,
         Err(err) => {
             error!("failed to open SimpleFileSystem: {err:?}");

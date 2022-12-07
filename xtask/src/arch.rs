@@ -14,8 +14,7 @@ impl Arch {
     }
 
     pub fn all_targets() -> [&'static str; 2] {
-        let targets: Vec<_> =
-            Arch::all().iter().map(Arch::uefi_target).collect();
+        let targets: Vec<_> = Arch::all().iter().map(Arch::uefi_target).collect();
         targets.try_into().unwrap()
     }
 

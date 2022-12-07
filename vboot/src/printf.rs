@@ -32,11 +32,7 @@ unsafe fn str_from_c_str<'a>(s: *const c_char) -> Cow<'a, str> {
 /// Write a printf-style message to the log at the info level. Called
 /// by `vboot_reference` for printing.
 #[no_mangle]
-unsafe extern "C" fn vb2ex_printf(
-    func: *const c_char,
-    fmt: *const c_char,
-    mut args: ...
-) {
+unsafe extern "C" fn vb2ex_printf(func: *const c_char, fmt: *const c_char, mut args: ...) {
     let func = str_from_c_str(func);
 
     let mut output = String::new();
@@ -96,8 +92,7 @@ unsafe extern "C" fn snprintf(
     // Get the length to copy. This is the size of the formatted output,
     // capped to one less than the buffer length (to leave room for a
     // trailing null).
-    let copy_len =
-        min(formatted_bytes.len(), buffer.len().checked_sub(1).unwrap());
+    let copy_len = min(formatted_bytes.len(), buffer.len().checked_sub(1).unwrap());
 
     // Copy the formatted output and null terminate.
     buffer[..copy_len].copy_from_slice(&formatted_bytes[..copy_len]);

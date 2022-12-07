@@ -59,8 +59,7 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
     let init_size = get_u32_field(kernel_buffer, INIT_SIZE_OFFSET)?;
     info!("minimum required size: {init_size}");
 
-    let init_size =
-        usize::try_from(init_size).map_err(|_| Error::Overflow("init_size"))?;
+    let init_size = usize::try_from(init_size).map_err(|_| Error::Overflow("init_size"))?;
 
     if init_size <= kernel_buffer.len() {
         Ok(())
@@ -69,14 +68,11 @@ pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
     }
 }
 
-fn entry_point_from_offset(
-    data: &[u8],
-    entry_point_offset: u32,
-) -> Result<Entrypoint> {
+fn entry_point_from_offset(data: &[u8], entry_point_offset: u32) -> Result<Entrypoint> {
     info!("entry_point_offset: 0x{:x}", entry_point_offset);
 
-    let entry_point_offset = usize::try_from(entry_point_offset)
-        .map_err(|_| Error::Overflow("entry_point_offset"))?;
+    let entry_point_offset =
+        usize::try_from(entry_point_offset).map_err(|_| Error::Overflow("entry_point_offset"))?;
 
     // Ensure that the entry point is somewhere in the kernel data.
     if entry_point_offset >= data.len() {
@@ -95,11 +91,7 @@ fn entry_point_from_offset(
     }
 }
 
-fn modify_loaded_image(
-    bt: &BootServices,
-    kernel_data: &[u8],
-    cmdline_ucs2: &CStr16,
-) -> Result<()> {
+fn modify_loaded_image(bt: &BootServices, kernel_data: &[u8], cmdline_ucs2: &CStr16) -> Result<()> {
     let mut li = bt
         .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
@@ -113,8 +105,7 @@ fn modify_loaded_image(
     }
 
     // Set kernel data.
-    let image_size =
-        u64::try_from(kernel_data.len()).expect("usize is larger than u64");
+    let image_size = u64::try_from(kernel_data.len()).expect("usize is larger than u64");
     unsafe {
         li.set_image(kernel_data.as_ptr().cast::<c_void>(), image_size);
     }
@@ -148,33 +139,23 @@ fn execute_linux_efi_stub(
     info!("booting the EFI stub");
 
     // Convert the string to UCS-2.
-    let cmdline_ucs2 = CString16::try_from(cmdline)
-        .map_err(|_| Error::CommandLineUcs2ConversionFailed)?;
+    let cmdline_ucs2 =
+        CString16::try_from(cmdline).map_err(|_| Error::CommandLineUcs2ConversionFailed)?;
 
     // Ideally we could create a new image here, but I'm not sure
     // there's any way to do that without calling LoadImage, which we
     // can't do due to secure boot. This is the same method shim uses:
     // modify the existing image's parameters.
-    modify_loaded_image(
-        system_table.boot_services(),
-        kernel_data,
-        &cmdline_ucs2,
-    )?;
+    modify_loaded_image(system_table.boot_services(), kernel_data, &cmdline_ucs2)?;
 
     unsafe {
-        (entry_point)(
-            system_table.boot_services().image_handle(),
-            system_table,
-        );
+        (entry_point)(system_table.boot_services().image_handle(), system_table);
     }
 
     Err(Error::KernelDidNotTakeControl)
 }
 
-fn execute_linux_kernel(
-    kernel: &LoadedKernel,
-    system_table: SystemTable<Boot>,
-) -> Result<()> {
+fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) -> Result<()> {
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {cmdline}");
 

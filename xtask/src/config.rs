@@ -132,17 +132,13 @@ impl Config {
     /// This cert will be enrolled as the PK, first KEK, and first DB
     /// entry. The private key is used to sign shim.
     pub fn secure_boot_root_key_paths(&self) -> SecureBootKeyPaths {
-        SecureBootKeyPaths::new(
-            self.workspace_path().join("secure_boot_root_key"),
-        )
+        SecureBootKeyPaths::new(self.workspace_path().join("secure_boot_root_key"))
     }
 
     /// This cert is embedded in shim and the private key is used to
     /// sign crdyboot.
     pub fn secure_boot_shim_key_paths(&self) -> SecureBootKeyPaths {
-        SecureBootKeyPaths::new(
-            self.workspace_path().join("secure_boot_shim_key"),
-        )
+        SecureBootKeyPaths::new(self.workspace_path().join("secure_boot_shim_key"))
     }
 
     pub fn shim_build_path(&self) -> Utf8PathBuf {

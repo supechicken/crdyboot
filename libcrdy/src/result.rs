@@ -57,17 +57,14 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
 
-        let mut write_with_status =
-            |msg, status| write!(f, "{msg}: {status:?}");
+        let mut write_with_status = |msg, status| write!(f, "{msg}: {status:?}");
 
         match self {
             Overflow(info) => {
                 write!(f, "overflow: {info}")
             }
 
-            Allocation(status) => {
-                write_with_status("failed to allocate memory", status)
-            }
+            Allocation(status) => write_with_status("failed to allocate memory", status),
 
             UefiServicesInitFailed(status) => {
                 write_with_status("failed to initialize UEFI services", status)
@@ -83,14 +80,12 @@ impl fmt::Display for Error {
             BlockIoProtocolMissing(status) => {
                 write_with_status("failed to get UEFI BlockIO protocol", status)
             }
-            DevicePathProtocolMissing(status) => write_with_status(
-                "failed to get UEFI DevicePath protocol",
-                status,
-            ),
-            LoadedImageProtocolMissing(status) => write_with_status(
-                "failed to get UEFI LoadedImage protocol",
-                status,
-            ),
+            DevicePathProtocolMissing(status) => {
+                write_with_status("failed to get UEFI DevicePath protocol", status)
+            }
+            LoadedImageProtocolMissing(status) => {
+                write_with_status("failed to get UEFI LoadedImage protocol", status)
+            }
 
             ParentDiskNotFound => {
                 write!(f, "failed to get parent disk")

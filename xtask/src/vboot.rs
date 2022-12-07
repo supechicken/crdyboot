@@ -33,13 +33,10 @@ pub fn parse_return_codes(conf: &Config) -> Result<Vec<String>> {
         .join("firmware/2lib/include/2return_codes.h");
 
     // Use clang to get an AST in JSON.
-    let output = Command::with_args(
-        "clang",
-        ["-Xclang", "-ast-dump=json", "-fsyntax-only"],
-    )
-    .add_arg(header_path)
-    .enable_capture()
-    .run()?;
+    let output = Command::with_args("clang", ["-Xclang", "-ast-dump=json", "-fsyntax-only"])
+        .add_arg(header_path)
+        .enable_capture()
+        .run()?;
     assert!(output.status.success(), "failed to get AST (clang failed)");
 
     // Parse the JSON.
@@ -49,10 +46,7 @@ pub fn parse_return_codes(conf: &Config) -> Result<Vec<String>> {
     let enum_node = ast
         .inner
         .iter()
-        .find(|node| {
-            node.kind == "EnumDecl"
-                && node.name.as_deref() == Some("vb2_return_code")
-        })
+        .find(|node| node.kind == "EnumDecl" && node.name.as_deref() == Some("vb2_return_code"))
         .expect("failed to find vb2_return_code");
 
     // Get an iterator of enum member names.
@@ -97,8 +91,7 @@ use crate::ReturnCode;
 pub fn return_code_to_str(rc: ReturnCode) -> &'static str {
     match rc {";
 
-    let lines: &mut Vec<String> =
-        &mut preamble.lines().map(|s| s.to_string()).collect();
+    let lines: &mut Vec<String> = &mut preamble.lines().map(|s| s.to_string()).collect();
 
     let mut push = |line: &str| lines.push(line.to_string());
 

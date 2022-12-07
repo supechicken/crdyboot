@@ -9,13 +9,10 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fatfs::{
-    FileSystem, FormatVolumeOptions, FsOptions, LossyOemCpConverter,
-    NullTimeProvider, StdIoWrapper,
+    FileSystem, FormatVolumeOptions, FsOptions, LossyOemCpConverter, NullTimeProvider, StdIoWrapper,
 };
 use fs_err::{self as fs, File, OpenOptions};
-use gpt_disk_types::{
-    guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive,
-};
+use gpt_disk_types::{guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive};
 use gptman::{GPTPartitionEntry, GPT};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ops::{Range, RangeInclusive};
@@ -90,8 +87,7 @@ impl<'a> DiskSettings<'a> {
 
         let mut disk_file = open_rw(self.path)?;
 
-        let mut gpt =
-            GPT::new_from(&mut disk_file, SECTOR_SIZE, self.guid.to_bytes())?;
+        let mut gpt = GPT::new_from(&mut disk_file, SECTOR_SIZE, self.guid.to_bytes())?;
 
         for (i, part) in self.partitions.iter().enumerate() {
             // GPT partitions start at 1.
@@ -131,11 +127,7 @@ struct PartitionDataRange(LbaRangeInclusive);
 impl PartitionDataRange {
     fn new(partition: &GPTPartitionEntry) -> Self {
         Self(
-            LbaRangeInclusive::new(
-                Lba(partition.starting_lba),
-                Lba(partition.ending_lba),
-            )
-            .unwrap(),
+            LbaRangeInclusive::new(Lba(partition.starting_lba), Lba(partition.ending_lba)).unwrap(),
         )
     }
 
@@ -198,9 +190,7 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
         guid: guid!("d24199e7-33f0-4409-b677-1c04683552c5"),
         partitions: &[PartitionSettings {
             label: "KERN-A",
-            data_range: PartitionDataRange::from_byte_range(
-                mib_to_byte(1)..mib_to_byte(17),
-            ),
+            data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(17)),
             type_guid: GptPartitionType::CHROME_OS_KERNEL,
             // Arbitrary, but must match the partition GUID in the vboot
             // test `test_load_kernel`.
@@ -221,8 +211,7 @@ fn gen_enroller_fs(conf: &Config) -> Result<Vec<u8>> {
     let mut sys_part_data = vec![0; mib_to_byte(2).try_into().unwrap()];
 
     {
-        let mut sys_part_cursor =
-            StdIoWrapper::new(Cursor::new(&mut sys_part_data));
+        let mut sys_part_cursor = StdIoWrapper::new(Cursor::new(&mut sys_part_data));
         fatfs::format_volume(&mut sys_part_cursor, FormatVolumeOptions::new())?;
     }
 
@@ -259,9 +248,7 @@ pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
         guid: guid!("4345f688-5dac-4ab0-a596-ad5bcaf30163"),
         partitions: &[PartitionSettings {
             label: "boot",
-            data_range: PartitionDataRange::from_byte_range(
-                mib_to_byte(1)..mib_to_byte(3),
-            ),
+            data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(3)),
             type_guid: GptPartitionType::EFI_SYSTEM,
             // Arbitrary GUID.
             guid: guid!("21049f0f-75a3-4fba-beff-569ba248a19d"),
@@ -282,11 +269,7 @@ pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
 fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F) -> Result<()>
 where
     F: Fn(
-        fatfs::Dir<
-            StdIoWrapper<Cursor<&mut Vec<u8>>>,
-            NullTimeProvider,
-            LossyOemCpConverter,
-        >,
+        fatfs::Dir<StdIoWrapper<Cursor<&mut Vec<u8>>>, NullTimeProvider, LossyOemCpConverter>,
     ) -> Result<()>,
 {
     let mut disk_file = open_rw(disk_path)?;
@@ -300,8 +283,7 @@ where
     let sys_data_range = PartitionDataRange::new(sys_part);
 
     // Load the entire partition into memory.
-    let mut sys_part_data =
-        sys_data_range.read_bytes_from_file(&mut disk_file)?;
+    let mut sys_part_data = sys_data_range.read_bytes_from_file(&mut disk_file)?;
 
     {
         let sys_part_cursor = Cursor::new(&mut sys_part_data);
@@ -316,10 +298,7 @@ where
 
 /// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
 /// system partition in the disk image at `disk_path`.
-pub fn update_boot_files(
-    disk_path: &Utf8Path,
-    src_dir: &Utf8Path,
-) -> Result<()> {
+pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
     modify_system_partition(disk_path, |root_dir| {
         let dst_efi_dir = root_dir.open_dir("EFI")?;
         let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
@@ -376,10 +355,7 @@ impl<'a> SignAndUpdateBootloader<'a> {
 pub struct VerboseRuntimeLogs(pub bool);
 
 /// Add or remove the `crdyboot_verbose` file from the ESP.
-pub fn update_verbose_boot_file(
-    conf: &Config,
-    verbose: VerboseRuntimeLogs,
-) -> Result<()> {
+pub fn update_verbose_boot_file(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     modify_system_partition(conf.disk_path(), |root_dir| {
         let efi_dir = root_dir.open_dir("EFI")?;
         let boot_dir = efi_dir.open_dir("BOOT")?;
@@ -415,10 +391,7 @@ pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
     .run()
 }
 
-pub fn sign_kernel_partition(
-    conf: &Config,
-    partition_name: &str,
-) -> Result<()> {
+pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> {
     let mut disk_file = open_rw(conf.disk_path())?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
     let kern_part = gpt
@@ -450,8 +423,7 @@ pub fn sign_kernel_partition(
     fs::write(&bootloader, "not a real bootloader")?;
 
     // Copy the whole partition to a temporary file.
-    let orig_kern_data =
-        kern_data_range.read_bytes_from_file(&mut disk_file)?;
+    let orig_kern_data = kern_data_range.read_bytes_from_file(&mut disk_file)?;
     fs::write(&unsigned_kernel_partition, orig_kern_data)?;
 
     // Get the kernel command line and write it to a file.
@@ -522,8 +494,7 @@ mod tests {
 
     #[test]
     fn test_partition_range() {
-        let r =
-            PartitionDataRange(LbaRangeInclusive::new(Lba(1), Lba(1)).unwrap());
+        let r = PartitionDataRange(LbaRangeInclusive::new(Lba(1), Lba(1)).unwrap());
 
         assert_eq!(r.num_bytes(), 512);
         assert_eq!(r.to_byte_range(), 512..=1023);

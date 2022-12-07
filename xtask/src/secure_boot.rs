@@ -48,10 +48,7 @@ impl SecureBootKeyPaths {
 pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     paths.create_dir()?;
 
-    if paths.priv_pem().exists()
-        && paths.pub_pem().exists()
-        && paths.pub_der().exists()
-    {
+    if paths.priv_pem().exists() && paths.pub_pem().exists() && paths.pub_der().exists() {
         println!("using existing {} key", paths.dir);
         return Ok(());
     }
@@ -70,10 +67,7 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())
 }
 
-pub fn generate_signed_vars(
-    paths: &SecureBootKeyPaths,
-    var_name: &str,
-) -> Result<()> {
+pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) -> Result<()> {
     let tmp_dir = tempfile::tempdir()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let unsigned_var = tmp_path.join("unsigned_var");
@@ -127,11 +121,7 @@ fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) -> Result<()> {
 
 /// Sign the file at `src` using the keys provided by `key_paths`. The
 /// signed result is written to `dst` (and the `src` is never modified).
-pub fn sign(
-    src: &Utf8Path,
-    dst: &Utf8Path,
-    key_paths: &SecureBootKeyPaths,
-) -> Result<()> {
+pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) -> Result<()> {
     #[rustfmt::skip]
     Command::with_args("sbsign", [
         "--key", key_paths.priv_pem().as_str(),

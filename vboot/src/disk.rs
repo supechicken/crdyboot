@@ -113,8 +113,7 @@ impl<'a> Disk<'a> {
     /// Convert `num_blocks` (`u64`) to number of bytes (`usize`). Fails
     /// if overflow occurs.
     fn blocks_to_bytes_usize(&self, num_blocks: u64) -> Option<usize> {
-        let num_bytes =
-            self.io.bytes_per_lba().get().checked_mul(num_blocks)?;
+        let num_bytes = self.io.bytes_per_lba().get().checked_mul(num_blocks)?;
         num_bytes.try_into().ok()
     }
 
@@ -123,21 +122,15 @@ impl<'a> Disk<'a> {
     /// # Safety
     ///
     /// The `buffer` must be at least `lba_count` blocks in size.
-    unsafe fn read(
-        &self,
-        lba_start: u64,
-        lba_count: u64,
-        buffer: *mut u8,
-    ) -> ReturnCode {
+    unsafe fn read(&self, lba_start: u64, lba_count: u64, buffer: *mut u8) -> ReturnCode {
         assert!(!buffer.is_null());
 
-        let buffer_len =
-            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
-                buffer_len
-            } else {
-                error!("invalid read size: {lba_count}");
-                return ReturnCode::VB2_ERROR_UNKNOWN;
-            };
+        let buffer_len = if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+            buffer_len
+        } else {
+            error!("invalid read size: {lba_count}");
+            return ReturnCode::VB2_ERROR_UNKNOWN;
+        };
         let buffer = slice::from_raw_parts_mut(buffer, buffer_len);
 
         self.io.read(lba_start, buffer)
@@ -148,21 +141,15 @@ impl<'a> Disk<'a> {
     /// # Safety
     ///
     /// The `buffer` must be at least `lba_count` blocks in size.
-    unsafe fn write(
-        &mut self,
-        lba_start: u64,
-        lba_count: u64,
-        buffer: *const u8,
-    ) -> ReturnCode {
+    unsafe fn write(&mut self, lba_start: u64, lba_count: u64, buffer: *const u8) -> ReturnCode {
         assert!(!buffer.is_null());
 
-        let buffer_len =
-            if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
-                buffer_len
-            } else {
-                error!("invalid write size: {lba_count}");
-                return ReturnCode::VB2_ERROR_UNKNOWN;
-            };
+        let buffer_len = if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
+            buffer_len
+        } else {
+            error!("invalid write size: {lba_count}");
+            return ReturnCode::VB2_ERROR_UNKNOWN;
+        };
         let buffer = slice::from_raw_parts(buffer, buffer_len);
 
         self.io.write(lba_start, buffer)
@@ -257,12 +244,11 @@ unsafe extern "C" fn VbExStreamRead(
     let disk = Disk::from_handle(stream_handle);
 
     // Get the number of blocks to read.
-    let num_blocks =
-        if let Some(num_blocks) = disk.bytes_to_blocks(u64::from(num_bytes)) {
-            num_blocks
-        } else {
-            return ReturnCode::VB2_ERROR_UNKNOWN;
-        };
+    let num_blocks = if let Some(num_blocks) = disk.bytes_to_blocks(u64::from(num_bytes)) {
+        num_blocks
+    } else {
+        return ReturnCode::VB2_ERROR_UNKNOWN;
+    };
 
     // Scope access to the stream so that we can call `disk.read` below.
     let cur_lba = {
@@ -430,10 +416,7 @@ mod tests {
         );
 
         /// Use VbExStreamRead to fill `buf`.
-        fn stream_read(
-            disk_stream: DiskStreamHandle,
-            buf: &mut [u8],
-        ) -> ReturnCode {
+        fn stream_read(disk_stream: DiskStreamHandle, buf: &mut [u8]) -> ReturnCode {
             unsafe {
                 VbExStreamRead(
                     disk_stream,

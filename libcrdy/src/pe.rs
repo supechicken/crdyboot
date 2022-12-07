@@ -24,9 +24,7 @@ fn u32_to_usize(v: u32) -> usize {
 ///
 /// The returned slice is valid for as long as boot services are active
 /// (as enforced by the lifetime).
-fn get_loaded_image_data<'boot>(
-    boot_services: &'boot BootServices,
-) -> Result<&'boot [u8]> {
+fn get_loaded_image_data<'boot>(boot_services: &'boot BootServices) -> Result<&'boot [u8]> {
     // Use the `LoadedImage` protocol to get a pointer to the data of
     // the currently-executing image.
     let li = boot_services
@@ -39,10 +37,8 @@ fn get_loaded_image_data<'boot>(
     info!("image size: {} bytes", image_len);
 
     // Convert the pointer and length to a byte slice.
-    let image_len =
-        usize::try_from(image_len).map_err(|_| Error::Overflow("image_len"))?;
-    let image_data: &'boot [u8] =
-        unsafe { slice::from_raw_parts(image_ptr, image_len) };
+    let image_len = usize::try_from(image_len).map_err(|_| Error::Overflow("image_len"))?;
+    let image_data: &'boot [u8] = unsafe { slice::from_raw_parts(image_ptr, image_len) };
 
     Ok(image_data)
 }
@@ -117,8 +113,8 @@ impl PeInfo {
 
         // Get the IA32 entry point for booting from IA32 firmware to a
         // 64-bit kernel.
-        let ia32_compat_entry_point = find_ia32_compat_entry_point(&pe)
-            .ok_or(Error::MissingIa32CompatEntryPoint)?;
+        let ia32_compat_entry_point =
+            find_ia32_compat_entry_point(&pe).ok_or(Error::MissingIa32CompatEntryPoint)?;
 
         Ok(Self {
             entry_point,
@@ -231,16 +227,10 @@ impl<'a> Iterator for CompatEntryIter<'a> {
 /// point if found.
 fn find_ia32_compat_entry_point(pe: &PeFile64) -> Option<u32> {
     let section = pe.section_by_name(".compat")?;
-    find_compat_entry_point_in_section(
-        section.data().ok()?,
-        IMAGE_FILE_MACHINE_I386,
-    )
+    find_compat_entry_point_in_section(section.data().ok()?, IMAGE_FILE_MACHINE_I386)
 }
 
-fn find_compat_entry_point_in_section(
-    section: &[u8],
-    target_machine_type: u16,
-) -> Option<u32> {
+fn find_compat_entry_point_in_section(section: &[u8], target_machine_type: u16) -> Option<u32> {
     for entry in CompatEntryIter::new(section) {
         if let Some(entry) = entry.v1 {
             if entry.machine_type == target_machine_type {
@@ -260,10 +250,8 @@ mod tests {
         let section = [
             // Small entry of unknown type.
             0x02, 0x02, // ARM entry point.
-            0x1, 0x8, 0xc0, 0x01, 0x77, 0x66, 0x55, 0x44,
-            // IA32 entry point.
-            0x1, 0x8, 0x4c, 0x01, 0x78, 0x56, 0x34, 0x12,
-            // Ending entry.
+            0x1, 0x8, 0xc0, 0x01, 0x77, 0x66, 0x55, 0x44, // IA32 entry point.
+            0x1, 0x8, 0x4c, 0x01, 0x78, 0x56, 0x34, 0x12, // Ending entry.
             0x0,
         ];
 
