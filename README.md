@@ -8,6 +8,8 @@ Crdyboot acts as a bridge between UEFI firmware and the Chromebook style
 of booting. It uses [vboot] to select and validate an appropriate
 [kernel partition], then launches that kernel using the Linux [EFI stub].
 
+[TOC]
+
 ## Features
 
 * Well documented and as simple as possible.
@@ -93,11 +95,6 @@ Then run it in QEMU:
 
     cargo xtask qemu [--ia32] [--secure-boot]
 
-Some additional build options can be set in `crdyboot.toml` (in the root of
-the repo). This file will be created automatically if it doesn't already
-exist by copying `xtask/default.toml`. The defaults are appropriate for
-development. In a release build, verbose logging should be turned off.
-
 ## Testing on real hardware
 
 To test secure boot with real hardware you will need to enroll custom
@@ -112,12 +109,6 @@ wait for it to complete.
 
 Unplug the enroller USB and plug in the cloudready USB, then reboot. Use the
 boot menu to select the USB.
-
-## Developer notes
-
-An older pure-Rust version can be found in the `pure-rust-20210729`
-branch. Since then we have switched to building the C vboot library and
-loading/verifying the kernel through that library.
 
 [BSD]: LICENSE
 [EFI stub]: https://docs.kernel.org/admin-guide/efi-stub.html
