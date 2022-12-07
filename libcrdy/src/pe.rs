@@ -20,18 +20,31 @@ fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
 }
 
-/// Use the `LoadedImage` protocol to get a pointer to the data of the
-/// currently-executing image.
-fn get_current_exe_image_ptr(
-    boot_services: &BootServices,
-) -> Result<*const u8> {
+/// Get the currently-executing image's data.
+///
+/// The returned slice is valid for as long as boot services are active
+/// (as enforced by the lifetime).
+fn get_loaded_image_data<'boot>(
+    boot_services: &'boot BootServices,
+) -> Result<&'boot [u8]> {
     // Use the `LoadedImage` protocol to get a pointer to the data of
     // the currently-executing image.
     let li = boot_services
         .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
         .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
-    let (image_ptr, _) = li.info();
-    Ok(image_ptr.cast())
+    let (image_ptr, image_len) = li.info();
+    let image_ptr: *const u8 = image_ptr.cast();
+
+    info!("image base: {:x?}", image_ptr);
+    info!("image size: {} bytes", image_len);
+
+    // Convert the pointer and length to a byte slice.
+    let image_len =
+        usize::try_from(image_len).map_err(|_| Error::Overflow("image_len"))?;
+    let image_data: &'boot [u8] =
+        unsafe { slice::from_raw_parts(image_ptr, image_len) };
+
+    Ok(image_data)
 }
 
 /// Read the packed public key data from the `.vbpubk` section of the
@@ -47,21 +60,7 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     #[cfg(target_pointer_width = "64")]
     type PeFile<'a> = object::read::pe::PeFile64<'a>;
 
-    let image_ptr = get_current_exe_image_ptr(boot_services)?;
-    info!("image base: {:x?}", image_ptr);
-
-    // On the IA32 target we can't rely on the image length provided by
-    // `LoadedImage`. This is due to a shim ABI issue. See
-    // https://github.com/rhboot/shim/issues/515 for more details.
-    //
-    // To work around this, assume that the image headers fit within the
-    // first kilobyte of data. Parse that partial data into a `PeFile`.
-    //
-    // Note that we could avoid this hack on X86_64, but let's keep the
-    // code paths the same on both targets to keep things consistent.
-    let estimated_pe_header_len = 1024;
-    let image_data =
-        unsafe { slice::from_raw_parts(image_ptr, estimated_pe_header_len) };
+    let image_data = get_loaded_image_data(boot_services)?;
     let pe = PeFile::parse(image_data).map_err(Error::InvalidPe)?;
 
     // Find the target section.
@@ -79,9 +78,9 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     info!("{section_name} section: offset={section_addr:#x}, len={section_len:#x}");
 
     // Get the section's data as a slice.
-    let section_data: &[u8] = unsafe {
-        slice::from_raw_parts(image_ptr.add(section_addr), section_len)
-    };
+    let section_data = image_data
+        .get(section_addr..section_addr + section_len)
+        .ok_or(Error::OutOfBounds("vbpubk section data"))?;
 
     Ok(section_data)
 }
