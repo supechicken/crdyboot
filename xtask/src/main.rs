@@ -130,9 +130,9 @@ struct QemuAction {
     #[argh(switch)]
     ia32: bool,
 
-    /// enable secure boot
+    /// disable secure boot
     #[argh(switch)]
-    secure_boot: bool,
+    no_secure_boot: bool,
 
     /// type of qemu display to use none, gtk, sdl (default=sdl)
     #[argh(option, default = "Display::Sdl")]
@@ -485,7 +485,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
     };
 
     let mut qemu = Qemu::new(ovmf);
-    qemu.secure_boot = action.secure_boot;
+    qemu.secure_boot = !action.no_secure_boot;
     qemu.run_disk_image(disk, VarAccess::ReadOnly, action.display)
 }
 
