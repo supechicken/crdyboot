@@ -16,6 +16,7 @@ mod logging;
 mod page_alloc;
 mod pe;
 mod result;
+mod tpm;
 
 pub use linux::load_and_execute_kernel;
 pub use logging::set_log_level;

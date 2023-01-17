@@ -5,6 +5,7 @@
 use crate::disk::GptDisk;
 use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::{get_vbpubk_from_image, PeInfo};
+use crate::tpm::extend_pcr_and_log;
 use crate::{Error, Result};
 use core::ffi::c_void;
 use core::mem;
@@ -237,6 +238,9 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
     // kernel. We could just allocate a bigger buffer here, but it
     // shouldn't be needed unless something has gone wrong anyway.
     validate_kernel_buffer_size(kernel.data())?;
+
+    // Measure the kernel into the TPM.
+    extend_pcr_and_log(system_table.boot_services(), kernel.data())?;
 
     execute_linux_kernel(&kernel, system_table)
 }

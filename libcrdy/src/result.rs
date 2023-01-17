@@ -50,6 +50,9 @@ pub enum Error {
 
     CommandLineTooBig(usize),
 
+    /// An error occurred when measuring the kernel into the TPM.
+    Tpm(&'static str, Status),
+
     KernelDidNotTakeControl,
 }
 
@@ -124,6 +127,10 @@ impl fmt::Display for Error {
 
             CommandLineTooBig(size) => {
                 write!(f, "kernel command line is too large: {size}")
+            }
+
+            Tpm(msg, status) => {
+                write!(f, "TPM error ({status}): {msg}")
             }
 
             KernelDidNotTakeControl => {
