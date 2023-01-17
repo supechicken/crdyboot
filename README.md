@@ -63,7 +63,7 @@ Install Rust: <https://rustup.rs>
 
 Install tools used for image signing and running in a VM:
 
-    sudo apt install efitools gdisk llvm ovmf ovmf-ia32 qemu-system-x86 sbsigntool
+    sudo apt install efitools gdisk llvm ovmf ovmf-ia32 qemu-system-x86 sbsigntool swtpm
 
 After installing qemu, add your user to the `kvm` group. You will need
 to log out and back in for this to take effect:
@@ -93,7 +93,7 @@ To just build crdyboot and install to the image (a quicker subset of `check`):
 
 Then run it in QEMU:
 
-    cargo xtask qemu [--ia32] [--secure-boot]
+    cargo xtask qemu [--ia32] [--no-secure-boot] [--tpm1|--tpm2]
 
 ## Testing on real hardware
 

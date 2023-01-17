@@ -10,6 +10,7 @@ mod package;
 mod qemu;
 mod secure_boot;
 mod shim;
+mod swtpm;
 mod vboot;
 
 use anyhow::{anyhow, Result};
@@ -23,6 +24,7 @@ use gen_disk::VerboseRuntimeLogs;
 use package::Package;
 use qemu::{Display, Qemu, VarAccess};
 use std::{env, process};
+use swtpm::TpmVersion;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -137,6 +139,30 @@ struct QemuAction {
     /// type of qemu display to use none, gtk, sdl (default=sdl)
     #[argh(option, default = "Display::Sdl")]
     display: Display,
+
+    /// enable emulated TPM v1.2
+    #[argh(switch)]
+    tpm1: bool,
+
+    /// enable emulated TPM v2.0
+    #[argh(switch)]
+    tpm2: bool,
+}
+
+impl QemuAction {
+    fn tpm_version(&self) -> Option<TpmVersion> {
+        match (self.tpm1, self.tpm2) {
+            (true, true) => {
+                // QEMU doesn't support connecting to multiple TPMs at
+                // the same time.
+                println!("cannot enable both --tpm1 and --tpm2 at the same time");
+                process::exit(1);
+            }
+            (true, false) => Some(TpmVersion::V1),
+            (false, true) => Some(TpmVersion::V2),
+            (false, false) => None,
+        }
+    }
 }
 
 /// Write the disk binary to a USB with `writedisk`.
@@ -404,9 +430,11 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
         // Run the enroller in QEMU to set up secure boot UEFI variables.
         let qemu = Qemu::new(ovmf);
         qemu.run_disk_image(
+            conf,
             &conf.enroller_disk_path(),
             VarAccess::ReadWrite,
             Display::None,
+            None,
         )?;
     }
 
@@ -486,7 +514,13 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = !action.no_secure_boot;
-    qemu.run_disk_image(disk, VarAccess::ReadOnly, action.display)
+    qemu.run_disk_image(
+        conf,
+        disk,
+        VarAccess::ReadOnly,
+        action.display,
+        action.tpm_version(),
+    )
 }
 
 fn run_writedisk(conf: &Config) -> Result<()> {
