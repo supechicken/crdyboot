@@ -47,6 +47,11 @@ unsafe extern "C" fn vb2ex_printf(func: *const c_char, fmt: *const c_char, mut a
     // desired but is OK since this is just for debug output.
     let stripped = output.strip_suffix('\n').unwrap_or(&output);
 
+    // No logger is enabled during unit tests, so to aid with debugging
+    // print to stdout when compiled in test mode.
+    #[cfg(test)]
+    println!("{stripped}");
+
     // The log format we're using (from uefi-rs) prints the file, but
     // vboot just tells us the function name. The function name is more
     // useful than outputing "printf.rs", so place the function name
