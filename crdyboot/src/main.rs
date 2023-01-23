@@ -7,12 +7,16 @@
 #![no_main]
 #![feature(abi_efiapi)]
 
-use libcrdy::{load_and_execute_kernel, set_log_level, Error, Result};
+use libcrdy::{load_and_execute_kernel, self_revocation_check, set_log_level, Error, Result};
 use uefi::prelude::*;
 
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
     uefi_services::init(&mut st).map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
     set_log_level(st.boot_services());
+
+    // The self-revocation check should happen as early as possible, so
+    // do it right after setting the log level.
+    self_revocation_check(st.runtime_services())?;
 
     load_and_execute_kernel(st)
 }

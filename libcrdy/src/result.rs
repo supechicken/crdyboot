@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::revocation::RevocationError;
 use core::fmt;
 use uefi::Status;
 use vboot::LoadKernelError;
@@ -14,6 +15,9 @@ pub enum Error {
     Allocation(Status),
 
     UefiServicesInitFailed(Status),
+
+    /// Self-revocation check failed.
+    Revocation(RevocationError),
 
     GetCommandLineFailed,
     CommandLineUcs2ConversionFailed,
@@ -71,6 +75,10 @@ impl fmt::Display for Error {
 
             UefiServicesInitFailed(status) => {
                 write_with_status("failed to initialize UEFI services", status)
+            }
+
+            Revocation(err) => {
+                write!(f, "self-revocation check failed: {err}")
             }
 
             GetCommandLineFailed => {
