@@ -22,7 +22,7 @@ use config::{Config, EfiExe};
 use fs_err as fs;
 use gen_disk::VerboseRuntimeLogs;
 use package::Package;
-use qemu::{Display, Qemu, VarAccess};
+use qemu::{Display, Qemu};
 use std::{env, process};
 use swtpm::TpmVersion;
 
@@ -429,13 +429,7 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
 
         // Run the enroller in QEMU to set up secure boot UEFI variables.
         let qemu = Qemu::new(ovmf);
-        qemu.run_disk_image(
-            conf,
-            &conf.enroller_disk_path(),
-            VarAccess::ReadWrite,
-            Display::None,
-            None,
-        )?;
+        qemu.run_disk_image(conf, &conf.enroller_disk_path(), Display::None, None)?;
     }
 
     Ok(())
@@ -514,13 +508,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
 
     let mut qemu = Qemu::new(ovmf);
     qemu.secure_boot = !action.no_secure_boot;
-    qemu.run_disk_image(
-        conf,
-        disk,
-        VarAccess::ReadOnly,
-        action.display,
-        action.tpm_version(),
-    )
+    qemu.run_disk_image(conf, disk, action.display, action.tpm_version())
 }
 
 fn run_writedisk(conf: &Config) -> Result<()> {

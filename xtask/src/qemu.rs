@@ -10,12 +10,6 @@ use command_run::Command;
 use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VarAccess {
-    ReadOnly,
-    ReadWrite,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Display {
     None,
     Gtk,
@@ -85,7 +79,7 @@ impl Qemu {
         }
     }
 
-    fn create_command(&self, var_access: VarAccess, display: Display) -> Command {
+    fn create_command(&self, display: Display) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
@@ -121,12 +115,7 @@ impl Qemu {
         cmd.add_args([
             "-drive",
             &format!(
-                "if=pflash,format=raw,unit=1,readonly={},file={}",
-                if var_access == VarAccess::ReadWrite {
-                    "off"
-                } else {
-                    "on"
-                },
+                "if=pflash,format=raw,unit=1,readonly=off,file={}",
                 if self.secure_boot {
                     self.ovmf.secure_boot_vars()
                 } else {
@@ -142,7 +131,6 @@ impl Qemu {
         &self,
         conf: &Config,
         image_path: &Utf8Path,
-        var_access: VarAccess,
         display: Display,
         tpm_version: Option<TpmVersion>,
     ) -> Result<()> {
@@ -152,7 +140,7 @@ impl Qemu {
             None
         };
 
-        let mut cmd = self.create_command(var_access, display);
+        let mut cmd = self.create_command(display);
 
         cmd.add_args(["-drive", &format!("format=raw,file={image_path}")]);
         if let Some(swtpm) = &swtpm {
