@@ -81,8 +81,25 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     Ok(section_data)
 }
 
-/// Info about a PE executable's entry points.
-pub struct PeInfo {
+/// Info about a PE section.
+pub struct PeSectionInfo {
+    /// Section's absolute start address.
+    pub address: u64,
+
+    /// Section's size in bytes.
+    pub len: u64,
+
+    /// Whether the section is writable.
+    pub writable: bool,
+
+    /// Whether the section is executable.
+    pub executable: bool,
+}
+
+/// Info about a PE executable.
+pub struct PeInfo<'a> {
+    pe: PeFile64<'a>,
+
     /// Primary entry point (as an offset).
     pub entry_point: u32,
 
@@ -90,7 +107,7 @@ pub struct PeInfo {
     pub ia32_compat_entry_point: u32,
 }
 
-impl PeInfo {
+impl<'a> PeInfo<'a> {
     /// Parse a PE executable and find its entry point.
     ///
     /// When booting from a 64-bit UEFI environment, the normal PE entry
@@ -101,7 +118,7 @@ impl PeInfo {
     /// this commit:
     ///
     ///    efi/x86: Implement mixed mode boot without the handover protocol
-    pub fn parse(data: &[u8]) -> Result<Self> {
+    pub fn parse(data: &'a [u8]) -> Result<Self> {
         let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
 
         // Get the primary entry point from a field in the PE header.
@@ -117,9 +134,34 @@ impl PeInfo {
             find_ia32_compat_entry_point(&pe).ok_or(Error::MissingIa32CompatEntryPoint)?;
 
         Ok(Self {
+            pe,
             entry_point,
             ia32_compat_entry_point,
         })
+    }
+
+    /// Get an iterator over the PE sections.
+    pub fn section_iter(&self) -> impl Iterator<Item = PeSectionInfo> + 'a {
+        // Convert the image data pointer to a u64.
+        let base = self.pe.data().as_ptr() as u64;
+
+        self.pe
+            .section_table()
+            .iter()
+            .enumerate()
+            .map(move |(index, section)| {
+                let c = section.characteristics.get(LittleEndian);
+
+                let (offset, len) = section.pe_address_range();
+                info!("section {index}: offset={offset:#x}, len={len:#x}, characteristics={c:#x}");
+
+                PeSectionInfo {
+                    address: base + u64::from(offset),
+                    len: u64::from(len),
+                    writable: (c & object::pe::IMAGE_SCN_MEM_WRITE) != 0,
+                    executable: (c & object::pe::IMAGE_SCN_MEM_EXECUTE) != 0,
+                }
+            })
     }
 }
 
