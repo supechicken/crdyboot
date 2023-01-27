@@ -52,6 +52,9 @@ pub enum Error {
     /// firmware.
     MissingIa32CompatEntryPoint,
 
+    /// An error occurred while updating memory attributes.
+    MemoryProtection(&'static str, Status),
+
     CommandLineTooBig(usize),
 
     /// An error occurred when measuring the kernel into the TPM.
@@ -135,6 +138,10 @@ impl fmt::Display for Error {
 
             CommandLineTooBig(size) => {
                 write!(f, "kernel command line is too large: {size}")
+            }
+
+            MemoryProtection(status, msg) => {
+                write!(f, "failed to set up memory protection ({status}): {msg}")
             }
 
             Tpm(msg, status) => {

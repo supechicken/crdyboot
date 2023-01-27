@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk::GptDisk;
+use crate::nx;
 use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::{get_vbpubk_from_image, PeInfo};
 use crate::tpm::extend_pcr_and_log;
@@ -161,6 +162,8 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
     info!("command line: {cmdline}");
 
     let pe = PeInfo::parse(kernel.data())?;
+
+    nx::update_mem_attrs(&pe, system_table.boot_services())?;
 
     let execute_linux_efi_stub = |system_table, entry_point_offset| {
         execute_linux_efi_stub(

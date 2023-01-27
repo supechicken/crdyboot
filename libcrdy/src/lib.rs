@@ -13,6 +13,7 @@
 mod disk;
 mod linux;
 mod logging;
+mod nx;
 mod page_alloc;
 mod pe;
 mod result;
