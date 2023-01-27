@@ -694,6 +694,7 @@ dependencies = [
  "fs-err",
  "gpt_disk_types",
  "gptman",
+ "object",
  "serde",
  "serde_json",
  "tempfile",

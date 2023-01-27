@@ -13,7 +13,7 @@ mod shim;
 mod swtpm;
 mod vboot;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use arch::Arch;
 use argh::FromArgs;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -21,6 +21,8 @@ use command_run::Command;
 use config::{Config, EfiExe};
 use fs_err as fs;
 use gen_disk::VerboseRuntimeLogs;
+use object::pe::{ImageNtHeaders32, ImageNtHeaders64, IMAGE_DLLCHARACTERISTICS_NX_COMPAT};
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use package::Package;
 use qemu::{Display, Qemu};
 use std::{env, process};
@@ -253,6 +255,28 @@ fn add_vbpubk_section(conf: &Config, src_path: &Utf8Path, dst_path: &Utf8Path) -
     Ok(())
 }
 
+/// Ensure that the NX-compat bit is set in a crdyboot executable.
+fn ensure_nx_compat_impl<Pe: ImageNtHeaders>(bin_data: &[u8]) -> Result<()> {
+    let pe = PeFile::<Pe>::parse(bin_data)?;
+    let characteristics = pe.nt_headers().optional_header().dll_characteristics();
+    if (characteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) == 0 {
+        bail!("nx-compat is not set")
+    }
+    Ok(())
+}
+
+/// Ensure that the NX-compat bit is set in all crdyboot executables.
+fn ensure_nx_compat(conf: &Config) -> Result<()> {
+    for arch in Arch::all() {
+        let bin_data = fs::read(conf.target_exec_path(arch, EfiExe::Crdyboot))?;
+        match arch {
+            Arch::Ia32 => ensure_nx_compat_impl::<ImageNtHeaders32>(&bin_data)?,
+            Arch::X64 => ensure_nx_compat_impl::<ImageNtHeaders64>(&bin_data)?,
+        }
+    }
+    Ok(())
+}
+
 fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_uefi_build(conf, Package::Crdyboot)?;
 
@@ -263,6 +287,9 @@ fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> 
             &conf.target_exec_path(arch, EfiExe::CrdybootWithPubkey),
         )?;
     }
+
+    // Ensure that the NX-compat bit is set in all crdyboot executables.
+    ensure_nx_compat(conf)?;
 
     // Update the disk image with the new executable.
     gen_disk::copy_in_crdyboot(conf)?;
