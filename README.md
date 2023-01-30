@@ -110,6 +110,10 @@ wait for it to complete.
 Unplug the enroller USB and plug in the cloudready USB, then reboot. Use the
 boot menu to select the USB.
 
+## Documentation
+
+See the [docs](docs) subdirectory.
+
 [BSD]: LICENSE
 [EFI stub]: https://docs.kernel.org/admin-guide/efi-stub.html
 [kernel partition]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/disk_format.md#Kernel-partition-format
