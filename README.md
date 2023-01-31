@@ -63,7 +63,8 @@ Install Rust: <https://rustup.rs>
 
 Install tools used for image signing and running in a VM:
 
-    sudo apt install efitools gdisk llvm ovmf ovmf-ia32 qemu-system-x86 sbsigntool swtpm
+    sudo apt install efitools gdisk llvm ovmf ovmf-ia32 podman \
+        qemu-system-x86 sbsigntool swtpm
 
 After installing qemu, add your user to the `kvm` group. You will need
 to log out and back in for this to take effect:
