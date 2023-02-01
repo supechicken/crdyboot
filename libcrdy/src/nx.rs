@@ -124,6 +124,14 @@ pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<()>
         }
     };
 
+    // Check that the executable self-reports NX compatibility.
+    if !pe.is_nx_compat() {
+        return Err(Error::MemoryProtection(
+            "PE is not NX compat",
+            Status::UNSUPPORTED,
+        ));
+    }
+
     let memory_protection = boot_services
         .open_protocol_exclusive::<MemoryProtection>(handle)
         .map_err(|err| Error::MemoryProtection("failed to open protocol", err.status()))?;

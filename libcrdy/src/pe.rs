@@ -10,6 +10,7 @@
 use crate::{Error, Result};
 use core::{mem, slice};
 use log::info;
+use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
 use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::PeFile64;
 use object::{LittleEndian, Object, ObjectSection};
@@ -138,6 +139,17 @@ impl<'a> PeInfo<'a> {
             entry_point,
             ia32_compat_entry_point,
         })
+    }
+
+    /// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.
+    pub fn is_nx_compat(&self) -> bool {
+        let c = self
+            .pe
+            .nt_headers()
+            .optional_header
+            .dll_characteristics
+            .get(LittleEndian);
+        (c & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) != 0
     }
 
     /// Get an iterator over the PE sections.
