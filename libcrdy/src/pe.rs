@@ -62,11 +62,16 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
 
     // Find the target section.
     let section_name = ".vbpubk";
-    let section = pe
+    let mut section_iter = pe
         .section_table()
         .iter()
-        .find(|section| section.raw_name() == section_name.as_bytes())
-        .ok_or(Error::MissingPubkey)?;
+        .filter(|section| section.raw_name() == section_name.as_bytes());
+    let section = section_iter.next().ok_or(Error::MissingPubkey)?;
+    // Return an error if there's more than one vbpubk section, as that
+    // could indicate something wrong with the signer.
+    if section_iter.next().is_some() {
+        return Err(Error::MultiplePubkey);
+    }
 
     // Get the section's data range (relative to the image_ptr).
     let (section_addr, section_len) = section.pe_address_range();

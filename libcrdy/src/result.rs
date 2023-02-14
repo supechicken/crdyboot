@@ -48,6 +48,9 @@ pub enum Error {
     /// The boot image is missing the ".vbpubk" section.
     MissingPubkey,
 
+    /// The boot image has multiple ".vbpubk" sections.
+    MultiplePubkey,
+
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.
     MissingIa32CompatEntryPoint,
@@ -131,6 +134,9 @@ impl fmt::Display for Error {
             }
             MissingPubkey => {
                 write!(f, "missing .vbpubk section")
+            }
+            MultiplePubkey => {
+                write!(f, "multiple .vbpubk sections")
             }
             MissingIa32CompatEntryPoint => {
                 write!(f, "missing ia32 compatibility entry point")
