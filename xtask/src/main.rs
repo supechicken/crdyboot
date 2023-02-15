@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 mod arch;
-mod build_mode;
 mod config;
 mod gen_disk;
 mod package;
@@ -201,14 +200,13 @@ fn run_check(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_clippy()
 }
 
-fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
-    let build_mode = conf.build_mode();
-
+fn run_uefi_build(package: Package) -> Result<()> {
     for target in Arch::all_targets() {
-        let mut cmd = Command::with_args(
+        Command::with_args(
             "cargo",
             [
                 "build",
+                "--release",
                 "--package",
                 package.name(),
                 "-Zbuild-std=core,compiler_builtins,alloc",
@@ -216,9 +214,8 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
                 "--target",
                 target,
             ],
-        );
-        cmd.add_args(build_mode.cargo_args());
-        cmd.run()?;
+        )
+        .run()?;
     }
 
     Ok(())
@@ -247,7 +244,7 @@ fn ensure_nx_compat(conf: &Config) -> Result<()> {
 }
 
 fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
-    run_uefi_build(conf, Package::Crdyboot)?;
+    run_uefi_build(Package::Crdyboot)?;
 
     // Ensure that the NX-compat bit is set in all crdyboot executables.
     ensure_nx_compat(conf)?;
@@ -281,7 +278,7 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
 }
 
 fn run_build_enroller(conf: &Config) -> Result<()> {
-    run_uefi_build(conf, Package::Enroller)?;
+    run_uefi_build(Package::Enroller)?;
 
     gen_disk::gen_enroller_disk(conf)
 }

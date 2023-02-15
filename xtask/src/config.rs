@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use crate::arch::Arch;
-use crate::build_mode::BuildMode;
 use crate::qemu::OvmfPaths;
 use crate::secure_boot::SecureBootKeyPaths;
 use crate::vboot::VbootKeyPaths;
@@ -43,7 +42,7 @@ impl Config {
     pub fn target_exec_path(&self, arch: Arch, exe: EfiExe) -> Utf8PathBuf {
         self.target_path()
             .join(arch.uefi_target())
-            .join(self.build_mode().dir_name())
+            .join("release")
             .join(exe.as_str())
     }
 
@@ -143,10 +142,6 @@ impl Config {
 
     pub fn shim_build_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("shim_build")
-    }
-
-    pub fn build_mode(&self) -> BuildMode {
-        BuildMode::Release
     }
 }
 
