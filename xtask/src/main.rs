@@ -224,37 +224,6 @@ fn run_uefi_build(conf: &Config, package: Package) -> Result<()> {
     Ok(())
 }
 
-/// Use llvm-objcopy to add a `.vbpubk` section to the PE executable at
-/// `src_path`. The result will be written to `dst_path` and the
-/// original file is not modified. The new section will contain the
-/// well-known test key in the packed vbpubk format.
-fn add_vbpubk_section(conf: &Config, src_path: &Utf8Path, dst_path: &Utf8Path) -> Result<()> {
-    let section_name = ".vbpubk";
-    let vbpubk_path = conf
-        .vboot_reference_path()
-        .join("tests/devkeys/kernel_subkey.vbpubk");
-
-    Command::with_args(
-        "llvm-objcopy",
-        [
-            "--add-section",
-            &format!("{section_name}={vbpubk_path}"),
-            "--set-section-flags",
-            // Setting the `data` flag is necessary to make the section
-            // go in a sensible place (otherwise it may be placed in a
-            // way that prevents the executable from booting). Also set
-            // readonly since there's no reason to write to this
-            // section again.
-            &format!("{section_name}=data,readonly"),
-            src_path.as_str(),
-            dst_path.as_str(),
-        ],
-    )
-    .run()?;
-
-    Ok(())
-}
-
 /// Ensure that the NX-compat bit is set in a crdyboot executable.
 fn ensure_nx_compat_impl<Pe: ImageNtHeaders>(bin_data: &[u8]) -> Result<()> {
     let pe = PeFile::<Pe>::parse(bin_data)?;
@@ -279,14 +248,6 @@ fn ensure_nx_compat(conf: &Config) -> Result<()> {
 
 fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_uefi_build(conf, Package::Crdyboot)?;
-
-    for arch in Arch::all() {
-        add_vbpubk_section(
-            conf,
-            &conf.target_exec_path(arch, EfiExe::Crdyboot),
-            &conf.target_exec_path(arch, EfiExe::CrdybootWithPubkey),
-        )?;
-    }
 
     // Ensure that the NX-compat bit is set in all crdyboot executables.
     ensure_nx_compat(conf)?;

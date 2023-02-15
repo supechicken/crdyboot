@@ -36,3 +36,13 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
 // See https://github.com/rhboot/shim/blob/main/SBAT.md for details of what
 // this section is used for.
 include!(concat!(env!("OUT_DIR"), "/sbat_section.rs"));
+
+// Add `.vbpubk` section to the binary.
+//
+// The data in this section is loaded by libcrdy to get the public key
+// used for kernel partition verification.
+//
+// By default this contains a test key with padding so that the section
+// can also hold larger keys. The real key is filled in during image
+// signing using `objcopy --update-section`.
+include!(concat!(env!("OUT_DIR"), "/vbpubk_section.rs"));
