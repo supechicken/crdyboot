@@ -407,7 +407,7 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
     let futility = conf.futility_executable_path();
     let futility = futility.as_str();
 
-    // TODO: for now just use a pregenerated test keys.
+    // Use test keys from vboot_reference.
     let kernel_key = &conf.kernel_key_paths();
     let kernel_data_key = &conf.kernel_data_key_paths();
 
@@ -455,8 +455,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
     )
     .run()?;
 
-    // TODO: give it a fake version for now.
-    let version = 0x1988;
+    // Arbitrary version.
+    let version = 0x1;
 
     // Sign it.
     #[rustfmt::skip]
