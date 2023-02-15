@@ -147,8 +147,6 @@ impl<'a> DiskIo for GptDisk<'a> {
                     "disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
                     buffer.len()
                 );
-                // TODO: is there a more specific vb2 error code that would be
-                // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN
             }
         }
@@ -163,8 +161,6 @@ impl<'a> DiskIo for GptDisk<'a> {
                     "disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
                     buffer.len()
                 );
-                // TODO: is there a more specific vb2 error code that would be
-                // better to return here?
                 ReturnCode::VB2_ERROR_UNKNOWN
             }
         }
