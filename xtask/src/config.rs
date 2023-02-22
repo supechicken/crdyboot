@@ -91,6 +91,10 @@ impl Config {
         &self.disk_path
     }
 
+    pub fn test_disk_path(&self) -> Utf8PathBuf {
+        self.workspace_path().join("test_disk.bin")
+    }
+
     pub fn enroller_disk_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("enroller.bin")
     }

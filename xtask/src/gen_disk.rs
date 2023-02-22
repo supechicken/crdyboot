@@ -488,6 +488,42 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
     kern_data_range.write_bytes_to_file(&mut disk_file, &signed_kern_data)
 }
 
+/// Intentionally corrupt one byte in a disk's KERN-A kernel data so
+/// that the kernel data signature is no longer valid.
+pub fn corrupt_kern_a(disk_path: &Utf8Path) -> Result<()> {
+    let mut disk_file = open_rw(disk_path)?;
+    let kern_data_range = {
+        let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
+        let kern_part = gpt
+            .iter()
+            .find(|part| part.1.partition_name.as_str() == "KERN-A")
+            .unwrap()
+            .1;
+        PartitionDataRange::new(kern_part).to_byte_range()
+    };
+
+    // Get the offset within the partition of the byte to modify. The
+    // exact byte doesn't matter much, but we want it far enough in the
+    // partition so that we're modifying actual kernel data, not the
+    // kernel partition headers.
+    let offset = mib_to_byte(1);
+
+    // Read the byte's current value.
+    disk_file.seek(SeekFrom::Start(kern_data_range.start() + offset))?;
+    let mut byte = [0];
+    disk_file.read_exact(&mut byte)?;
+
+    // Flip all the bits.
+    byte[0] = !byte[0];
+
+    // Write out the new value.
+    disk_file.seek(SeekFrom::Start(kern_data_range.start() + offset))?;
+    disk_file.write_all(&byte)?;
+    disk_file.sync_all()?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

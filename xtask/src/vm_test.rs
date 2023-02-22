@@ -4,12 +4,13 @@
 
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::gen_disk::VerboseRuntimeLogs;
+use crate::gen_disk::{corrupt_kern_a, VerboseRuntimeLogs};
 use crate::qemu::{Display, QemuOpts};
-use crate::run_crdyboot_build;
+use crate::{copy_file, run_crdyboot_build};
 use anyhow::{bail, Result};
 use camino::Utf8Path;
 use command_run::Command;
+use std::io::{BufRead, BufReader};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
@@ -104,9 +105,68 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Make a copy of the original disk image so that we can modify it for
+/// the test.
+fn create_test_disk(conf: &Config) -> Result<()> {
+    copy_file(conf.disk_path(), conf.test_disk_path())
+}
+
+/// Test failed boot due to corrupt KERN-A.
+///
+/// This test generates an intentionally corrupt disk, where a single
+/// byte in the kernel data has been changed so that the signature is no
+/// longer valid.
+///
+/// The test checks that vboot rejects that kernel with a specific
+/// error, and that crdyboot fails to boot.
+fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
+    println!("test if boot correctly fails when KERN-A is corrupt");
+
+    create_test_disk(conf)?;
+
+    corrupt_kern_a(&conf.test_disk_path())?;
+
+    let opts = QemuOpts {
+        capture_output: true,
+        display: Display::None,
+        image_path: conf.test_disk_path(),
+        ovmf: conf.ovmf_paths(Arch::X64),
+        secure_boot: true,
+        timeout: Some(Duration::from_secs(30)),
+        tpm_version: None,
+    };
+    let vm = opts.spawn_disk_image(conf)?;
+
+    let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+    let mut line = String::new();
+    let mut confirmed_kernel_data_error = false;
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            // EOF reached,
+            bail!("QEMU no longer running");
+        }
+
+        if line.contains("Kernel data verification failed") {
+            confirmed_kernel_data_error = true;
+        } else if line.contains("boot failed: failed to load kernel") {
+            if confirmed_kernel_data_error {
+                // The expected failure occurred, test is
+                // successful. Kill the VM.
+                vm.qemu.lock().unwrap().kill().unwrap();
+                return Ok(());
+            } else {
+                bail!("missing the kernel data verification error");
+            }
+        }
+    }
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_crdyboot_build(conf, VerboseRuntimeLogs(true))?;
 
+    test_corrupt_kern_a(conf)?;
     test_successful_boot(conf)?;
 
     Ok(())
