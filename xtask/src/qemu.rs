@@ -10,6 +10,8 @@ use camino::Utf8PathBuf;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Display {
@@ -70,7 +72,39 @@ impl OvmfPaths {
 
 pub struct QemuProcess {
     pub qemu: Arc<Mutex<ScopedChild>>,
+    timeout_thread_handle: Option<thread::JoinHandle<()>>,
     _swtpm: Option<Swtpm>,
+}
+
+impl QemuProcess {
+    // If the process is still running after the `timeout` duration has
+    // elapsed, kill the process and panic.
+    fn kill_child_after_timeout(timeout: Duration, process: Arc<Mutex<ScopedChild>>) {
+        let start_time = Instant::now();
+
+        // Wait up to `timeout` for the child to exit.
+        while start_time.elapsed() < timeout {
+            let exit_status = process.lock().unwrap().try_wait().unwrap();
+            if exit_status.is_some() {
+                // Child has already exited.
+                return;
+            }
+            // Sleep a half second before checking again.
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        // Kill the child and panic.
+        let _ = process.lock().unwrap().kill();
+        panic!("timeout occurred, VM killed");
+    }
+}
+
+impl Drop for QemuProcess {
+    fn drop(&mut self) {
+        if let Some(handle) = self.timeout_thread_handle.take() {
+            handle.join().unwrap();
+        }
+    }
 }
 
 pub struct QemuOpts {
@@ -79,6 +113,7 @@ pub struct QemuOpts {
     pub image_path: Utf8PathBuf,
     pub ovmf: OvmfPaths,
     pub secure_boot: bool,
+    pub timeout: Option<Duration>,
     pub tpm_version: Option<TpmVersion>,
 }
 
@@ -159,8 +194,20 @@ impl QemuOpts {
         }
         let process = Arc::new(Mutex::new(ScopedChild::new(cmd.spawn()?)));
 
+        // If a timeout is set, launch a background thread to kill the
+        // VM when the timeout is reached.
+        let timeout_thread_handle = if let Some(timeout) = self.timeout {
+            let process = process.clone();
+            Some(thread::spawn(move || {
+                QemuProcess::kill_child_after_timeout(timeout, process)
+            }))
+        } else {
+            None
+        };
+
         Ok(QemuProcess {
             qemu: process,
+            timeout_thread_handle,
             _swtpm: swtpm,
         })
     }

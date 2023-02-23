@@ -416,6 +416,7 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
             image_path: conf.enroller_disk_path(),
             ovmf,
             secure_boot: true,
+            timeout: None,
             tpm_version: None,
         };
         qemu.run_disk_image(conf)?;
@@ -499,6 +500,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
         image_path: conf.disk_path().to_path_buf(),
         ovmf,
         secure_boot: !action.no_secure_boot,
+        timeout: None,
         tpm_version: action.tpm_version(),
     };
     qemu.run_disk_image(conf)
