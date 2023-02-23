@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 use crate::swtpm::{Swtpm, TpmVersion};
+use crate::util::ScopedChild;
 use crate::Config;
 use anyhow::{anyhow, Error, Result};
 use camino::Utf8PathBuf;
-use command_run::Command;
+use std::process::Command;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Display {
@@ -66,6 +68,11 @@ impl OvmfPaths {
     }
 }
 
+pub struct QemuProcess {
+    pub qemu: Arc<Mutex<ScopedChild>>,
+    _swtpm: Option<Swtpm>,
+}
+
 pub struct QemuOpts {
     pub display: Display,
     pub image_path: Utf8PathBuf,
@@ -77,38 +84,39 @@ pub struct QemuOpts {
 impl QemuOpts {
     fn create_command(&self) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
-        cmd.add_arg("-enable-kvm");
-        cmd.add_arg("-nodefaults");
-        cmd.add_args(["-vga", "virtio"]);
-        cmd.add_args(["-serial", "stdio"]);
-        cmd.add_args(["-display", self.display.as_arg_str()]);
+        cmd.arg("-enable-kvm");
+        cmd.arg("-nodefaults");
+        cmd.arg("-snapshot");
+        cmd.args(["-vga", "virtio"]);
+        cmd.args(["-serial", "stdio"]);
+        cmd.args(["-display", self.display.as_arg_str()]);
 
         // Give it a small but reasonable amount of memory (the
         // default of 128M is too small).
-        cmd.add_args(["-m", "1G"]);
+        cmd.args(["-m", "1G"]);
 
         // These options are needed for SMM as described in
         // edk2/OvmfPkg/README.
-        cmd.add_args(["-machine", "q35,smm=on,accel=kvm"]);
-        cmd.add_args(["-global", "ICH9-LPC.disable_s3=1"]);
+        cmd.args(["-machine", "q35,smm=on,accel=kvm"]);
+        cmd.args(["-global", "ICH9-LPC.disable_s3=1"]);
 
         // Send OVMF debug logging to a file.
-        cmd.add_args([
+        cmd.args([
             "-debugcon",
             &format!("file:{}", self.ovmf.qemu_log()),
             "-global",
             "isa-debugcon.iobase=0x402",
         ]);
 
-        cmd.add_args(["-global", "driver=cfi.pflash01,property=secure,value=on"]);
-        cmd.add_args([
+        cmd.args(["-global", "driver=cfi.pflash01,property=secure,value=on"]);
+        cmd.args([
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=0,readonly=on,file={}",
                 self.ovmf.code()
             ),
         ]);
-        cmd.add_args([
+        cmd.args([
             "-drive",
             &format!(
                 "if=pflash,format=raw,unit=1,readonly=off,file={}",
@@ -123,7 +131,7 @@ impl QemuOpts {
         cmd
     }
 
-    pub fn run_disk_image(&self, conf: &Config) -> Result<()> {
+    pub fn spawn_disk_image(&self, conf: &Config) -> Result<QemuProcess> {
         let swtpm = if let Some(tpm_version) = self.tpm_version {
             Some(Swtpm::spawn(conf, tpm_version)?)
         } else {
@@ -132,12 +140,25 @@ impl QemuOpts {
 
         let mut cmd = self.create_command();
 
-        cmd.add_args(["-drive", &format!("format=raw,file={}", self.image_path)]);
+        cmd.args(["-drive", &format!("format=raw,file={}", self.image_path)]);
         if let Some(swtpm) = &swtpm {
-            cmd.add_args(swtpm.qemu_args());
+            cmd.args(swtpm.qemu_args());
         }
-        cmd.run()?;
+        let process = Arc::new(Mutex::new(ScopedChild::new(cmd.spawn()?)));
 
-        Ok(())
+        Ok(QemuProcess {
+            qemu: process,
+            _swtpm: swtpm,
+        })
+    }
+
+    pub fn run_disk_image(&self, conf: &Config) -> Result<()> {
+        let vm = self.spawn_disk_image(conf)?;
+        let status = vm.qemu.lock().unwrap().wait()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow!("qemu exited non-zero: {status:?}"))
+        }
     }
 }
