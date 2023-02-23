@@ -12,6 +12,7 @@ mod shim;
 mod swtpm;
 mod util;
 mod vboot;
+mod vm_test;
 
 use anyhow::{anyhow, bail, Result};
 use arch::Arch;
@@ -79,6 +80,10 @@ struct CheckAction {
     /// only log warnings and errors
     #[argh(switch)]
     disable_verbose_logs: bool,
+
+    /// enable slow VM tests
+    #[argh(switch)]
+    vm_tests: bool,
 }
 
 impl CheckAction {
@@ -117,13 +122,17 @@ struct SetupAction {
 
 struct Miri(bool);
 
-/// Run "cargo test" in the vboot project.
-#[derive(FromArgs, PartialEq, Debug, Default)]
+/// Run tests.
+#[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "test")]
 struct TestAction {
     /// disable miri tests
     #[argh(switch)]
     no_miri: bool,
+
+    /// enable slow VM tests
+    #[argh(switch)]
+    vm_tests: bool,
 }
 
 /// Run crdyboot under qemu.
@@ -193,12 +202,20 @@ fn run_cargo_deny() -> Result<()> {
     Ok(())
 }
 
-fn run_check(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
+fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
     run_cargo_deny()?;
     run_rustfmt(&FormatAction { check: true })?;
-    run_tests(&Default::default())?;
-    run_crdyboot_build(conf, verbose)?;
-    run_clippy()
+    run_clippy()?;
+    run_tests(
+        conf,
+        &TestAction {
+            no_miri: false,
+            vm_tests: action.vm_tests,
+        },
+    )?;
+    run_crdyboot_build(conf, action.verbose())?;
+
+    Ok(())
 }
 
 fn run_uefi_build(package: Package) -> Result<()> {
@@ -351,7 +368,7 @@ fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
     Ok(())
 }
 
-fn run_tests(action: &TestAction) -> Result<()> {
+fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
     run_tests_for_package(Package::Xtask, Miri(false))?;
     run_tests_for_package(Package::Vboot, Miri(false))?;
     run_tests_for_package(Package::Libcrdy, Miri(false))?;
@@ -359,6 +376,10 @@ fn run_tests(action: &TestAction) -> Result<()> {
     if !action.no_miri {
         run_tests_for_package(Package::Vboot, Miri(true))?;
         run_tests_for_package(Package::Libcrdy, Miri(true))?;
+    }
+
+    if action.vm_tests {
+        vm_test::run_vm_tests(conf)?;
     }
 
     Ok(())
@@ -571,12 +592,12 @@ fn main() -> Result<()> {
     match &opt.action {
         Action::Build(action) => run_crdyboot_build(&conf, action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
-        Action::Check(action) => run_check(&conf, action.verbose()),
+        Action::Check(action) => run_check(&conf, action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
         Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
-        Action::Test(action) => run_tests(action),
+        Action::Test(action) => run_tests(&conf, action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
         Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),

@@ -86,7 +86,9 @@ setup commands. The image must have rootfs verification enabled
 
 To check formatting, lint, test, build crdyboot, and install to the image:
 
-    cargo xtask check
+    cargo xtask check [--vm-tests]
+
+The `--vm-tests` option enables slow tests that run under QEMU.
 
 To just build crdyboot and install to the image (a quicker subset of `check`):
 
