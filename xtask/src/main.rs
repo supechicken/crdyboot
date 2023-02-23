@@ -24,7 +24,7 @@ use gen_disk::VerboseRuntimeLogs;
 use object::pe::{ImageNtHeaders32, ImageNtHeaders64, IMAGE_DLLCHARACTERISTICS_NX_COMPAT};
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use package::Package;
-use qemu::{Display, Qemu};
+use qemu::{Display, QemuOpts};
 use std::{env, process};
 use swtpm::TpmVersion;
 
@@ -410,8 +410,14 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
         copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
 
         // Run the enroller in QEMU to set up secure boot UEFI variables.
-        let qemu = Qemu::new(ovmf);
-        qemu.run_disk_image(conf, &conf.enroller_disk_path(), Display::None, None)?;
+        let qemu = QemuOpts {
+            display: Display::None,
+            image_path: conf.enroller_disk_path(),
+            ovmf,
+            secure_boot: true,
+            tpm_version: None,
+        };
+        qemu.run_disk_image(conf)?;
     }
 
     Ok(())
@@ -480,17 +486,20 @@ fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
 }
 
 fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
-    let disk = conf.disk_path();
-
     let ovmf = if action.ia32 {
         conf.ovmf_paths(Arch::Ia32)
     } else {
         conf.ovmf_paths(Arch::X64)
     };
 
-    let mut qemu = Qemu::new(ovmf);
-    qemu.secure_boot = !action.no_secure_boot;
-    qemu.run_disk_image(conf, disk, action.display, action.tpm_version())
+    let qemu = QemuOpts {
+        display: action.display,
+        image_path: conf.disk_path().to_path_buf(),
+        ovmf,
+        secure_boot: !action.no_secure_boot,
+        tpm_version: action.tpm_version(),
+    };
+    qemu.run_disk_image(conf)
 }
 
 fn run_writedisk(conf: &Config) -> Result<()> {

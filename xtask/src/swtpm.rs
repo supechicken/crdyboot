@@ -9,7 +9,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 /// TPM version.
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum TpmVersion {
     /// V1 TPM.
     V1,

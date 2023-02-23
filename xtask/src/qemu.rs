@@ -5,7 +5,7 @@
 use crate::swtpm::{Swtpm, TpmVersion};
 use crate::Config;
 use anyhow::{anyhow, Error, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use command_run::Command;
 use std::str::FromStr;
 
@@ -66,26 +66,22 @@ impl OvmfPaths {
     }
 }
 
-pub struct Qemu {
-    ovmf: OvmfPaths,
+pub struct QemuOpts {
+    pub display: Display,
+    pub image_path: Utf8PathBuf,
+    pub ovmf: OvmfPaths,
     pub secure_boot: bool,
+    pub tpm_version: Option<TpmVersion>,
 }
 
-impl Qemu {
-    pub fn new(ovmf: OvmfPaths) -> Qemu {
-        Qemu {
-            ovmf,
-            secure_boot: true,
-        }
-    }
-
-    fn create_command(&self, display: Display) -> Command {
+impl QemuOpts {
+    fn create_command(&self) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.add_arg("-enable-kvm");
         cmd.add_arg("-nodefaults");
         cmd.add_args(["-vga", "virtio"]);
         cmd.add_args(["-serial", "stdio"]);
-        cmd.add_args(["-display", display.as_arg_str()]);
+        cmd.add_args(["-display", self.display.as_arg_str()]);
 
         // Give it a small but reasonable amount of memory (the
         // default of 128M is too small).
@@ -127,22 +123,16 @@ impl Qemu {
         cmd
     }
 
-    pub fn run_disk_image(
-        &self,
-        conf: &Config,
-        image_path: &Utf8Path,
-        display: Display,
-        tpm_version: Option<TpmVersion>,
-    ) -> Result<()> {
-        let swtpm = if let Some(tpm_version) = tpm_version {
+    pub fn run_disk_image(&self, conf: &Config) -> Result<()> {
+        let swtpm = if let Some(tpm_version) = self.tpm_version {
             Some(Swtpm::spawn(conf, tpm_version)?)
         } else {
             None
         };
 
-        let mut cmd = self.create_command(display);
+        let mut cmd = self.create_command();
 
-        cmd.add_args(["-drive", &format!("format=raw,file={image_path}")]);
+        cmd.add_args(["-drive", &format!("format=raw,file={}", self.image_path)]);
         if let Some(swtpm) = &swtpm {
             cmd.add_args(swtpm.qemu_args());
         }
