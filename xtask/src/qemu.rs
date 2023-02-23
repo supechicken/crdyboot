@@ -7,7 +7,7 @@ use crate::util::ScopedChild;
 use crate::Config;
 use anyhow::{anyhow, Error, Result};
 use camino::Utf8PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -74,6 +74,7 @@ pub struct QemuProcess {
 }
 
 pub struct QemuOpts {
+    pub capture_output: bool,
     pub display: Display,
     pub image_path: Utf8PathBuf,
     pub ovmf: OvmfPaths,
@@ -134,6 +135,11 @@ impl QemuOpts {
             "-net",
             &format!("user,hostfwd=tcp::{}-:22", Config::ssh_port()),
         ]);
+
+        if self.capture_output {
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+        }
 
         cmd
     }

@@ -411,6 +411,7 @@ fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
 
         // Run the enroller in QEMU to set up secure boot UEFI variables.
         let qemu = QemuOpts {
+            capture_output: false,
             display: Display::None,
             image_path: conf.enroller_disk_path(),
             ovmf,
@@ -493,6 +494,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
     };
 
     let qemu = QemuOpts {
+        capture_output: false,
         display: action.display,
         image_path: conf.disk_path().to_path_buf(),
         ovmf,
