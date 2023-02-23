@@ -10,6 +10,7 @@ mod qemu;
 mod secure_boot;
 mod shim;
 mod swtpm;
+mod util;
 mod vboot;
 
 use anyhow::{anyhow, bail, Result};

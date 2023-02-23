@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::util::ScopedChild;
 use crate::Config;
 use anyhow::Result;
-use std::process::{Child, Command};
+use std::process::Command;
 use tempfile::TempDir;
 
 /// TPM version.
@@ -24,7 +25,7 @@ pub enum TpmVersion {
 /// The process is killed on drop.
 pub struct Swtpm {
     tmp_dir: TempDir,
-    child: Child,
+    _child: ScopedChild,
 }
 
 impl Swtpm {
@@ -54,9 +55,12 @@ impl Swtpm {
         }
 
         println!("launching swtpm");
-        let child = cmd.spawn()?;
+        let child = ScopedChild::new(cmd.spawn()?);
 
-        Ok(Self { tmp_dir, child })
+        Ok(Self {
+            tmp_dir,
+            _child: child,
+        })
     }
 
     /// Get the QEMU args needed to connect to the TPM emulator.
@@ -70,12 +74,5 @@ impl Swtpm {
             "-device".into(),
             "tpm-tis,tpmdev=tpm0".into(),
         ]
-    }
-}
-
-impl Drop for Swtpm {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
