@@ -128,6 +128,13 @@ impl QemuOpts {
             ),
         ]);
 
+        cmd.args([
+            "-net",
+            "nic,model=virtio",
+            "-net",
+            &format!("user,hostfwd=tcp::{}-:22", Config::ssh_port()),
+        ]);
+
         cmd
     }
 

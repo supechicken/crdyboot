@@ -143,6 +143,11 @@ impl Config {
     pub fn shim_build_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("shim_build")
     }
+
+    /// SSH port for VMs.
+    pub fn ssh_port() -> u16 {
+        9322
+    }
 }
 
 #[derive(Clone, Copy)]
