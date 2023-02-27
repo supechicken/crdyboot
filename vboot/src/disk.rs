@@ -125,9 +125,7 @@ impl<'a> Disk<'a> {
     unsafe fn read(&self, lba_start: u64, lba_count: u64, buffer: *mut u8) -> ReturnCode {
         assert!(!buffer.is_null());
 
-        let buffer_len = if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
-            buffer_len
-        } else {
+        let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) else {
             error!("invalid read size: {lba_count}");
             return ReturnCode::VB2_ERROR_UNKNOWN;
         };
@@ -144,9 +142,7 @@ impl<'a> Disk<'a> {
     unsafe fn write(&mut self, lba_start: u64, lba_count: u64, buffer: *const u8) -> ReturnCode {
         assert!(!buffer.is_null());
 
-        let buffer_len = if let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) {
-            buffer_len
-        } else {
+        let Some(buffer_len) = self.blocks_to_bytes_usize(lba_count) else {
             error!("invalid write size: {lba_count}");
             return ReturnCode::VB2_ERROR_UNKNOWN;
         };
@@ -244,9 +240,7 @@ unsafe extern "C" fn VbExStreamRead(
     let disk = Disk::from_handle(stream_handle);
 
     // Get the number of blocks to read.
-    let num_blocks = if let Some(num_blocks) = disk.bytes_to_blocks(u64::from(num_bytes)) {
-        num_blocks
-    } else {
+    let Some(num_blocks) = disk.bytes_to_blocks(u64::from(num_bytes)) else {
         return ReturnCode::VB2_ERROR_UNKNOWN;
     };
 

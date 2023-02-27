@@ -55,9 +55,7 @@ fn is_parent_disk(potential_parent: Handle, partition: Handle, bt: &BootServices
 
     // After the zip operation we expect there to be one remaining path for the
     // partition device; validate that this expectation is met.
-    let final_partition_path = if let Some(path) = partition_device_path_node_iter.next() {
-        path
-    } else {
+    let Some(final_partition_path) = partition_device_path_node_iter.next() else {
         return Ok(false);
     };
 

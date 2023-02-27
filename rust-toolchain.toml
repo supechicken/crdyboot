@@ -1,9 +1,5 @@
 [toolchain]
-channel = "nightly-2022-10-29"
-
-components = [
-    # Needed for `-Zbuild-std`.
-    "rust-src",
-
-    "miri",
-]
+# Roughly corresponds to Rust 1.67.
+channel = "nightly-2022-12-09"
+targets = ["i686-unknown-uefi", "x86_64-unknown-uefi"]
+components = ["miri"]

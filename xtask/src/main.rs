@@ -209,8 +209,6 @@ fn run_uefi_build(package: Package) -> Result<()> {
                 "--release",
                 "--package",
                 package.name(),
-                "-Zbuild-std=core,compiler_builtins,alloc",
-                "-Zbuild-std-features=compiler-builtins-mem",
                 "--target",
                 target,
             ],
@@ -323,8 +321,6 @@ fn run_clippy_for_package(package: Package) -> Result<()> {
     // of uefi-rs due to `eh_personality` no longer being set.
     if package != Package::Xtask {
         cmd.add_args([
-            "-Zbuild-std=core,compiler_builtins,alloc",
-            "-Zbuild-std-features=compiler-builtins-mem",
             "--target",
             // Arbitrarily choose the 64-bit target.
             Arch::X64.uefi_target(),
@@ -521,10 +517,7 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "Re-running setup: upgrading from {} to {}",
-        existing_version, current_version
-    );
+    println!("Re-running setup: upgrading from {existing_version} to {current_version}");
 
     // Put any version-specific cleanup operations here.
 
