@@ -176,6 +176,12 @@ impl QemuOpts {
             cmd.stderr(Stdio::piped());
         }
 
+        // Disconnect the input stream. This prevents QEMU from messing
+        // with the TTY. Normally it doesn't matter, but if QEMU is
+        // terminated without shutting down cleanly it may leave the TTY
+        // with echo turned off.
+        cmd.stdin(Stdio::null());
+
         cmd
     }
 
