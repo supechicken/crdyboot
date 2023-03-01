@@ -81,6 +81,10 @@ struct CheckAction {
     #[argh(switch)]
     disable_verbose_logs: bool,
 
+    /// disable miri tests
+    #[argh(switch)]
+    no_miri: bool,
+
     /// enable slow VM tests
     #[argh(switch)]
     vm_tests: bool,
@@ -209,7 +213,7 @@ fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
     run_tests(
         conf,
         &TestAction {
-            no_miri: false,
+            no_miri: action.no_miri,
             vm_tests: action.vm_tests,
         },
     )?;
