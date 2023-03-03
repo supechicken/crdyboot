@@ -10,8 +10,7 @@ anyhow = "1.0.57"
 argh = "0.1.7"
 camino = { version = "1.0.9", features = ["serde1"] }
 command-run = "1.1.1"
-# The latest fatfs release (0.3.5) is old, use git instead to pick up some fixes.
-fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", rev = "4892fb1791b29616d8573235eb83644003d13791", default-features = false, features = ["lfn", "std"] }
+fatfs = { version = "0.3.6", default-features = false, features = ["alloc", "std"] }
 fs-err = "2.7.0"
 gpt_disk_types = { version = "0.14.0", features = ["std"] }
 gptman = { version = "1.0.0", default-features = false }
