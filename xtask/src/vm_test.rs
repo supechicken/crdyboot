@@ -4,13 +4,13 @@
 
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::gen_disk::{corrupt_kern_a, VerboseRuntimeLogs};
+use crate::gen_disk::{corrupt_kern_a, corrupt_pubkey_section, VerboseRuntimeLogs};
 use crate::qemu::{Display, QemuOpts};
 use crate::{copy_file, run_crdyboot_build};
 use anyhow::{bail, Result};
 use camino::Utf8Path;
 use command_run::Command;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
@@ -165,9 +165,86 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
     }
 }
 
+/// Wrapper that prints `text` when dropped if `print` is true. This is
+/// used for printing test output when a panic occurs.
+struct PrintOutputOnDrop {
+    text: String,
+    print: bool,
+}
+
+impl PrintOutputOnDrop {
+    fn new() -> Self {
+        Self {
+            text: String::new(),
+            print: true,
+        }
+    }
+}
+
+impl Drop for PrintOutputOnDrop {
+    fn drop(&mut self) {
+        if self.print {
+            println!("start output ---");
+            println!("{}", self.text);
+            println!("--- end output");
+        }
+    }
+}
+
+/// This test modifies a byte in the `.vbpubk` section of the
+/// bootloader, then verifies that shim refuses to launch crdyboot due
+/// to the executable's signature no longer being valid.
+///
+/// This validates that the `.vbpubk` section is properly included in
+/// the authenticode hash, and shim is correctly validating the
+/// signature.
+fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
+    println!("test that modifying the vbpubk section prevents crdyboot from launching");
+
+    create_test_disk(conf)?;
+
+    corrupt_pubkey_section(&conf.test_disk_path())?;
+
+    let opts = QemuOpts {
+        capture_output: true,
+        display: Display::None,
+        image_path: conf.test_disk_path(),
+        ovmf: conf.ovmf_paths(Arch::X64),
+        secure_boot: true,
+        snapshot: true,
+        timeout: Some(Duration::from_secs(30)),
+        tpm_version: None,
+    };
+    let vm = opts.spawn_disk_image(conf)?;
+    let mut stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
+    let mut output = PrintOutputOnDrop::new();
+    loop {
+        // Read one byte at a time since there's no newline character
+        // after the message we are looking for.
+        let mut byte = [0];
+        if stdout.read(&mut byte)? == 0 {
+            // EOF reached.
+            bail!("QEMU no longer running");
+        }
+        output.text.push(char::try_from(byte[0]).unwrap());
+
+        if output
+            .text
+            .contains("Verification failed: (0x1A) Security Violation")
+        {
+            // The expected failure occurred, test is successful. Kill
+            // the VM.
+            output.print = false;
+            vm.qemu.lock().unwrap().kill().unwrap();
+            return Ok(());
+        }
+    }
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_crdyboot_build(conf, VerboseRuntimeLogs(true))?;
 
+    test_vbpubk_mod_breaks_signature(conf)?;
     test_corrupt_kern_a(conf)?;
     test_successful_boot(conf)?;
 

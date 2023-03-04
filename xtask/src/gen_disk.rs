@@ -12,6 +12,7 @@ use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
 use fs_err::{self as fs, File, OpenOptions};
 use gpt_disk_types::{guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive};
 use gptman::{GPTPartitionEntry, GPT};
+use object::read::pe::PeFile64;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::ops::{Range, RangeInclusive};
 use tempfile::TempDir;
@@ -521,6 +522,60 @@ pub fn corrupt_kern_a(disk_path: &Utf8Path) -> Result<()> {
     disk_file.sync_all()?;
 
     Ok(())
+}
+
+/// Modify one byte at the end of crdyboot's `.vbpubk` section in a disk
+/// image.
+///
+/// This is used in a test to verify that the vbpubk section is properly
+/// included in the authenticode hash, so modifying the key prevents
+/// shim from validating crdyboot's signature.
+pub fn corrupt_pubkey_section(disk_path: &Utf8Path) -> Result<()> {
+    // Get the expected section data for the vbpubk. This matches the
+    // data produced by crdyboot's build.rs.
+    let mut expected_pubkey =
+        include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk")
+            .to_vec();
+    expected_pubkey.resize(8192, 0);
+
+    modify_system_partition(disk_path, |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+
+        let file_name = "crdybootx64.efi";
+        let mut data = Vec::new();
+        {
+            let mut f = boot_dir.open_file(file_name)?;
+            f.read_to_end(&mut data)?;
+        }
+
+        // Find the offset and size of the `.vbpubk` section.
+        let pe = PeFile64::parse(&*data)?;
+        let section = pe
+            .section_table()
+            .iter()
+            .find(|section| section.raw_name() == b".vbpubk")
+            .unwrap();
+        let (offset, size) = section.pe_file_range();
+
+        // Verify the section contains the expected data.
+        let section_data = &mut data[offset as usize..(offset + size) as usize];
+        assert_eq!(section_data, expected_pubkey);
+
+        // Modify a single bit at the end of the section. This bit is
+        // outside of the actual key data, so it doesn't actually break
+        // verification from crdyboot -> kernel. However, it should
+        // break the launch of crdyboot itself since the whole section
+        // is part of the image authenticode hash.
+        section_data[section_data.len() - 1] = 1;
+
+        // Write the modified file out.
+        boot_dir.remove(file_name)?;
+        let mut f = boot_dir.create_file(file_name)?;
+        f.write_all(&data)?;
+
+        Ok(())
+    })
 }
 
 #[cfg(test)]
