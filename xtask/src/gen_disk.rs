@@ -304,11 +304,15 @@ pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()>
             let file_name = entry.file_name();
             let file_name = file_name.to_str().unwrap();
 
-            let src = fs::read(entry.path())?;
-            let mut dst = dst_boot_dir.open_file(file_name)?;
+            println!("copying {} to EFI/BOOT", entry.path().display());
 
-            // Clear out existing data, then copy in the new data.
-            dst.truncate()?;
+            let src = fs::read(entry.path())?;
+
+            // Delete the file if it already exists.
+            let _ = dst_boot_dir.remove(file_name);
+
+            // Write out the new data.
+            let mut dst = dst_boot_dir.create_file(file_name)?;
             dst.write_all(&src)?;
         }
 
@@ -368,8 +372,7 @@ pub fn update_verbose_boot_file(conf: &Config, verbose: VerboseRuntimeLogs) -> R
     })
 }
 
-/// Sign crdyboot, then copy it into the disk image under the "grub"
-/// name (since that's what shim currently chains to).
+/// Sign crdyboot, then copy it into the disk image.
 pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
     SignAndUpdateBootloader {
         disk_path: conf.disk_path(),
@@ -379,7 +382,7 @@ pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
             .map(|arch| {
                 (
                     conf.target_exec_path(*arch, EfiExe::Crdyboot),
-                    arch.efi_file_name("grub"),
+                    arch.efi_file_name("crdyboot"),
                 )
             })
             .collect(),

@@ -30,6 +30,8 @@ fn build_shim(conf: &Config) -> Result<()> {
         shim_dir.join("chromeos_reven.cer"),
     )?;
 
+    // Apply some modifications to the Dockerfile:
+    //
     // Disable EBS protection. This is a shim feature that hooks the
     // ExitBootServices function so that shim can verify that the
     // 2nd-stage bootloader properly used shim's verification protocol
@@ -37,12 +39,26 @@ fn build_shim(conf: &Config) -> Result<()> {
     // we verify the signature of the entire kernel partition through
     // a different mechanism than what shim provides, so the EBS check
     // would fail if enabled.
+    //
+    // Change the second-stage bootloader name from grub to crdyboot.
     let dockerfile_path = shim_dir.join("Dockerfile");
-    let orig_dockerfile = fs::read_to_string(&dockerfile_path)?;
+    let dockerfile = fs::read_to_string(&dockerfile_path)?;
+
     let orig_str = "TOPDIR=.. -f ../Makefile";
     let new_str = format!("DISABLE_EBS_PROTECTION=y {orig_str}");
-    let new_dockerfile = orig_dockerfile.replace(orig_str, &new_str);
-    fs::write(&dockerfile_path, new_dockerfile)?;
+    let dockerfile = dockerfile.replace(orig_str, &new_str);
+
+    let default_loader_prefix = r"DEFAULT_LOADER=\\\\crdyboot";
+
+    let orig_str = "ARCH=x86_64";
+    let new_str = format!("{default_loader_prefix}x64.efi {orig_str}");
+    let dockerfile = dockerfile.replace(orig_str, &new_str);
+
+    let orig_str = "ARCH=ia32";
+    let new_str = format!("{default_loader_prefix}ia32.efi {orig_str}");
+    let dockerfile = dockerfile.replace(orig_str, &new_str);
+
+    fs::write(&dockerfile_path, dockerfile)?;
 
     Command::with_args("make", ["build"])
         .set_dir(&shim_dir)
