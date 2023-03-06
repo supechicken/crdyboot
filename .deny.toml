@@ -20,6 +20,9 @@ confidence-threshold = 1.0
 
 [bans]
 multiple-versions = "warn"
+skip = [
+     { name = "windows-sys", version = "0.42.0" }
+]
 
 [sources]
 unknown-git = "allow"
