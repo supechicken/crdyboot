@@ -71,6 +71,8 @@ to log out and back in for this to take effect:
 
     sudo adduser ${USER} kvm
 
+Googlers: see [go/crdyboot-internal] for additional recommendations.
+
 ## Building and testing
 
 Before running any other commands in the repository, run this setup
@@ -119,6 +121,7 @@ See the [docs](docs) subdirectory.
 
 [BSD]: LICENSE
 [EFI stub]: https://docs.kernel.org/admin-guide/efi-stub.html
+[go/crdyboot-internal]: http://go/crdyboot-internal
 [kernel partition]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/disk_format.md#Kernel-partition-format
 [uefi crate]: https://docs.rs/uefi/latest/uefi/
 [vboot]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/+/HEAD/README
