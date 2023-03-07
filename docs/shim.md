@@ -16,6 +16,15 @@ requires podman, because we build from the [ChromeOS Flex
 shim-review][shim-review] repo to match our real shim as closely as
 possible. See [`shim.rs`] for details.
 
+## Logging
+
+Verbose runtime logging can be enabled for shim by setting the
+`SHIM_VERBOSE` UEFI variable. This can be done with the enroller. To
+enable verbose mode, first `touch workspace/shim_verbose`. Then rebuild
+the setup to rebuild the enroller and update the VM vars: `cargo xtask
+setup`. Alternatively, to just rebuild the enroller: `cargo xtask
+build-enroller.`
+
 [shim]: https://github.com/rhboot/shim
 [`shim.rs`]: ../xtask/src/shim.rs
 [shim-review]: https://chromium.googlesource.com/chromiumos/shim-review

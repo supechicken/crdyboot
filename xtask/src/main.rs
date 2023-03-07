@@ -222,9 +222,9 @@ fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
     Ok(())
 }
 
-fn run_uefi_build(package: Package) -> Result<()> {
+fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
     for target in Arch::all_targets() {
-        Command::with_args(
+        let mut cmd = Command::with_args(
             "cargo",
             [
                 "build",
@@ -234,8 +234,12 @@ fn run_uefi_build(package: Package) -> Result<()> {
                 "--target",
                 target,
             ],
-        )
-        .run()?;
+        );
+        if !features.is_empty() {
+            cmd.add_arg("--features");
+            cmd.add_arg(features.join(","));
+        }
+        cmd.run()?;
     }
 
     Ok(())
@@ -264,7 +268,7 @@ fn ensure_nx_compat(conf: &Config) -> Result<()> {
 }
 
 fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
-    run_uefi_build(Package::Crdyboot)?;
+    run_uefi_build(Package::Crdyboot, vec![])?;
 
     // Ensure that the NX-compat bit is set in all crdyboot executables.
     ensure_nx_compat(conf)?;
@@ -298,7 +302,13 @@ pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
 }
 
 fn run_build_enroller(conf: &Config) -> Result<()> {
-    run_uefi_build(Package::Enroller)?;
+    let features = if conf.workspace_path().join("shim_verbose").exists() {
+        vec!["shim_verbose"]
+    } else {
+        vec![]
+    };
+
+    run_uefi_build(Package::Enroller, features)?;
 
     gen_disk::gen_enroller_disk(conf)
 }
