@@ -113,6 +113,7 @@ pub struct QemuOpts {
     pub image_path: Utf8PathBuf,
     pub ovmf: OvmfPaths,
     pub secure_boot: bool,
+    pub snapshot: bool,
     pub timeout: Option<Duration>,
     pub tpm_version: Option<TpmVersion>,
 }
@@ -122,10 +123,13 @@ impl QemuOpts {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.arg("-enable-kvm");
         cmd.arg("-nodefaults");
-        cmd.arg("-snapshot");
         cmd.args(["-vga", "virtio"]);
         cmd.args(["-serial", "stdio"]);
         cmd.args(["-display", self.display.as_arg_str()]);
+
+        if self.snapshot {
+            cmd.arg("-snapshot");
+        }
 
         // Give it a small but reasonable amount of memory (the
         // default of 128M is too small).

@@ -93,6 +93,7 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
             image_path: conf.disk_path().to_path_buf(),
             ovmf: conf.ovmf_paths(arch),
             secure_boot: true,
+            snapshot: true,
             timeout: None,
             tpm_version: None,
         };
@@ -132,6 +133,7 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
         image_path: conf.test_disk_path(),
         ovmf: conf.ovmf_paths(Arch::X64),
         secure_boot: true,
+        snapshot: true,
         timeout: Some(Duration::from_secs(30)),
         tpm_version: None,
     };
