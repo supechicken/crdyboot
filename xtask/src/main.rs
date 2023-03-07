@@ -550,7 +550,7 @@ fn run_writedisk(conf: &Config) -> Result<()> {
 
 fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 5;
+    let current_version = 6;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
