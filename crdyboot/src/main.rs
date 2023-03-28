@@ -5,7 +5,6 @@
 #![deny(clippy::pedantic)]
 #![no_std]
 #![no_main]
-#![feature(abi_efiapi)]
 
 use libcrdy::{load_and_execute_kernel, self_revocation_check, set_log_level, Error, Result};
 use uefi::prelude::*;

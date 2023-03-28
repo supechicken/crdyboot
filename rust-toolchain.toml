@@ -1,5 +1,5 @@
 [toolchain]
-# Roughly corresponds to Rust 1.67.
-channel = "nightly-2022-12-09"
+# Roughly corresponds to Rust 1.68.
+channel = "nightly-2023-01-20"
 targets = ["i686-unknown-uefi", "x86_64-unknown-uefi"]
 components = ["miri"]

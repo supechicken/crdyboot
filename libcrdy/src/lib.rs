@@ -8,7 +8,6 @@
 #![allow(clippy::module_name_repetitions)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
-#![feature(abi_efiapi)]
 
 mod disk;
 mod linux;
