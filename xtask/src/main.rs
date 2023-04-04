@@ -28,6 +28,7 @@ use package::Package;
 use qemu::{Display, QemuOpts};
 use std::{env, process};
 use swtpm::TpmVersion;
+use tempfile::TempDir;
 
 /// Tools for crdyboot.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -493,20 +494,67 @@ fn build_futility(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+fn download_latest_reven(conf: &Config) -> Result<()> {
+    let gsutil = "gsutil";
+    let bucket = "chromeos-image-archive";
+    let board_dir = "reven-release";
+
+    // Find the latest version using the LATEST-main file, which
+    // contains a string like "R114-15410.0.0".
+    let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
+    let output = Command::with_args(gsutil, ["cat", &latest_main_path])
+        .enable_capture()
+        .run()?;
+    let latest_version = String::from_utf8(output.stdout)?;
+
+    // Download the compressed test image to a temporary directory.
+    let tmp_dir = TempDir::new()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+    let compressed_name = "chromiumos_test_image.tar.xz";
+    let download_path = tmp_path.join(compressed_name);
+    let test_image_path = format!("gs://{bucket}/{board_dir}/{latest_version}/{compressed_name}");
+    Command::with_args(gsutil, ["cp", &test_image_path, download_path.as_str()]).run()?;
+
+    // Extract the image.
+    Command::with_args(
+        "tar",
+        [
+            "xf",
+            download_path.as_str(),
+            // Change directory to the temporary directory.
+            "-C",
+            tmp_path.as_str(),
+        ],
+    )
+    .run()?;
+
+    // Move the image to the workspace.
+    Command::with_args(
+        "mv",
+        [
+            &tmp_path.join("chromiumos_test_image.bin"),
+            conf.disk_path(),
+        ],
+    )
+    .run()?;
+
+    Ok(())
+}
+
 // Run various setup operations. This must be run once before running
 // any other xtask commands.
 fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
     init_submodules(conf)?;
 
+    // If the user has provided their own disk image on the command
+    // line, use that.
     if let Some(disk_image) = &action.disk_image {
         copy_file(disk_image, conf.disk_path())?;
     }
 
+    // If we don't have a disk image, download one from GS.
     if !conf.disk_path().exists() {
-        println!("A disk image is needed to continue. Rerun this command");
-        println!("with the path of a reven disk image, which will be copied");
-        println!("to a local path.");
-        process::exit(1);
+        download_latest_reven(conf)?;
     }
 
     build_futility(conf)?;

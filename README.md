@@ -78,13 +78,13 @@ Googlers: see [go/crdyboot-internal] for additional recommendations.
 Before running any other commands in the repository, run this setup
 command:
 
-    cargo xtask setup <reven-verity-image-path>
+    cargo xtask setup [<disk-path>]
 
-This will copy the reven image to a local directory and run various
-setup commands. The image must have rootfs verification enabled
-(i.e. `build_image` must be run _without_ `-r` or
-`--no-enable-rootfs-verification`). Any kind of image (`base`, `dev`, or
-`test`) is allowed.
+This will prepare a reven image to use with various tests. By default
+the latest reven release is downloaded from a GS bucket. You can also
+provide a path to use a local image. Any kind of image (`base`, `dev`,
+or `test`) is allowed, but the image must have rootfs verification
+enabled.
 
 To check formatting, lint, test, build crdyboot, and install to the image:
 
