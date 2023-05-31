@@ -6,6 +6,7 @@ use crate::disk::{Disk, DiskIo};
 use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use core::ffi::c_void;
+use core::ops::Range;
 use core::{fmt, ptr, str};
 use log::{error, info};
 use uguid::Guid;
@@ -13,7 +14,7 @@ use uguid::Guid;
 /// Fully verified kernel loaded into memory.
 pub struct LoadedKernel<'a> {
     data: &'a [u8],
-    bootloader_address: u64,
+    cros_config: Range<usize>,
     unique_partition_guid: Guid,
 }
 
@@ -33,6 +34,9 @@ pub enum LoadKernelError {
 
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
+
+    /// Bootloader address offset is not valid.
+    BadBootloaderAddress(u64),
 }
 
 impl fmt::Display for LoadKernelError {
@@ -55,12 +59,11 @@ impl fmt::Display for LoadKernelError {
                 rc,
             ),
             LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
+            BadBootloaderAddress(addr) => {
+                write!(f, "bootloader address is invalid: {addr:#02x?}")
+            }
         }
     }
-}
-
-fn u32_to_u64(v: u32) -> u64 {
-    v.into()
 }
 
 fn u32_to_usize(v: u32) -> usize {
@@ -69,29 +72,12 @@ fn u32_to_usize(v: u32) -> usize {
 
 impl<'a> LoadedKernel<'a> {
     fn command_line_with_placeholders(&self) -> Option<&str> {
-        // TODO: would be nice if the command line location was returned in
-        // the output parameters of vb2_kernel_params, might be
-        // worth putting up a CL for that.
-        //
-        // This arithmetic is based on `fill_info_cros` in depthcharge,
-        // which is where the magic constant comes from.
-        let command_line_start: usize = (self
-            .bootloader_address
-            .checked_sub(0x10_0000)?
-            .checked_sub(u32_to_u64(vboot_sys::CROS_PARAMS_SIZE))?
-            .checked_sub(u32_to_u64(vboot_sys::CROS_CONFIG_SIZE))?)
-        .try_into()
-        .ok()?;
-
-        // Get the entire command-line area.
-        let command_line_end =
-            command_line_start.checked_add(u32_to_usize(vboot_sys::CROS_CONFIG_SIZE))?;
-        let command_line = self.data.get(command_line_start..command_line_end)?;
+        let cros_config = self.data.get(self.cros_config.clone())?;
 
         // Find the null terminator and narrow the slice to end just before
         // that.
-        let command_line_end = command_line.iter().position(|b| *b == 0)?;
-        let command_line = command_line.get(..command_line_end)?;
+        let command_line_end = cros_config.iter().position(|b| *b == 0)?;
+        let command_line = cros_config.get(..command_line_end)?;
 
         str::from_utf8(command_line).ok()
     }
@@ -169,6 +155,43 @@ impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
         vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE as usize;
 }
 
+/// Offsets within the kernel buffer divined from
+/// `vboot_sys::vb2_kernel_params`.
+struct KernelBufferOffsets {
+    #[allow(dead_code)]
+    bootloader_address: usize,
+    cros_config: Range<usize>,
+}
+
+impl KernelBufferOffsets {
+    fn new(params: &vboot_sys::vb2_kernel_params) -> Option<Self> {
+        // This arithmetic is based on `fill_info_cros` in
+        // depthcharge. That's also where the magic constant of
+        // 0x10_0000 is copied from.
+        //
+        // TODO: would be nice if vboot just provided direct offsets
+        // rather than having to copy these calculations into multiple
+        // projects, could maybe do a CL for that.
+
+        let bootloader_address =
+            usize::try_from(params.bootloader_address.checked_sub(0x10_0000)?).ok()?;
+
+        let cros_params_size = u32_to_usize(vboot_sys::CROS_PARAMS_SIZE);
+        let cros_config_size = u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
+
+        let cros_config_start = bootloader_address
+            .checked_sub(cros_params_size)?
+            .checked_sub(cros_config_size)?;
+
+        let cros_config_end = cros_config_start.checked_add(cros_config_size)?;
+
+        Some(Self {
+            bootloader_address,
+            cros_config: cros_config_start..cros_config_end,
+        })
+    }
+}
+
 /// Find the best kernel. The details are up to the firmware library in
 /// `vboot_reference`. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
@@ -210,9 +233,13 @@ pub fn load_kernel<'kernel>(
         if status == ReturnCode::VB2_SUCCESS {
             info!("LoadKernel success");
 
+            let offsets = KernelBufferOffsets::new(&params).ok_or(
+                LoadKernelError::BadBootloaderAddress(params.bootloader_address),
+            )?;
+
             Ok(LoadedKernel {
                 data: inputs.kernel_buffer,
-                bootloader_address: params.bootloader_address,
+                cros_config: offsets.cros_config,
                 unique_partition_guid: Guid::from_bytes(params.partition_guid),
             })
         } else {
