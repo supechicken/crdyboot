@@ -413,14 +413,8 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
 
     let unsigned_kernel_partition = tmp_path.join("kernel_partition");
     let vmlinuz = tmp_path.join("vmlinuz");
-    let bootloader = tmp_path.join("bootloader");
     let config = tmp_path.join("config");
     let signed_kernel_partition = tmp_path.join("kernel_partition.signed");
-
-    // The bootloader isn't actually used, so just write an
-    // placeholder file. (Can't be empty as futility
-    // rejects it.)
-    fs::write(&bootloader, "not a real bootloader")?;
 
     // Copy the whole partition to a temporary file.
     let orig_kern_data = kern_data_range.read_bytes_from_file(&mut disk_file)?;
@@ -466,7 +460,6 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
         "--signprivate", kernel_data_key.vbprivk.as_str(),
         "--version", &version.to_string(),
         "--vmlinuz", vmlinuz.as_str(),
-        "--bootloader", bootloader.as_str(),
         "--config", config.as_str(),
         "--arch", "amd64"]).run()?;
 

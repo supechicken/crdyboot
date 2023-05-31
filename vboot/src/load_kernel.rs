@@ -7,7 +7,7 @@ use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use core::ffi::c_void;
 use core::ops::Range;
-use core::{fmt, ptr, str};
+use core::{fmt, ptr, slice, str};
 use log::{error, info};
 use uguid::Guid;
 
@@ -23,6 +23,9 @@ pub enum LoadKernelError {
     /// Failed to convert numeric type.
     BadNumericConversion(&'static str),
 
+    /// An arithmetic operation overflowed.
+    Overflow(&'static str),
+
     /// Packed pubkey buffer is too small.
     PubkeyTooSmall(usize),
 
@@ -37,6 +40,12 @@ pub enum LoadKernelError {
 
     /// Bootloader address offset is not valid.
     BadBootloaderAddress(u64),
+
+    /// Bootloader data is larger than the reserved space.
+    BootloaderTooLarge(usize),
+
+    /// The expected UEFI stub signature was not found.
+    MissingUefiStub,
 }
 
 impl fmt::Display for LoadKernelError {
@@ -50,6 +59,9 @@ impl fmt::Display for LoadKernelError {
             BadNumericConversion(info) => {
                 write!(f, "failed to convert numeric type: {info}")
             }
+            Overflow(info) => {
+                write!(f, "overflow: {info}")
+            }
             PubkeyTooSmall(size) => {
                 write!(f, "packed pubkey buffer is too small: {size}")
             }
@@ -61,6 +73,15 @@ impl fmt::Display for LoadKernelError {
             LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
             BadBootloaderAddress(addr) => {
                 write!(f, "bootloader address is invalid: {addr:#02x?}")
+            }
+            BootloaderTooLarge(size) => {
+                write!(f, "bootloader data is too large: {size}")
+            }
+            MissingUefiStub => {
+                write!(
+                    f,
+                    "the UEFI stub is missing or not in the expected location"
+                )
             }
         }
     }
@@ -158,7 +179,6 @@ impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
 /// Offsets within the kernel buffer divined from
 /// `vboot_sys::vb2_kernel_params`.
 struct KernelBufferOffsets {
-    #[allow(dead_code)]
     bootloader_address: usize,
     cros_config: Range<usize>,
 }
@@ -169,12 +189,21 @@ impl KernelBufferOffsets {
         // depthcharge. That's also where the magic constant of
         // 0x10_0000 is copied from.
         //
+        // The additional offset of `bootloader_size` is needed because
+        // we move the bootloader into space at the beginning of the
+        // kernel buffer.
+        //
         // TODO: would be nice if vboot just provided direct offsets
         // rather than having to copy these calculations into multiple
         // projects, could maybe do a CL for that.
 
-        let bootloader_address =
-            usize::try_from(params.bootloader_address.checked_sub(0x10_0000)?).ok()?;
+        let bootloader_address = usize::try_from(
+            params
+                .bootloader_address
+                .checked_add(u64::from(params.bootloader_size))?
+                .checked_sub(0x10_0000)?,
+        )
+        .ok()?;
 
         let cros_params_size = u32_to_usize(vboot_sys::CROS_PARAMS_SIZE);
         let cros_config_size = u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
@@ -203,14 +232,28 @@ pub fn load_kernel<'kernel>(
     unsafe {
         let ctx_ptr = init_vb2_context(inputs.packed_pubkey, inputs.workbuf)?;
 
+        let full_kernel_buffer = inputs.kernel_buffer.as_mut_ptr();
+        let full_kernel_buffer_size: u32 = inputs
+            .kernel_buffer
+            .len()
+            .try_into()
+            .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?;
+
+        // Reserve space at the beginning of `full_kernel_buffer` so
+        // that we can later copy in the bootloader (UEFI stub).
+        //
+        // The actual size as of 2023-05-30 is 16KiB, allocate double
+        // that to give some headroom.
+        let max_bootloader_size: u32 = 1024 * 32;
+        let kernel_buffer = full_kernel_buffer.add(u32_to_usize(max_bootloader_size));
+        let kernel_buffer_size = full_kernel_buffer_size
+            .checked_sub(max_bootloader_size)
+            .ok_or(LoadKernelError::Overflow("kernel_buffer_size"))?;
+
         let mut params = vboot_sys::vb2_kernel_params {
             // Initialize inputs.
-            kernel_buffer: inputs.kernel_buffer.as_mut_ptr().cast::<c_void>(),
-            kernel_buffer_size: inputs
-                .kernel_buffer
-                .len()
-                .try_into()
-                .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?,
+            kernel_buffer: kernel_buffer.cast(),
+            kernel_buffer_size,
 
             // Initialize outputs.
             disk_handle: ptr::null_mut(),
@@ -233,12 +276,43 @@ pub fn load_kernel<'kernel>(
         if status == ReturnCode::VB2_SUCCESS {
             info!("LoadKernel success");
 
+            if params.bootloader_size > max_bootloader_size {
+                return Err(LoadKernelError::BootloaderTooLarge(u32_to_usize(
+                    params.bootloader_size,
+                )));
+            }
+
             let offsets = KernelBufferOffsets::new(&params).ok_or(
                 LoadKernelError::BadBootloaderAddress(params.bootloader_address),
             )?;
 
+            let unused_space = u32_to_usize(
+                max_bootloader_size
+                    .checked_sub(params.bootloader_size)
+                    .ok_or(LoadKernelError::Overflow("unused_space"))?,
+            );
+
+            // Turn the kernel data back into a slice, leaving out any
+            // unused space at the beginning.
+            let kernel_buffer = slice::from_raw_parts_mut(
+                full_kernel_buffer.add(unused_space),
+                u32_to_usize(full_kernel_buffer_size)
+                    .checked_sub(unused_space)
+                    .ok_or(LoadKernelError::Overflow("kernel_buffer"))?,
+            );
+
+            // Copy the bootloader data to the start of the slice,
+            // essentially undoing the splitting up of kernel data that
+            // futility did when creating the kernel partition.
+            let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader_address);
+            if &rest[0..2] != b"MZ" {
+                return Err(LoadKernelError::MissingUefiStub);
+            }
+            let bootloader_size = u32_to_usize(params.bootloader_size);
+            bootloader[..bootloader_size].copy_from_slice(&rest[..bootloader_size]);
+
             Ok(LoadedKernel {
-                data: inputs.kernel_buffer,
+                data: kernel_buffer,
                 cros_config: offsets.cros_config,
                 unique_partition_guid: Guid::from_bytes(params.partition_guid),
             })
