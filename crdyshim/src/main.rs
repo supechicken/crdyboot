@@ -8,10 +8,6 @@
 #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
-// TODO(nicholasbishop): temporarily allow some lints to make it easier
-// to split up changes into separate CLs.
-#![allow(dead_code)]
-#![allow(clippy::needless_pass_by_value)]
 
 extern crate alloc;
 
@@ -21,20 +17,23 @@ mod sbat_revocation;
 
 use core::fmt::{self, Display, Formatter};
 use fs::FsError;
-use libcrdy::arch::Arch;
-use libcrdy::launch::LaunchError;
-use libcrdy::nx::NxError;
-use libcrdy::page_alloc::PageAllocationError;
-use libcrdy::tpm::TpmError;
-use libcrdy::{embed_section, set_log_level};
+use libcrdy::arch::{Arch, PeFileForCurrentArch};
+use libcrdy::embed_section;
+use libcrdy::entry_point::get_primary_entry_point;
+use libcrdy::launch::{LaunchError, NextStage};
+use libcrdy::nx::{self, NxError};
+use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
+use libcrdy::set_log_level;
+use libcrdy::tpm::{extend_pcr_and_log, TpmError};
 use log::{error, info};
-use relocation::RelocationError;
+use relocation::{relocate_pe_into, RelocationError};
+use sbat::RevocationSbat;
 use sbat_revocation::RevocationError;
 use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
-use uefi::table::boot::ScopedProtocol;
+use uefi::table::boot::{AllocateType, BootServices, MemoryType, ScopedProtocol};
 use uefi::table::runtime::VariableVendor;
 use uefi::table::{Boot, SystemTable};
 use uefi::{cstr16, CStr16, CString16};
@@ -49,6 +48,17 @@ use libcrdy::uefi_services;
 /// See also the Linux TPM PCR Registry:
 /// <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
 const PCR_INDEX: PcrIndex = PcrIndex(4);
+
+/// Amount of memory to allocate for both the raw executable and the
+/// relocated version (each).
+///
+/// This value does not need to be particularly precise, other than
+/// being a multiple of the UEFI page size.
+///
+/// Choose 2 MiB, which is a small enough amount of memory that we
+/// don't need to worry about it, but still much larger than what our
+/// next stage actually needs.
+const NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES: usize = 2 * 1024 * 1024;
 
 pub enum CrdyshimError {
     /// Failed to get the revocation data.
@@ -250,6 +260,135 @@ fn get_public_key() -> Result<ed25519_compact::PublicKey, CrdyshimError> {
         .map_err(|_| CrdyshimError::InvalidPublicKey)
 }
 
+fn load_and_validate_next_stage<'a>(
+    next_stage_name: &CStr16,
+    system_table: &SystemTable<Boot>,
+) -> Result<ScopedPageAllocation<'a>, CrdyshimError> {
+    let is_secure_boot_enabled = is_secure_boot_enabled(system_table.runtime_services());
+    info!("secure boot enabled? {}", is_secure_boot_enabled);
+
+    // Allocate space for the raw next stage executable.
+    let mut raw_exe_alloc = ScopedPageAllocation::new(
+        // Safety: this system table clone will remain valid until
+        // ExitBootServices is called. That won't happen until after the
+        // next stage is executed, at which point this buffer will have
+        // already been freed.
+        unsafe { system_table.unsafe_clone() },
+        AllocateType::AnyPages,
+        // Use `LOADER_DATA` because this buffer will not be used
+        // for code execution. The executable will be relocated in a
+        // separate buffer.
+        MemoryType::LOADER_DATA,
+        NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES,
+    )
+    .map_err(CrdyshimError::Allocation)?;
+
+    // Read the next stage executable and signature.
+    let mut loader = NextStageFileLoader::new(
+        system_table.boot_services(),
+        next_stage_name,
+        Arch::get_current_exe_arch(),
+    )?;
+    let raw_exe = loader.read_executable(&mut raw_exe_alloc)?;
+    let raw_signature = loader.read_signature()?;
+
+    let public_key = get_public_key()?;
+
+    // Verify the executable's signature.
+    let signature = ed25519_compact::Signature::from_slice(raw_signature.as_slice())
+        .map_err(|_| CrdyshimError::InvalidSignature)?;
+    let verified = public_key.verify(&raw_exe, &signature).is_ok();
+
+    info!("signature verified? {}", verified);
+
+    if !verified {
+        if is_secure_boot_enabled {
+            return Err(CrdyshimError::SignatureVerificationFailed);
+        }
+
+        info!("secure boot is not enabled, allowing failed verification");
+    }
+
+    // Measure the raw executable into the TPM.
+    //
+    // This measurement must be done on the raw data rather than the
+    // relocated version. Relocations depend on where the image is
+    // loaded in memory, so the measurement would essentially be random.
+    //
+    // We measure at this point because we still have access to
+    // `raw_exe`. The full `raw_exe_alloc` has extra padding at the end
+    // filled with zeroes, which would make the measurement less useful.
+    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, raw_exe)
+        .map_err(CrdyshimError::Tpm)?;
+
+    Ok(raw_exe_alloc)
+}
+
+fn execute_relocated_next_stage(
+    relocated_exe: &[u8],
+    system_table: SystemTable<Boot>,
+) -> Result<(), CrdyshimError> {
+    let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
+
+    let entry_point_offset = get_primary_entry_point(&pe);
+
+    nx::update_mem_attrs(&pe, system_table.boot_services())
+        .map_err(CrdyshimError::MemoryProtection)?;
+
+    let next_stage = NextStage {
+        image_data: relocated_exe,
+        load_options: &[],
+        entry_point_offset,
+    };
+    unsafe { next_stage.launch(system_table) }.map_err(CrdyshimError::Launch)
+}
+
+/// Load, validate, and execute the next stage.
+///
+/// This loads the next stage executable from a hardcoded path. The
+/// executable's signature is also loaded from a hardcoded path, and
+/// used to verify that the executable data has been properly signed by
+/// the expected key.
+///
+/// The validated raw executable is then relocated into a new buffer to
+/// move sections to the correct offset and apply relocations from the
+/// .reloc section.
+///
+/// The relocated executable is then launched, and control transfers to
+/// that executable.
+fn load_and_execute_next_stage(
+    system_table: SystemTable<Boot>,
+    revocations: &RevocationSbat,
+) -> Result<(), CrdyshimError> {
+    // Base file name of the next stage. The actual file name will have
+    // an arch suffix and extension, e.g. "crdybootx64.efi".
+    let next_stage_name = cstr16!("crdyboot");
+
+    // Allocate space for the relocated next stage executable. This is
+    // the allocation the next stage will actually run from, so it is
+    // allocated as type `LOADER_CODE`.
+    let mut relocated_exe_alloc = ScopedPageAllocation::new(
+        // Safety: this system table clone will remain valid until
+        // ExitBootServices is called. That won't happen until after
+        // the kernel is executed, at which point the bootloader
+        // code is no longer in use.
+        unsafe { system_table.unsafe_clone() },
+        AllocateType::AnyPages,
+        MemoryType::LOADER_CODE,
+        NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES,
+    )
+    .map_err(CrdyshimError::Allocation)?;
+
+    {
+        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name, &system_table)?;
+        let pe = PeFileForCurrentArch::parse(&raw_exe_alloc).map_err(CrdyshimError::InvalidPe)?;
+        sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)?;
+        relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
+    }
+
+    execute_relocated_next_stage(&relocated_exe_alloc, system_table)
+}
+
 /// The main application.
 ///
 /// The following operations are performed:
@@ -274,8 +413,7 @@ fn run(system_table: SystemTable<Boot>) -> Result<(), CrdyshimError> {
     // little code as possible prior to this point.
     sbat_revocation::validate_image(&SBAT, &revocations).map_err(CrdyshimError::SelfRevoked)?;
 
-    // TODO(nicholasbishop): load, verify, and execute the next stage here.
-    todo!()
+    load_and_execute_next_stage(system_table, &revocations)
 }
 
 #[entry]
