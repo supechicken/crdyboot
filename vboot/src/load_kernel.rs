@@ -38,8 +38,8 @@ pub enum LoadKernelError {
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
 
-    /// Bootloader address offset is not valid.
-    BadBootloaderAddress(u64),
+    /// Bootloader offset is not valid.
+    BadBootloaderOffset(u64),
 
     /// Bootloader data is larger than the reserved space.
     BootloaderTooLarge(usize),
@@ -71,8 +71,8 @@ impl fmt::Display for LoadKernelError {
                 rc,
             ),
             LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
-            BadBootloaderAddress(addr) => {
-                write!(f, "bootloader address is invalid: {addr:#02x?}")
+            BadBootloaderOffset(offset) => {
+                write!(f, "bootloader offset is invalid: {offset:#02x?}")
             }
             BootloaderTooLarge(size) => {
                 write!(f, "bootloader data is too large: {size}")
@@ -179,15 +179,14 @@ impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
 /// Offsets within the kernel buffer divined from
 /// `vboot_sys::vb2_kernel_params`.
 struct KernelBufferOffsets {
-    bootloader_address: usize,
+    bootloader: usize,
     cros_config: Range<usize>,
 }
 
 impl KernelBufferOffsets {
     fn new(params: &vboot_sys::vb2_kernel_params) -> Option<Self> {
         // This arithmetic is based on `fill_info_cros` in
-        // depthcharge. That's also where the magic constant of
-        // 0x10_0000 is copied from.
+        // depthcharge.
         //
         // The additional offset of `bootloader_size` is needed because
         // we move the bootloader into space at the beginning of the
@@ -197,25 +196,24 @@ impl KernelBufferOffsets {
         // rather than having to copy these calculations into multiple
         // projects, could maybe do a CL for that.
 
-        let bootloader_address = usize::try_from(
+        let bootloader = usize::try_from(
             params
-                .bootloader_address
-                .checked_add(u64::from(params.bootloader_size))?
-                .checked_sub(0x10_0000)?,
+                .bootloader_offset
+                .checked_add(u64::from(params.bootloader_size))?,
         )
         .ok()?;
 
         let cros_params_size = u32_to_usize(vboot_sys::CROS_PARAMS_SIZE);
         let cros_config_size = u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
 
-        let cros_config_start = bootloader_address
+        let cros_config_start = bootloader
             .checked_sub(cros_params_size)?
             .checked_sub(cros_config_size)?;
 
         let cros_config_end = cros_config_start.checked_add(cros_config_size)?;
 
         Some(Self {
-            bootloader_address,
+            bootloader,
             cros_config: cros_config_start..cros_config_end,
         })
     }
@@ -258,7 +256,7 @@ pub fn load_kernel<'kernel>(
             // Initialize outputs.
             disk_handle: ptr::null_mut(),
             partition_number: 0,
-            bootloader_address: 0,
+            bootloader_offset: 0,
             bootloader_size: 0,
             partition_guid: [0; 16],
             flags: 0,
@@ -283,7 +281,7 @@ pub fn load_kernel<'kernel>(
             }
 
             let offsets = KernelBufferOffsets::new(&params).ok_or(
-                LoadKernelError::BadBootloaderAddress(params.bootloader_address),
+                LoadKernelError::BadBootloaderOffset(params.bootloader_offset),
             )?;
 
             let unused_space = u32_to_usize(
@@ -304,7 +302,7 @@ pub fn load_kernel<'kernel>(
             // Copy the bootloader data to the start of the slice,
             // essentially undoing the splitting up of kernel data that
             // futility did when creating the kernel partition.
-            let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader_address);
+            let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader);
             if &rest[0..2] != b"MZ" {
                 return Err(LoadKernelError::MissingUefiStub);
             }
