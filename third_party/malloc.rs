@@ -13,8 +13,7 @@ struct AllocInfo {
 #[no_mangle]
 unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
     let align = 8;
-    let layout =
-        Layout::from_size_align(size, align).expect("failed to create layout");
+    let layout = Layout::from_size_align(size, align).expect("failed to create layout");
 
     // Compute a layout sufficient to store `AllocInfo`
     // immediately before it.
@@ -35,8 +34,9 @@ unsafe extern "C" fn malloc(size: usize) -> *mut u8 {
     // `underlying_dealloc`.
     // `write_unaligned` is used, so unaligned ptr is OK.
     #[allow(clippy::cast_ptr_alignment)]
-    let info_ptr =
-        result_ptr.sub(mem::size_of::<AllocInfo>()).cast::<AllocInfo>();
+    let info_ptr = result_ptr
+        .sub(mem::size_of::<AllocInfo>())
+        .cast::<AllocInfo>();
     info_ptr.write_unaligned(AllocInfo {
         layout: to_request,
         ptr: orig_ptr,
@@ -49,8 +49,7 @@ unsafe extern "C" fn free(ptr: *mut u8) {
     assert!(!ptr.is_null());
     // Read the `AllocInfo` we wrote in `malloc`, and pass it into `dealloc`.
     // `read_unaligned` is used, so unaligned ptr is OK.
-    #[allow(clippy::cast_ptr_alignment)]
-    let info_ptr = ptr.sub(mem::size_of::<AllocInfo>()) as *const AllocInfo;
+    let info_ptr: *const AllocInfo = ptr.sub(mem::size_of::<AllocInfo>()).cast_const().cast();
     let info = info_ptr.read_unaligned();
     alloc::alloc::dealloc(info.ptr, info.layout);
 }
