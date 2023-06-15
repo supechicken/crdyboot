@@ -17,6 +17,7 @@ use core::ops::Range;
 use log::info;
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
+use uefi::table::boot::PAGE_SIZE;
 use uefi::table::boot::{BootServices, MemoryAttribute};
 use uefi::Status;
 
@@ -28,7 +29,7 @@ fn is_page_aligned(addr: PhysicalAddress) -> bool {
 
 /// Round the address up to the nearest page size (4KiB).
 fn round_up_to_page_alignment(addr: PhysicalAddress) -> PhysicalAddress {
-    let efi_page_size = 4096;
+    let efi_page_size = u64::try_from(PAGE_SIZE).unwrap();
     let r = addr % efi_page_size;
     if r == 0 {
         addr

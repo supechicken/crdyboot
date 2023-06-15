@@ -17,6 +17,7 @@ use crate::{Error, Result};
 use core::ops::{Deref, DerefMut};
 use core::slice;
 use log::{error, info};
+use uefi::table::boot::PAGE_SIZE;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::Status;
@@ -31,10 +32,6 @@ pub struct ScopedPageAllocation<'a> {
 }
 
 impl<'a> ScopedPageAllocation<'a> {
-    /// UEFI defines the page size as 4KiB in section 7.2.1,
-    /// `EFI_BOOT_SERVICES.AllocatePages()`.
-    const PAGE_SIZE: usize = 4096;
-
     /// Allocate `num_bytes` of page-aligned memory.
     pub fn new(
         system_table: SystemTable<Boot>,
@@ -43,12 +40,12 @@ impl<'a> ScopedPageAllocation<'a> {
         num_bytes: usize,
     ) -> Result<Self> {
         // Reject the allocation if it's not a multiple of the page size.
-        if num_bytes % Self::PAGE_SIZE != 0 {
+        if num_bytes % PAGE_SIZE != 0 {
             error!("{num_bytes} is not an even multiple of page size");
             return Err(Error::Allocation(Status::UNSUPPORTED));
         }
 
-        let num_pages = num_bytes / Self::PAGE_SIZE;
+        let num_pages = num_bytes / PAGE_SIZE;
 
         info!("allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})");
         let addr = system_table
