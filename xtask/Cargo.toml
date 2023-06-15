@@ -12,7 +12,7 @@ camino = { version = "1.0.9", features = ["serde1"] }
 command-run = "1.1.1"
 fatfs = { version = "0.3.6", default-features = false, features = ["alloc", "std"] }
 fs-err = "2.7.0"
-gpt_disk_types = { version = "0.14.0", features = ["std"] }
+gpt_disk_types = { version = "0.15.0", features = ["std"] }
 gptman = { version = "1.0.0", default-features = false }
 object = { version = "0.30.0", default-features = false, features = ["pe", "read_core", "std", "unaligned"] }
 serde = { version = "1.0.137", features = ["derive"] }

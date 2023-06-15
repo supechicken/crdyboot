@@ -71,5 +71,5 @@ fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
         .expect("failed to write SHIM_VERBOSE");
     }
 
-    rt.reset(ResetType::Shutdown, Status::SUCCESS, None);
+    rt.reset(ResetType::SHUTDOWN, Status::SUCCESS, None);
 }

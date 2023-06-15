@@ -6,7 +6,7 @@ repository = "https://chromium.googlesource.com/crdyboot"
 version = "1.0.0"
 
 [dependencies]
-uefi = { version = "0.20.0", default-features = false, features = ["alloc"] }
-uefi-services = "0.17.0"
+uefi = { version = "0.23.0", default-features = false, features = ["alloc"] }
+uefi-services = "0.20.0"
 
 libcrdy = { path = "../libcrdy" }

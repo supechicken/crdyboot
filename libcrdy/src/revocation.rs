@@ -327,7 +327,7 @@ mod tests {
             data.copy_from_slice(&self.test.get_variable_data);
             self.test
                 .get_variable_status
-                .into_with_val(|| (&*data, self.test.get_variable_attrs))
+                .to_result_with_val(|| (&*data, self.test.get_variable_attrs))
         }
 
         fn set_variable(
