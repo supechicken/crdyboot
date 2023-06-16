@@ -2,7 +2,7 @@
 name = "crdyboot"
 edition = "2021"
 license = "BSD-3-Clause"
-repository = "https://chromium.googlesource.com/crdyboot"
+repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
 version = "1.0.0"
 
 [dependencies]
