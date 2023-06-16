@@ -1,8 +1,10 @@
 [package]
 name = "vboot"
-version = "0.1.0"
-edition = "2021"
-license = "BSD-3-Clause"
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [dependencies]
 log = "0.4.0"

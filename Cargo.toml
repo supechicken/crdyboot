@@ -2,5 +2,11 @@
 members = ["crdyboot", "enroller", "libcrdy", "vboot", "xtask"]
 resolver = "2"
 
+[workspace.package]
+edition = "2021"
+license = "BSD-3-Clause"
+repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
+version = "1.0.0"
+
 [profile.release]
 overflow-checks = true

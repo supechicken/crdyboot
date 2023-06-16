@@ -205,7 +205,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "enroller"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "log",
  "uefi",
@@ -343,7 +343,7 @@ checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
 name = "libcrdy"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "log",
  "object",
@@ -709,7 +709,7 @@ checksum = "5bd2fe26506023ed7b5e1e315add59d6f584c621d037f9368fea9cfb988f368c"
 
 [[package]]
 name = "vboot"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "bindgen",
  "log",
@@ -834,7 +834,7 @@ checksum = "447660ad36a13288b1db4d4248e857b510e8c3a225c822ba4fb748c0aafecffd"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "argh",
