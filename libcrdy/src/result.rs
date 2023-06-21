@@ -36,12 +36,6 @@ pub enum Error {
     /// Attempted to access out-of-bounds data.
     OutOfBounds(&'static str),
 
-    /// Kernel's `SetupHeader` doesn't contain the expected magic bytes.
-    InvalidKernelMagic,
-
-    /// The buffer allocated to hold the kernel is not big enough.
-    KernelBufferTooSmall(usize, usize),
-
     /// Parse error from the [`object`] crate.
     InvalidPe(object::Error),
 
@@ -118,15 +112,6 @@ impl fmt::Display for Error {
 
             OutOfBounds(info) => {
                 write!(f, "out of bounds: {info}")
-            }
-            InvalidKernelMagic => {
-                write!(f, "invalid magic in the kernel setup header")
-            }
-            KernelBufferTooSmall(required, allocated) => {
-                write!(
-                    f,
-                    "allocated kernel buffer not big enough: {required}b > {allocated}b",
-                )
             }
 
             InvalidPe(err) => {

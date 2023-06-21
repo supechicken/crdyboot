@@ -27,49 +27,6 @@ fn is_64bit() -> bool {
     }
 }
 
-/// Read a little-endian u32 field from with the kernel data at the
-/// given `offset`.
-fn get_u32_field(kernel_data: &[u8], offset: usize) -> Result<u32> {
-    let end = offset
-        .checked_add(mem::size_of::<u32>())
-        .ok_or(Error::Overflow("get_u32_field"))?;
-    let bytes = kernel_data
-        .get(offset..end)
-        .ok_or(Error::OutOfBounds("get_u32_field"))?;
-    // OK to unwrap, the length of the slice is already known to be correct.
-    Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
-}
-
-/// Check that the kernel buffer is big enough to run the kernel without
-/// relocation. This is done by comparing the buffer size with the
-/// `init_size` field in the kernel boot header.
-///
-/// The layout of the header is described here:
-/// <https://docs.kernel.org/x86/boot.html>
-pub(crate) fn validate_kernel_buffer_size(kernel_buffer: &[u8]) -> Result<()> {
-    const SETUP_MAGIC: u32 = 0x5372_6448; // "HdrS"
-    const MAGIC_OFFSET: usize = 0x0202;
-    const INIT_SIZE_OFFSET: usize = 0x0260;
-
-    // Check that the correct header magic is present.
-    let magic = get_u32_field(kernel_buffer, MAGIC_OFFSET)?;
-    if magic != SETUP_MAGIC {
-        return Err(Error::InvalidKernelMagic);
-    }
-
-    // Get the `init_size` field.
-    let init_size = get_u32_field(kernel_buffer, INIT_SIZE_OFFSET)?;
-    info!("minimum required size: {init_size}");
-
-    let init_size = usize::try_from(init_size).map_err(|_| Error::Overflow("init_size"))?;
-
-    if init_size <= kernel_buffer.len() {
-        Ok(())
-    } else {
-        Err(Error::KernelBufferTooSmall(init_size, kernel_buffer.len()))
-    }
-}
-
 fn entry_point_from_offset(data: &[u8], entry_point_offset: u32) -> Result<Entrypoint> {
     info!("entry_point_offset: 0x{:x}", entry_point_offset);
 
@@ -196,12 +153,8 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
     )?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
-    // hold the kernel data loaded by vboot, but should also be big
-    // enough for the kernel to successfully run without relocation. The
-    // latter requirement is checked below with
-    // `validate_kernel_buffer_size`. The actual required size is
-    // currently around 35 MiB, so 64 MiB should be plenty for the
-    // forseeable future.
+    // hold the kernel data loaded by vboot. Allocating 64MiB should be
+    // more than enough for the forseeable future.
     //
     // This buffer will never be freed, unless loading or executing the
     // kernel fails.
@@ -213,6 +166,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
         unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
+        // 64 MiB.
         64 * 1024 * 1024,
     )?;
 
@@ -236,11 +190,6 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
 
     // Go ahead and free the workbuf, not needed anymore.
     drop(workbuf);
-
-    // Ensure the buffer is large enough to actually run the
-    // kernel. We could just allocate a bigger buffer here, but it
-    // shouldn't be needed unless something has gone wrong anyway.
-    validate_kernel_buffer_size(kernel.data())?;
 
     // Measure the kernel into the TPM.
     extend_pcr_and_log(system_table.boot_services(), kernel.data())?;
