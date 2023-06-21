@@ -5,6 +5,7 @@
 use crate::disk::GptDiskError;
 use crate::nx::NxError;
 use crate::revocation::RevocationError;
+use crate::tpm::TpmError;
 use core::fmt;
 use uefi::Status;
 use vboot::LoadKernelError;
@@ -52,7 +53,7 @@ pub enum Error {
     CommandLineTooBig(usize),
 
     /// An error occurred when measuring the kernel into the TPM.
-    Tpm(&'static str, Status),
+    Tpm(TpmError),
 
     KernelDidNotTakeControl,
 }
@@ -122,8 +123,8 @@ impl fmt::Display for Error {
                 write!(f, "failed to set up memory protection: {error}")
             }
 
-            Tpm(msg, status) => {
-                write!(f, "TPM error ({status}): {msg}")
+            Tpm(error) => {
+                write!(f, "TPM error: {error}")
             }
 
             KernelDidNotTakeControl => {

@@ -34,7 +34,7 @@
 //! See also the Linux TPM PCR Registry:
 //! <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
 
-use crate::{Error, Result};
+use core::fmt::{self, Display, Formatter};
 use core::mem::MaybeUninit;
 use log::info;
 use uefi::proto::tcg::{v1, v2, EventType, PcrIndex};
@@ -48,6 +48,78 @@ const PCR_INDEX: PcrIndex = PcrIndex(8);
 const EVENT_TYPE: EventType = EventType::IPL;
 const EVENT_DATA: &[u8] = b"ChromeOS kernel partition data";
 
+enum TpmVersion {
+    V1,
+    V2,
+}
+
+pub struct TpmError {
+    version: TpmVersion,
+    kind: TpmErrorKind,
+    status: Status,
+}
+
+impl TpmError {
+    #[allow(clippy::needless_pass_by_value)]
+    fn v1(kind: TpmErrorKind, err: uefi::Error) -> Self {
+        Self {
+            version: TpmVersion::V1,
+            kind,
+            status: err.status(),
+        }
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    fn v2(kind: TpmErrorKind, err: uefi::Error) -> Self {
+        Self {
+            version: TpmVersion::V2,
+            kind,
+            status: err.status(),
+        }
+    }
+}
+
+enum TpmErrorKind {
+    /// An unexpected error occurred when getting a `Tcg` handle.
+    ///
+    /// This error is not used if the handle is simply not present.
+    InvalidHandle,
+
+    /// Failed to open the `Tcg` protocol.
+    OpenProtocolFailed,
+
+    // Failed to create a `PcrEvent`.
+    InvalidPcrEvent,
+
+    /// Failed to log to the TPM.
+    HashLogExtendEventFailed,
+}
+
+impl Display for TpmError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let status = self.status;
+        let version = match self.version {
+            TpmVersion::V1 => 1,
+            TpmVersion::V2 => 2,
+        };
+
+        match self.kind {
+            TpmErrorKind::InvalidHandle => {
+                write!(f, "unexpected error getting TPMv{version} handle: {status}")
+            }
+            TpmErrorKind::OpenProtocolFailed => {
+                write!(f, "failed to open the TPMv{version} protocol: {status}")
+            }
+            TpmErrorKind::InvalidPcrEvent => {
+                write!(f, "failed to create TPMv{version} PcrEvent: {status}")
+            }
+            TpmErrorKind::HashLogExtendEventFailed => {
+                write!(f, "TPMv{version} hash_log_extend_event failed: {status}")
+            }
+        }
+    }
+}
+
 enum TpmHandle {
     V1(Handle),
     V2(Handle),
@@ -59,7 +131,7 @@ impl TpmHandle {
     /// TPM.
     ///
     /// Any errors other than `NOT_FOUND` are propagated to the caller.
-    fn find(boot_services: &BootServices) -> Result<Self> {
+    fn find(boot_services: &BootServices) -> Result<Self, TpmError> {
         // Try to get a V2 handle first.
         match boot_services.get_handle_for_protocol::<v2::Tcg>() {
             Ok(handle) => Ok(Self::V2(handle)),
@@ -72,18 +144,12 @@ impl TpmHandle {
                             if err.status() == Status::NOT_FOUND {
                                 Ok(Self::None)
                             } else {
-                                Err(Error::Tpm(
-                                    "unexpected error getting TPMv1 handle",
-                                    err.status(),
-                                ))
+                                Err(TpmError::v1(TpmErrorKind::InvalidHandle, err))
                             }
                         }
                     }
                 } else {
-                    Err(Error::Tpm(
-                        "unexpected error getting TPMv2 handle",
-                        err.status(),
-                    ))
+                    Err(TpmError::v2(TpmErrorKind::InvalidHandle, err))
                 }
             }
         }
@@ -94,10 +160,10 @@ fn extend_pcr_and_log_v1(
     boot_services: &BootServices,
     data_to_hash: &[u8],
     handle: Handle,
-) -> Result<()> {
+) -> Result<(), TpmError> {
     let mut tcg = boot_services
         .open_protocol_exclusive::<v1::Tcg>(handle)
-        .map_err(|err| Error::Tpm("failed to open protocol", err.status()))?;
+        .map_err(|err| TpmError::v1(TpmErrorKind::OpenProtocolFailed, err))?;
 
     // Make a buffer big enough to hold the event.
     let mut event_buf = [MaybeUninit::uninit(); 64];
@@ -111,10 +177,10 @@ fn extend_pcr_and_log_v1(
         [0; 20],
         EVENT_DATA,
     )
-    .map_err(|err| Error::Tpm("failed to create PcrEvent", err.status()))?;
+    .map_err(|err| TpmError::v1(TpmErrorKind::InvalidPcrEvent, err))?;
 
     tcg.hash_log_extend_event(event, Some(data_to_hash))
-        .map_err(|err| Error::Tpm("hash_log_extend_event failed", err.status()))?;
+        .map_err(|err| TpmError::v1(TpmErrorKind::HashLogExtendEventFailed, err))?;
 
     Ok(())
 }
@@ -123,26 +189,29 @@ fn extend_pcr_and_log_v2(
     boot_services: &BootServices,
     data_to_hash: &[u8],
     handle: Handle,
-) -> Result<()> {
+) -> Result<(), TpmError> {
     let mut tcg = boot_services
         .open_protocol_exclusive::<v2::Tcg>(handle)
-        .map_err(|err| Error::Tpm("failed to open protocol", err.status()))?;
+        .map_err(|err| TpmError::v2(TpmErrorKind::OpenProtocolFailed, err))?;
 
     // Make a buffer big enough to hold the event.
     let mut event_buf = [MaybeUninit::uninit(); 64];
 
     let event =
         v2::PcrEventInputs::new_in_buffer(&mut event_buf, PCR_INDEX, EVENT_TYPE, EVENT_DATA)
-            .map_err(|err| Error::Tpm("failed to create PcrEvent", err.status()))?;
+            .map_err(|err| TpmError::v2(TpmErrorKind::InvalidPcrEvent, err))?;
 
     tcg.hash_log_extend_event(v2::HashLogExtendEventFlags::empty(), data_to_hash, event)
-        .map_err(|err| Error::Tpm("hash_log_extend_event failed", err.status()))?;
+        .map_err(|err| TpmError::v2(TpmErrorKind::HashLogExtendEventFailed, err))?;
 
     Ok(())
 }
 
 /// Extend PCR 8 with a measurement of `data_to_hash` and add to the event log.
-pub fn extend_pcr_and_log(boot_services: &BootServices, data_to_hash: &[u8]) -> Result<()> {
+pub fn extend_pcr_and_log(
+    boot_services: &BootServices,
+    data_to_hash: &[u8],
+) -> Result<(), TpmError> {
     match TpmHandle::find(boot_services)? {
         TpmHandle::V1(handle) => {
             info!("measuring to v1 TPM");

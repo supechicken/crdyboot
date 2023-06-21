@@ -192,7 +192,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(system_table.boot_services(), kernel.data())?;
+    extend_pcr_and_log(system_table.boot_services(), kernel.data()).map_err(Error::Tpm)?;
 
     execute_linux_kernel(&kernel, system_table)
 }
