@@ -120,7 +120,7 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
 
     let pe = PeInfo::parse(kernel.data())?;
 
-    nx::update_mem_attrs(&pe, system_table.boot_services())?;
+    nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
 
     let execute_linux_efi_stub = |system_table, entry_point_offset| {
         execute_linux_efi_stub(

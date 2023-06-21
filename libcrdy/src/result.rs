@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::nx::NxError;
 use crate::revocation::RevocationError;
 use core::fmt;
 use uefi::Status;
@@ -50,7 +51,7 @@ pub enum Error {
     MissingIa32CompatEntryPoint,
 
     /// An error occurred while updating memory attributes.
-    MemoryProtection(&'static str, Status),
+    MemoryProtection(NxError),
 
     CommandLineTooBig(usize),
 
@@ -131,8 +132,8 @@ impl fmt::Display for Error {
                 write!(f, "kernel command line is too large: {size}")
             }
 
-            MemoryProtection(status, msg) => {
-                write!(f, "failed to set up memory protection ({status}): {msg}")
+            MemoryProtection(error) => {
+                write!(f, "failed to set up memory protection: {error}")
             }
 
             Tpm(msg, status) => {

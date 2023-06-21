@@ -12,7 +12,7 @@
 //! <https://techcommunity.microsoft.com/t5/hardware-dev-center/new-uefi-ca-memory-mitigation-requirements-for-signing/ba-p/3608714>
 
 use crate::pe::{PeInfo, PeSectionInfo};
-use crate::{Error, Result};
+use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
 use uefi::data_types::PhysicalAddress;
@@ -20,6 +20,53 @@ use uefi::proto::security::MemoryProtection;
 use uefi::table::boot::PAGE_SIZE;
 use uefi::table::boot::{BootServices, MemoryAttribute};
 use uefi::Status;
+
+pub enum NxError {
+    /// Failed to open the [`MemoryProtection`] protocol.
+    ///
+    /// If no handles support the protocol, it is not considered an
+    /// error. This error is only returned when a handle claims to
+    /// support the protocol, but the protocol can't be opened.
+    OpenProtocolFailed(Status),
+
+    /// Failed to clear memory attributes from a region of memory.
+    ClearAttributesFailed(Status, Range<PhysicalAddress>),
+
+    /// Failed to set memory attributes on a region of memory.
+    SetAttributesFailed(Status, Range<PhysicalAddress>),
+
+    /// The NX-compatability bit is not set in the PE attributes.
+    PeNotNxCompat,
+
+    /// A section in the PE is both writable and executable, which is
+    /// not allowed for NX compat.
+    SectionWritableAndExecutable,
+
+    /// A section in the PE is not page aligned. Since memory attributes
+    /// are set at page granularity, this is not allowed.
+    SectionStartNotPageAligned(PhysicalAddress),
+}
+
+impl Display for NxError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::OpenProtocolFailed(status) => write!(f, "failed to open protocol: {status}"),
+            Self::ClearAttributesFailed(status, region) => {
+                write!(f, "failed to clear attributes in {region:#016x?}: {status}")
+            }
+            Self::SetAttributesFailed(status, region) => {
+                write!(f, "failed to set attributes in {region:#016x?}: {status}")
+            }
+            Self::PeNotNxCompat => write!(f, "PE is not NX compat"),
+            Self::SectionWritableAndExecutable => {
+                write!(f, "section is both writable and executable")
+            }
+            Self::SectionStartNotPageAligned(addr) => {
+                write!(f, "section start is not page aligned: {addr:#016x}")
+            }
+        }
+    }
+}
 
 /// Check whether the address is aligned to the page size (4KiB).
 #[allow(clippy::verbose_bit_mask)]
@@ -64,16 +111,13 @@ impl PeSectionInfo {
     /// Although there are other `MemoryAttribute` values, these
     /// three bits are the only ones that can be used with the memory
     /// protection protocol.
-    pub fn memory_attributes(&self) -> Result<SectionMemoryAttributes> {
+    pub fn memory_attributes(&self) -> Result<SectionMemoryAttributes, NxError> {
         const READ_PROTECT: MemoryAttribute = MemoryAttribute::READ_PROTECT;
         const READ_ONLY: MemoryAttribute = MemoryAttribute::READ_ONLY;
         const EXECUTE_PROTECT: MemoryAttribute = MemoryAttribute::EXECUTE_PROTECT;
 
         match (self.writable, self.executable) {
-            (true, true) => Err(Error::MemoryProtection(
-                "section is both writable and executable",
-                Status::UNSUPPORTED,
-            )),
+            (true, true) => Err(NxError::SectionWritableAndExecutable),
             (true, false) => Ok(SectionMemoryAttributes {
                 clear: READ_PROTECT | READ_ONLY,
                 set: EXECUTE_PROTECT,
@@ -98,23 +142,20 @@ impl PeSectionInfo {
     /// aligned, so return an error if that requirement isn't
     /// upheld. The section sizes aren't required to be aligned, so
     /// round the end address up.
-    pub fn page_aligned_byte_region(&self) -> Result<Range<PhysicalAddress>> {
+    pub fn page_aligned_byte_region(&self) -> Result<Range<PhysicalAddress>, NxError> {
         if is_page_aligned(self.address) {
             // Panic on overflow.
             let end = self.address.checked_add(self.len).unwrap();
 
             Ok(self.address..round_up_to_page_alignment(end))
         } else {
-            Err(Error::MemoryProtection(
-                "section start is not page aligned",
-                Status::UNSUPPORTED,
-            ))
+            Err(NxError::SectionStartNotPageAligned(self.address))
         }
     }
 }
 
 /// Set up memory protection attributes for the kernel data.
-pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<()> {
+pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<(), NxError> {
     let handle = match boot_services.get_handle_for_protocol::<MemoryProtection>() {
         Ok(handle) => handle,
         Err(err) => {
@@ -127,15 +168,12 @@ pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<()>
 
     // Check that the executable self-reports NX compatibility.
     if !pe.is_nx_compat() {
-        return Err(Error::MemoryProtection(
-            "PE is not NX compat",
-            Status::UNSUPPORTED,
-        ));
+        return Err(NxError::PeNotNxCompat);
     }
 
     let memory_protection = boot_services
         .open_protocol_exclusive::<MemoryProtection>(handle)
-        .map_err(|err| Error::MemoryProtection("failed to open protocol", err.status()))?;
+        .map_err(|err| NxError::OpenProtocolFailed(err.status()))?;
 
     for section in pe.section_iter() {
         let attrs = section.memory_attributes()?;
@@ -148,10 +186,10 @@ pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<()>
 
         memory_protection
             .clear_memory_attributes(byte_region.clone(), attrs.clear)
-            .map_err(|err| Error::MemoryProtection("failed to clear attributes", err.status()))?;
+            .map_err(|err| NxError::ClearAttributesFailed(err.status(), byte_region.clone()))?;
         memory_protection
-            .set_memory_attributes(byte_region, attrs.set)
-            .map_err(|err| Error::MemoryProtection("failed to set attributes", err.status()))?;
+            .set_memory_attributes(byte_region.clone(), attrs.set)
+            .map_err(|err| NxError::SetAttributesFailed(err.status(), byte_region.clone()))?;
     }
 
     Ok(())
