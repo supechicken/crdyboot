@@ -10,9 +10,8 @@
 use crate::{Error, Result};
 use core::{mem, slice};
 use log::info;
-use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
-use object::pe::IMAGE_FILE_MACHINE_I386;
-use object::read::pe::PeFile64;
+use object::pe::{IMAGE_DLLCHARACTERISTICS_NX_COMPAT, IMAGE_FILE_MACHINE_I386};
+use object::read::pe::{ImageOptionalHeader, PeFile64};
 use object::{LittleEndian, Object, ObjectSection};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
@@ -105,45 +104,36 @@ pub struct PeSectionInfo {
 /// Info about a PE executable.
 pub struct PeInfo<'a> {
     pe: PeFile64<'a>,
-
-    /// Primary entry point (as an offset).
-    pub entry_point: u32,
-
-    /// IA32 entry point (as an offset).
-    pub ia32_compat_entry_point: u32,
 }
 
 impl<'a> PeInfo<'a> {
-    /// Parse a PE executable and find its entry point.
+    /// Parse a PE executable.
+    pub fn parse(data: &'a [u8]) -> Result<Self> {
+        let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
+
+        Ok(Self { pe })
+    }
+
+    /// Primary entry point (as an offset).
     ///
     /// When booting from a 64-bit UEFI environment, the normal PE entry
     /// point in the PE header can be used.
+    pub fn primary_entry_point(&self) -> u32 {
+        self.pe
+            .nt_headers()
+            .optional_header
+            .address_of_entry_point()
+    }
+
+    /// IA32 entry point (as an offset).
     ///
     /// When booting from a 32-bit UEFI environment, newer kernels can
     /// provide a compatibility entry point. This requires a kernel with
     /// this commit:
     ///
     ///    efi/x86: Implement mixed mode boot without the handover protocol
-    pub fn parse(data: &'a [u8]) -> Result<Self> {
-        let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
-
-        // Get the primary entry point from a field in the PE header.
-        let entry_point = pe
-            .nt_headers()
-            .optional_header
-            .address_of_entry_point
-            .get(LittleEndian);
-
-        // Get the IA32 entry point for booting from IA32 firmware to a
-        // 64-bit kernel.
-        let ia32_compat_entry_point =
-            find_ia32_compat_entry_point(&pe).ok_or(Error::MissingIa32CompatEntryPoint)?;
-
-        Ok(Self {
-            pe,
-            entry_point,
-            ia32_compat_entry_point,
-        })
+    pub fn ia32_compat_entry_point(&self) -> Result<u32> {
+        find_ia32_compat_entry_point(&self.pe).ok_or(Error::MissingIa32CompatEntryPoint)
     }
 
     /// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.

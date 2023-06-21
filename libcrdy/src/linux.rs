@@ -132,9 +132,9 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
     };
 
     if is_64bit() {
-        execute_linux_efi_stub(system_table, pe.entry_point)
+        execute_linux_efi_stub(system_table, pe.primary_entry_point())
     } else {
-        execute_linux_efi_stub(system_table, pe.ia32_compat_entry_point)
+        execute_linux_efi_stub(system_table, pe.ia32_compat_entry_point()?)
     }
 }
 
