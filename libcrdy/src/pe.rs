@@ -7,7 +7,8 @@
 //! This uses the [`object`] library to parse a PE executable and
 //! extract data.
 
-use crate::{Error, Result};
+use core::fmt::{self, Display, Formatter};
+use core::ops::Range;
 use core::{mem, slice};
 use log::info;
 use object::pe::{IMAGE_DLLCHARACTERISTICS_NX_COMPAT, IMAGE_FILE_MACHINE_I386};
@@ -15,21 +16,50 @@ use object::read::pe::{ImageOptionalHeader, PeFile64};
 use object::{LittleEndian, Object, ObjectSection};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
+use uefi::Status;
 
 fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
+}
+
+pub enum VbpubkError {
+    ImageTooBig(u64),
+    InvalidPe(object::Error),
+    InvalidSectionBounds(Range<usize>),
+    MissingSection,
+    MultipleSections,
+    OpenLoadedImageProtocolFailed(Status),
+}
+
+impl Display for VbpubkError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::ImageTooBig(size) => write!(f, "image is larger than usize: {size}"),
+            Self::InvalidPe(error) => write!(f, "invalid PE: {error}"),
+            Self::InvalidSectionBounds(range) => {
+                write!(f, "invalid section bounds: {range:#016x?}")
+            }
+            Self::MissingSection => write!(f, "missing .vbpubk section"),
+            Self::MultipleSections => write!(f, "multiple .vbpubk sections"),
+            Self::OpenLoadedImageProtocolFailed(status) => {
+                write!(f, "failed to open LoadedImage protocol: {status}")
+            }
+        }
+    }
 }
 
 /// Get the currently-executing image's data.
 ///
 /// The returned slice is valid for as long as boot services are active
 /// (as enforced by the lifetime).
-fn get_loaded_image_data<'boot>(boot_services: &'boot BootServices) -> Result<&'boot [u8]> {
+fn get_loaded_image_data<'boot>(
+    boot_services: &'boot BootServices,
+) -> Result<&'boot [u8], VbpubkError> {
     // Use the `LoadedImage` protocol to get a pointer to the data of
     // the currently-executing image.
     let li = boot_services
         .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
-        .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
+        .map_err(|err| VbpubkError::OpenLoadedImageProtocolFailed(err.status()))?;
     let (image_ptr, image_len) = li.info();
     let image_ptr: *const u8 = image_ptr.cast();
 
@@ -37,7 +67,7 @@ fn get_loaded_image_data<'boot>(boot_services: &'boot BootServices) -> Result<&'
     info!("image size: {} bytes", image_len);
 
     // Convert the pointer and length to a byte slice.
-    let image_len = usize::try_from(image_len).map_err(|_| Error::Overflow("image_len"))?;
+    let image_len = usize::try_from(image_len).map_err(|_| VbpubkError::ImageTooBig(image_len))?;
     let image_data: &'boot [u8] = unsafe { slice::from_raw_parts(image_ptr, image_len) };
 
     Ok(image_data)
@@ -48,7 +78,7 @@ fn get_loaded_image_data<'boot>(boot_services: &'boot BootServices) -> Result<&'
 ///
 /// The returned slice is valid for as long as boot services are active
 /// (as enforced by the lifetime).
-pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
+pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
     // The PE layout is different between the 32-bit and 64-bit targets;
     // make a `PeFile` type alias to the appropriate type.
     #[cfg(target_pointer_width = "32")]
@@ -57,7 +87,7 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     type PeFile<'a> = object::read::pe::PeFile64<'a>;
 
     let image_data = get_loaded_image_data(boot_services)?;
-    let pe = PeFile::parse(image_data).map_err(Error::InvalidPe)?;
+    let pe = PeFile::parse(image_data).map_err(VbpubkError::InvalidPe)?;
 
     // Find the target section.
     let section_name = ".vbpubk";
@@ -65,11 +95,11 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
         .section_table()
         .iter()
         .filter(|section| section.raw_name() == section_name.as_bytes());
-    let section = section_iter.next().ok_or(Error::MissingPubkey)?;
+    let section = section_iter.next().ok_or(VbpubkError::MissingSection)?;
     // Return an error if there's more than one vbpubk section, as that
     // could indicate something wrong with the signer.
     if section_iter.next().is_some() {
-        return Err(Error::MultiplePubkey);
+        return Err(VbpubkError::MultipleSections);
     }
 
     // Get the section's data range (relative to the image_ptr).
@@ -79,9 +109,10 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8]> {
     info!("{section_name} section: offset={section_addr:#x}, len={section_len:#x}");
 
     // Get the section's data as a slice.
+    let section_range = section_addr..section_addr + section_len;
     let section_data = image_data
-        .get(section_addr..section_addr + section_len)
-        .ok_or(Error::OutOfBounds("vbpubk section data"))?;
+        .get(section_range.clone())
+        .ok_or(VbpubkError::InvalidSectionBounds(section_range))?;
 
     Ok(section_data)
 }
@@ -108,8 +139,8 @@ pub struct PeInfo<'a> {
 
 impl<'a> PeInfo<'a> {
     /// Parse a PE executable.
-    pub fn parse(data: &'a [u8]) -> Result<Self> {
-        let pe = PeFile64::parse(data).map_err(Error::InvalidPe)?;
+    pub fn parse(data: &'a [u8]) -> Result<Self, object::Error> {
+        let pe = PeFile64::parse(data)?;
 
         Ok(Self { pe })
     }
@@ -132,8 +163,8 @@ impl<'a> PeInfo<'a> {
     /// this commit:
     ///
     ///    efi/x86: Implement mixed mode boot without the handover protocol
-    pub fn ia32_compat_entry_point(&self) -> Result<u32> {
-        find_ia32_compat_entry_point(&self.pe).ok_or(Error::MissingIa32CompatEntryPoint)
+    pub fn ia32_compat_entry_point(&self) -> Option<u32> {
+        find_ia32_compat_entry_point(&self.pe)
     }
 
     /// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.

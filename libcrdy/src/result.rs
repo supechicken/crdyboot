@@ -4,6 +4,7 @@
 
 use crate::disk::GptDiskError;
 use crate::nx::NxError;
+use crate::pe::VbpubkError;
 use crate::revocation::RevocationError;
 use crate::tpm::TpmError;
 use core::fmt;
@@ -27,6 +28,8 @@ pub enum Error {
 
     LoadedImageProtocolMissing(Status),
 
+    Vbpubk(VbpubkError),
+
     GptDisk(GptDiskError),
 
     LoadKernelFailed(LoadKernelError),
@@ -36,12 +39,6 @@ pub enum Error {
 
     /// Parse error from the [`object`] crate.
     InvalidPe(object::Error),
-
-    /// The boot image is missing the ".vbpubk" section.
-    MissingPubkey,
-
-    /// The boot image has multiple ".vbpubk" sections.
-    MultiplePubkey,
 
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.
@@ -90,6 +87,10 @@ impl fmt::Display for Error {
                 write_with_status("failed to get UEFI LoadedImage protocol", status)
             }
 
+            Vbpubk(error) => {
+                write!(f, "failed to get packed public key: {error}")
+            }
+
             GptDisk(error) => {
                 write!(f, "failed to open GPT disk: {error}")
             }
@@ -104,12 +105,6 @@ impl fmt::Display for Error {
 
             InvalidPe(err) => {
                 write!(f, "invalid PE: {err}")
-            }
-            MissingPubkey => {
-                write!(f, "missing .vbpubk section")
-            }
-            MultiplePubkey => {
-                write!(f, "multiple .vbpubk sections")
             }
             MissingIa32CompatEntryPoint => {
                 write!(f, "missing ia32 compatibility entry point")

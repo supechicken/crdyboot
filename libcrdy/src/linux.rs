@@ -118,7 +118,7 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {cmdline}");
 
-    let pe = PeInfo::parse(kernel.data())?;
+    let pe = PeInfo::parse(kernel.data()).map_err(Error::InvalidPe)?;
 
     nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
 
@@ -134,7 +134,11 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
     if is_64bit() {
         execute_linux_efi_stub(system_table, pe.primary_entry_point())
     } else {
-        execute_linux_efi_stub(system_table, pe.ia32_compat_entry_point()?)
+        execute_linux_efi_stub(
+            system_table,
+            pe.ia32_compat_entry_point()
+                .ok_or(Error::MissingIa32CompatEntryPoint)?,
+        )
     }
 }
 
@@ -172,7 +176,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
 
     let boot_services = system_table.boot_services();
 
-    let kernel_verification_key = get_vbpubk_from_image(boot_services)?;
+    let kernel_verification_key = get_vbpubk_from_image(boot_services).map_err(Error::Vbpubk)?;
     info!(
         "kernel_verification_key len={}",
         kernel_verification_key.len()
