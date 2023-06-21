@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::result::{Error, Result};
+use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
 use log::error;
 use uefi::prelude::*;
@@ -12,11 +12,57 @@ use uefi::proto::media::block::BlockIO;
 use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use vboot::{DiskIo, ReturnCode};
 
+pub enum GptDiskError {
+    /// The disk block size is zero.
+    InvalidBlockSize,
+
+    /// No handles support the [`BlockIO`] protocol.
+    BlockIoProtocolMissing(Status),
+
+    /// Failed to open the [`BlockIO`] protocol.
+    OpenBlockIoProtocolFailed(Status),
+
+    /// Failed to open the [`DevicePath`] protocol.
+    OpenDevicePathProtocolFailed(Status),
+
+    /// Failed to open the [`LoadedImage`] protocol.
+    OpenLoadedImageProtocolFailed(Status),
+
+    /// Failed to find the handle for the disk that the current
+    /// executable was booted from.
+    ParentDiskNotFound,
+}
+
+impl Display for GptDiskError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidBlockSize => {
+                write!(f, "disk block size is zero")
+            }
+            Self::BlockIoProtocolMissing(status) => {
+                write!(f, "no handles support the BlockIO protocol: {status}")
+            }
+            Self::OpenBlockIoProtocolFailed(status) => {
+                write!(f, "failed to open the BlockIO protocol: {status}")
+            }
+            Self::OpenDevicePathProtocolFailed(status) => {
+                write!(f, "failed to open the DevicePath protocol: {status}")
+            }
+            Self::OpenLoadedImageProtocolFailed(status) => {
+                write!(f, "failed to open the LoadedImage protocol: {status}")
+            }
+            Self::ParentDiskNotFound => {
+                write!(f, "failed to get parent disk")
+            }
+        }
+    }
+}
+
 /// Open `DevicePath` protocol for `handle`.
 fn device_paths_for_handle(
     handle: Handle,
     bt: &BootServices,
-) -> Result<ScopedProtocol<DevicePath>> {
+) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
     // Safety: this protocol cannot be opened in exclusive mode. This
     // should be fine here as device paths are immutable.
     let device_path = unsafe {
@@ -28,7 +74,7 @@ fn device_paths_for_handle(
             },
             OpenProtocolAttributes::GetProtocol,
         )
-        .map_err(|err| Error::DevicePathProtocolMissing(err.status()))
+        .map_err(|err| GptDiskError::OpenDevicePathProtocolFailed(err.status()))
     }?;
     Ok(device_path)
 }
@@ -39,7 +85,11 @@ fn device_paths_for_handle(
 /// This is determined by looking at the Device Paths associated with each
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
-fn is_parent_disk(potential_parent: Handle, partition: Handle, bt: &BootServices) -> Result<bool> {
+fn is_parent_disk(
+    potential_parent: Handle,
+    partition: Handle,
+    bt: &BootServices,
+) -> Result<bool, GptDiskError> {
     let potential_parent_device_path = device_paths_for_handle(potential_parent, bt)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
     let partition_device_path = device_paths_for_handle(partition, bt)?;
@@ -73,36 +123,36 @@ fn find_parent_disk(
     block_io_handles: &[Handle],
     partition_handle: Handle,
     bt: &BootServices,
-) -> Result<Handle> {
+) -> Result<Handle, GptDiskError> {
     for handle in block_io_handles {
         if is_parent_disk(*handle, partition_handle, bt)? {
             return Ok(*handle);
         }
     }
 
-    Err(Error::ParentDiskNotFound)
+    Err(GptDiskError::ParentDiskNotFound)
 }
 
-fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>> {
+fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
     // Get the LoadedImage protocol for the image handle. This provides a
     // device handle which should correspond to the disk that the image was
     // loaded from.
     let loaded_image = bt
         .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
-        .map_err(|err| Error::LoadedImageProtocolMissing(err.status()))?;
+        .map_err(|err| GptDiskError::OpenLoadedImageProtocolFailed(err.status()))?;
     let partition_handle = loaded_image.device();
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
     let block_io_handles = bt
         .find_handles::<BlockIO>()
-        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))?;
+        .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
     let disk_handle = find_parent_disk(&block_io_handles, partition_handle, bt)?;
 
     bt.open_protocol_exclusive::<BlockIO>(disk_handle)
-        .map_err(|err| Error::BlockIoProtocolMissing(err.status()))
+        .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
 }
 
 pub struct GptDisk<'a> {
@@ -112,11 +162,11 @@ pub struct GptDisk<'a> {
 }
 
 impl<'a> GptDisk<'a> {
-    pub fn new(bt: &'a BootServices) -> Result<GptDisk<'a>> {
+    pub fn new(bt: &'a BootServices) -> Result<GptDisk<'a>, GptDiskError> {
         let block_io = find_disk_block_io(bt)?;
 
-        let bytes_per_lba =
-            NonZeroU64::new(block_io.media().block_size().into()).ok_or(Error::InvalidBlockSize)?;
+        let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
+            .ok_or(GptDiskError::InvalidBlockSize)?;
         let lba_count = block_io.media().last_block() + 1;
 
         Ok(GptDisk {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::disk::GptDiskError;
 use crate::nx::NxError;
 use crate::revocation::RevocationError;
 use core::fmt;
@@ -23,14 +24,9 @@ pub enum Error {
     GetCommandLineFailed,
     CommandLineUcs2ConversionFailed,
 
-    BlockIoProtocolMissing(Status),
-    DevicePathProtocolMissing(Status),
     LoadedImageProtocolMissing(Status),
 
-    ParentDiskNotFound,
-
-    /// The disk block size is zero.
-    InvalidBlockSize,
+    GptDisk(GptDiskError),
 
     LoadKernelFailed(LoadKernelError),
 
@@ -89,22 +85,12 @@ impl fmt::Display for Error {
                 write!(f, "failed to convert kernel command line to UCS-2")
             }
 
-            BlockIoProtocolMissing(status) => {
-                write_with_status("failed to get UEFI BlockIO protocol", status)
-            }
-            DevicePathProtocolMissing(status) => {
-                write_with_status("failed to get UEFI DevicePath protocol", status)
-            }
             LoadedImageProtocolMissing(status) => {
                 write_with_status("failed to get UEFI LoadedImage protocol", status)
             }
 
-            ParentDiskNotFound => {
-                write!(f, "failed to get parent disk")
-            }
-
-            InvalidBlockSize => {
-                write!(f, "disk block size is zero")
+            GptDisk(error) => {
+                write!(f, "failed to open GPT disk: {error}")
             }
 
             LoadKernelFailed(err) => {

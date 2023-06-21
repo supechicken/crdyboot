@@ -184,7 +184,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new(boot_services)?,
+        &mut GptDisk::new(boot_services).map_err(Error::GptDisk)?,
     )
     .map_err(Error::LoadKernelFailed)?;
 
