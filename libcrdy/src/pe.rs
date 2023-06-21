@@ -7,6 +7,7 @@
 //! This uses the [`object`] library to parse a PE executable and
 //! extract data.
 
+use crate::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use core::{mem, slice};
@@ -17,10 +18,6 @@ use object::{LittleEndian, Object, ObjectSection};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
 use uefi::Status;
-
-fn u32_to_usize(v: u32) -> usize {
-    v.try_into().expect("size of usize is smaller than u32")
-}
 
 pub enum VbpubkError {
     ImageTooBig(u64),

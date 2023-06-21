@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk::GptDiskError;
+use crate::launch::LaunchError;
 use crate::nx::NxError;
 use crate::pe::VbpubkError;
 use crate::revocation::RevocationError;
@@ -12,9 +13,6 @@ use uefi::Status;
 use vboot::LoadKernelError;
 
 pub enum Error {
-    /// An arithmetic operation or a numeric conversion overflowed.
-    Overflow(&'static str),
-
     /// Failed to allocate memory.
     Allocation(Status),
 
@@ -26,16 +24,11 @@ pub enum Error {
     GetCommandLineFailed,
     CommandLineUcs2ConversionFailed,
 
-    LoadedImageProtocolMissing(Status),
-
     Vbpubk(VbpubkError),
 
     GptDisk(GptDiskError),
 
     LoadKernelFailed(LoadKernelError),
-
-    /// Attempted to access out-of-bounds data.
-    OutOfBounds(&'static str),
 
     /// Parse error from the [`object`] crate.
     InvalidPe(object::Error),
@@ -47,7 +40,7 @@ pub enum Error {
     /// An error occurred while updating memory attributes.
     MemoryProtection(NxError),
 
-    CommandLineTooBig(usize),
+    Launch(LaunchError),
 
     /// An error occurred when measuring the kernel into the TPM.
     Tpm(TpmError),
@@ -60,10 +53,6 @@ impl fmt::Display for Error {
         let mut write_with_status = |msg, status| write!(f, "{msg}: {status:?}");
 
         match self {
-            Overflow(info) => {
-                write!(f, "overflow: {info}")
-            }
-
             Allocation(status) => write_with_status("failed to allocate memory", status),
 
             UefiServicesInitFailed(status) => {
@@ -81,10 +70,6 @@ impl fmt::Display for Error {
                 write!(f, "failed to convert kernel command line to UCS-2")
             }
 
-            LoadedImageProtocolMissing(status) => {
-                write_with_status("failed to get UEFI LoadedImage protocol", status)
-            }
-
             Vbpubk(error) => {
                 write!(f, "failed to get packed public key: {error}")
             }
@@ -97,10 +82,6 @@ impl fmt::Display for Error {
                 write!(f, "failed to load kernel: {err}")
             }
 
-            OutOfBounds(info) => {
-                write!(f, "out of bounds: {info}")
-            }
-
             InvalidPe(err) => {
                 write!(f, "invalid PE: {err}")
             }
@@ -108,12 +89,12 @@ impl fmt::Display for Error {
                 write!(f, "missing ia32 compatibility entry point")
             }
 
-            CommandLineTooBig(size) => {
-                write!(f, "kernel command line is too large: {size}")
-            }
-
             MemoryProtection(error) => {
                 write!(f, "failed to set up memory protection: {error}")
+            }
+
+            Launch(error) => {
+                write!(f, "failed to launch next stage: {error}")
             }
 
             Tpm(error) => {

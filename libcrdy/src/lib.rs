@@ -10,6 +10,7 @@
 #![cfg_attr(not(test), no_std)]
 
 mod disk;
+mod launch;
 mod linux;
 mod logging;
 mod nx;
@@ -23,3 +24,8 @@ pub use linux::load_and_execute_kernel;
 pub use logging::set_log_level;
 pub use result::{Error, Result};
 pub use revocation::self_revocation_check;
+
+/// On the targets we care about, `usize` is always at least as large as `u32`.
+fn u32_to_usize(v: u32) -> usize {
+    v.try_into().expect("size of usize is smaller than u32")
+}
