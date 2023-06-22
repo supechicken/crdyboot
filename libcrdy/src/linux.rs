@@ -111,7 +111,10 @@ fn execute_linux_efi_stub(
         (entry_point)(system_table.boot_services().image_handle(), system_table);
     }
 
-    Err(Error::KernelDidNotTakeControl)
+    // We do not expect the kernel to ever exit back to our code, so
+    // that code path is not tested. To avoid anything unexpected
+    // happening if the entry point somehow does return, panic here.
+    unreachable!("the kernel should not return control")
 }
 
 fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) -> Result<()> {

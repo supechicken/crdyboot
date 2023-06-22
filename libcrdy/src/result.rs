@@ -51,8 +51,6 @@ pub enum Error {
 
     /// An error occurred when measuring the kernel into the TPM.
     Tpm(TpmError),
-
-    KernelDidNotTakeControl,
 }
 
 impl fmt::Display for Error {
@@ -120,10 +118,6 @@ impl fmt::Display for Error {
 
             Tpm(error) => {
                 write!(f, "TPM error: {error}")
-            }
-
-            KernelDidNotTakeControl => {
-                write!(f, "failed to transfer control to the kernel")
             }
         }
     }
