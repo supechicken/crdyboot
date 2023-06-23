@@ -6,11 +6,11 @@
 #![no_std]
 #![no_main]
 
-use libcrdy::{load_and_execute_kernel, self_revocation_check, set_log_level, Error, Result};
+use libcrdy::{load_and_execute_kernel, self_revocation_check, set_log_level, Result};
 use uefi::prelude::*;
 
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
-    uefi_services::init(&mut st).map_err(|err| Error::UefiServicesInitFailed(err.status()))?;
+    uefi_services::init(&mut st).expect("failed to initialize uefi_services");
     set_log_level(st.boot_services());
 
     // The self-revocation check should happen as early as possible, so

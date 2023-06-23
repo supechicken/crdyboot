@@ -16,8 +16,6 @@ pub enum Error {
     /// Failed to allocate memory.
     Allocation(Status),
 
-    UefiServicesInitFailed(Status),
-
     /// Self-revocation check failed.
     Revocation(RevocationError),
 
@@ -54,10 +52,6 @@ impl fmt::Display for Error {
 
         match self {
             Allocation(status) => write_with_status("failed to allocate memory", status),
-
-            UefiServicesInitFailed(status) => {
-                write_with_status("failed to initialize UEFI services", status)
-            }
 
             Revocation(err) => {
                 write!(f, "self-revocation check failed: {err}")
