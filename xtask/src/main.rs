@@ -117,12 +117,28 @@ struct LintAction {}
 struct PrepDiskAction {}
 
 /// Initialize the workspace.
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(FromArgs, PartialEq, Debug, Default)]
 #[argh(subcommand, name = "setup")]
 struct SetupAction {
     /// path of the reven disk image to copy.
     #[argh(positional)]
     disk_image: Option<Utf8PathBuf>,
+
+    /// OVMF 64-bit code file.
+    #[argh(option)]
+    ovmf64_code: Option<Utf8PathBuf>,
+
+    /// OVMF 64-bit vars file.
+    #[argh(option)]
+    ovmf64_vars: Option<Utf8PathBuf>,
+
+    /// OVMF 32-bit code file.
+    #[argh(option)]
+    ovmf32_code: Option<Utf8PathBuf>,
+
+    /// OVMF 32-bit vars file.
+    #[argh(option)]
+    ovmf32_vars: Option<Utf8PathBuf>,
 }
 
 struct Miri(bool);
@@ -427,19 +443,29 @@ fn init_submodules(conf: &Config) -> Result<()> {
 }
 
 /// Run the enroller in a VM to set up UEFI variables for secure boot.
-fn enroll_secure_boot_keys(conf: &Config) -> Result<()> {
+fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
     for arch in Arch::all() {
         let ovmf = conf.ovmf_paths(arch);
 
-        // Copy the system OVMF files to a local directory.
-        // TODO: move these hardcoded paths to the config.
+        // Get the system path of the OVMF files installed via apt.
         let system_ovmf_dir = Utf8Path::new("/usr/share/OVMF/");
         let (system_code, system_vars) = match arch {
             Arch::Ia32 => ("OVMF32_CODE_4M.secboot.fd", "OVMF32_VARS_4M.fd"),
             Arch::X64 => ("OVMF_CODE_4M.secboot.fd", "OVMF_VARS_4M.fd"),
         };
-        copy_file(system_ovmf_dir.join(system_code), ovmf.code())?;
-        copy_file(system_ovmf_dir.join(system_vars), ovmf.original_vars())?;
+        let system_code = system_ovmf_dir.join(system_code);
+        let system_vars = system_ovmf_dir.join(system_vars);
+
+        let (args_code, args_vars) = match arch {
+            Arch::Ia32 => (action.ovmf32_code.as_ref(), action.ovmf32_vars.as_ref()),
+            Arch::X64 => (action.ovmf64_code.as_ref(), action.ovmf64_vars.as_ref()),
+        };
+
+        // Copy the OVMF files to a local directory.
+        let src_code_path = args_code.unwrap_or(&system_code);
+        let src_vars_path = args_vars.unwrap_or(&system_vars);
+        copy_file(src_code_path, ovmf.code())?;
+        copy_file(src_vars_path, ovmf.original_vars())?;
 
         // Keep a copy of the original vars for running QEMU in
         // non-secure-boot mode.
@@ -567,7 +593,7 @@ fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
 
     generate_secure_boot_keys(conf)?;
     run_build_enroller(conf)?;
-    enroll_secure_boot_keys(conf)?;
+    enroll_secure_boot_keys(conf, action)?;
 
     // Build and install shim, and sign the kernel partitions with a
     // local key.
@@ -632,7 +658,7 @@ fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
 
     // End version-specific cleanup operations.
 
-    run_setup(conf, &SetupAction { disk_image: None })?;
+    run_setup(conf, &SetupAction::default())?;
     conf.write_setup_version(current_version)
 }
 
