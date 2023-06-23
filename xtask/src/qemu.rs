@@ -137,7 +137,7 @@ impl QemuOpts {
 
         // These options are needed for SMM as described in
         // edk2/OvmfPkg/README.
-        cmd.args(["-machine", "q35,smm=on,accel=kvm"]);
+        cmd.args(["-machine", "q35,smm=on"]);
         cmd.args(["-global", "ICH9-LPC.disable_s3=1"]);
 
         // Send OVMF debug logging to a file.
