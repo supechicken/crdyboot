@@ -485,10 +485,16 @@ fn build_futility(conf: &Config) -> Result<()> {
             conf.futility_executable_path().as_str(),
         ],
     );
-    // For compatiblity with openssl3, allow use of deprecated
-    // functions.
-    cmd.env
-        .insert("CFLAGS".into(), "-Wno-deprecated-declarations".into());
+    let cflags = [
+        // For compatiblity with openssl3, allow use of deprecated
+        // functions.
+        "-Wno-deprecated-declarations",
+        // Disable this error to match the default chromeos build
+        // flags. See b/231987783.
+        "-Wno-int-conversion",
+    ];
+
+    cmd.env.insert("CFLAGS".into(), cflags.join(" ").into());
     cmd.run()?;
 
     Ok(())
