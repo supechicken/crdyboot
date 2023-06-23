@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::arch::Arch;
 use crate::disk::GptDisk;
 use crate::launch::NextStage;
 use crate::nx;
@@ -9,20 +10,11 @@ use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::{get_vbpubk_from_image, PeInfo};
 use crate::tpm::extend_pcr_and_log;
 use crate::{Error, Result};
-use core::mem;
 use log::info;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::CString16;
 use vboot::{LoadKernelInputs, LoadedKernel};
-
-fn is_64bit() -> bool {
-    match mem::size_of::<usize>() {
-        8 => true,
-        4 => false,
-        other => panic!("invalid size of usize: {other}"),
-    }
-}
 
 /// Hand off control to the Linux EFI stub.
 ///
@@ -53,11 +45,11 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
 
     nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
 
-    let entry_point_offset = if is_64bit() {
-        pe.primary_entry_point()
-    } else {
-        pe.ia32_compat_entry_point()
-            .ok_or(Error::MissingIa32CompatEntryPoint)?
+    let entry_point_offset = match Arch::get_current_exe_arch() {
+        Arch::X86_64 => pe.primary_entry_point(),
+        Arch::Ia32 => pe
+            .ia32_compat_entry_point()
+            .ok_or(Error::MissingIa32CompatEntryPoint)?,
     };
 
     let next_stage = NextStage {

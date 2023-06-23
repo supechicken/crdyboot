@@ -9,6 +9,7 @@
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 
+mod arch;
 mod disk;
 mod launch;
 mod linux;
