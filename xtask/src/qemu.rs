@@ -140,6 +140,14 @@ impl QemuOpts {
         cmd.args(["-machine", "q35,smm=on"]);
         cmd.args(["-global", "ICH9-LPC.disable_s3=1"]);
 
+        // Set the same CPU args used by project Mu's
+        // QemuRunner.py. Some of these are necessary to boot Mu when
+        // KVM is enabled.
+        cmd.args([
+            "-cpu",
+            "qemu64,rdrand=on,umip=on,smep=on,pdpe1gb=on,popcnt=on",
+        ]);
+
         // Send OVMF debug logging to a file.
         cmd.args([
             "-debugcon",
