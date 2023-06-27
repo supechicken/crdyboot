@@ -16,7 +16,7 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
 use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
-use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile64};
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use object::LittleEndian;
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
@@ -183,8 +183,8 @@ impl NxSectionInfo {
 }
 
 /// Get an iterator over the PE sections.
-fn get_section_iter<'a>(
-    pe: &PeFile64<'a>,
+fn get_section_iter<'a, N: ImageNtHeaders>(
+    pe: &PeFile<'a, N>,
 ) -> impl Iterator<Item = Result<NxSectionInfo, NxError>> + 'a {
     let data_ptr = pe.data().as_ptr();
     let section_table = pe.section_table();
@@ -214,14 +214,17 @@ fn get_section_iter<'a>(
 }
 
 /// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.
-fn is_pe_nx_compat(pe: &PeFile64) -> bool {
+fn is_pe_nx_compat<N: ImageNtHeaders>(pe: &PeFile<N>) -> bool {
     let dll_characteristics = pe.nt_headers().optional_header().dll_characteristics();
 
     (dll_characteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) != 0
 }
 
 /// Set up memory protection attributes for the kernel data.
-pub fn update_mem_attrs(pe: &PeFile64, boot_services: &BootServices) -> Result<(), NxError> {
+pub fn update_mem_attrs<N: ImageNtHeaders>(
+    pe: &PeFile<N>,
+    boot_services: &BootServices,
+) -> Result<(), NxError> {
     let handle = match boot_services.get_handle_for_protocol::<MemoryProtection>() {
         Ok(handle) => handle,
         Err(err) => {

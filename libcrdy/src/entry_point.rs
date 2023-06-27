@@ -4,7 +4,7 @@
 
 use core::mem;
 use object::pe::IMAGE_FILE_MACHINE_I386;
-use object::read::pe::{ImageOptionalHeader, PeFile64};
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile, PeFile64};
 use object::{Object, ObjectSection};
 
 /// Primary entry point (as an offset).
@@ -12,8 +12,8 @@ use object::{Object, ObjectSection};
 /// When booting from a 64-bit UEFI environment, the normal PE entry
 /// point in the PE header can be used.
 #[must_use]
-pub fn get_primary_entry_point(pe: &PeFile64) -> u32 {
-    pe.nt_headers().optional_header.address_of_entry_point()
+pub fn get_primary_entry_point<N: ImageNtHeaders>(pe: &PeFile<N>) -> u32 {
+    pe.nt_headers().optional_header().address_of_entry_point()
 }
 
 /// IA32 entry point (as an offset).
