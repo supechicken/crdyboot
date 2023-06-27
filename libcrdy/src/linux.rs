@@ -45,7 +45,7 @@ fn execute_linux_kernel(
 
     let pe = PeInfo::parse(kernel.data()).map_err(Error::InvalidPe)?;
 
-    nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
+    nx::update_mem_attrs(&pe.pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
         Arch::X86_64 => pe.primary_entry_point(),

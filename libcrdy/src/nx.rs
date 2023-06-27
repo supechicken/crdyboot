@@ -11,10 +11,12 @@
 //! more information:
 //! <https://techcommunity.microsoft.com/t5/hardware-dev-center/new-uefi-ca-memory-mitigation-requirements-for-signing/ba-p/3608714>
 
-use crate::pe::{PeInfo, PeSectionInfo};
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
+use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
+use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile64};
+use object::LittleEndian;
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
 use uefi::table::boot::{BootServices, MemoryAttribute, PAGE_SIZE};
@@ -95,7 +97,22 @@ struct SectionMemoryAttributes {
     set: MemoryAttribute,
 }
 
-impl PeSectionInfo {
+/// Info about a PE section.
+struct NxSectionInfo {
+    /// Section's absolute start address.
+    address: u64,
+
+    /// Section's size in bytes.
+    len: u64,
+
+    /// Whether the section is writable.
+    writable: bool,
+
+    /// Whether the section is executable.
+    executable: bool,
+}
+
+impl NxSectionInfo {
     /// Get the `SectionMemoryAttributes` for this section.
     ///
     /// Attribute explanation:
@@ -153,8 +170,40 @@ impl PeSectionInfo {
     }
 }
 
+/// Get an iterator over the PE sections.
+fn get_section_iter<'a>(pe: &PeFile64<'a>) -> impl Iterator<Item = NxSectionInfo> + 'a {
+    let data_ptr = pe.data().as_ptr();
+    let section_table = pe.section_table();
+
+    let base = data_ptr as u64;
+
+    section_table
+        .iter()
+        .enumerate()
+        .map(move |(index, section)| {
+            let c = section.characteristics.get(LittleEndian);
+
+            let (offset, len) = section.pe_address_range();
+            info!("section {index}: offset={offset:#x}, len={len:#x}, characteristics={c:#x}");
+
+            NxSectionInfo {
+                address: base + u64::from(offset),
+                len: u64::from(len),
+                writable: (c & object::pe::IMAGE_SCN_MEM_WRITE) != 0,
+                executable: (c & object::pe::IMAGE_SCN_MEM_EXECUTE) != 0,
+            }
+        })
+}
+
+/// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.
+fn is_pe_nx_compat(pe: &PeFile64) -> bool {
+    let dll_characteristics = pe.nt_headers().optional_header().dll_characteristics();
+
+    (dll_characteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) != 0
+}
+
 /// Set up memory protection attributes for the kernel data.
-pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<(), NxError> {
+pub fn update_mem_attrs(pe: &PeFile64, boot_services: &BootServices) -> Result<(), NxError> {
     let handle = match boot_services.get_handle_for_protocol::<MemoryProtection>() {
         Ok(handle) => handle,
         Err(err) => {
@@ -166,7 +215,7 @@ pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<(),
     };
 
     // Check that the executable self-reports NX compatibility.
-    if !pe.is_nx_compat() {
+    if !is_pe_nx_compat(pe) {
         return Err(NxError::PeNotNxCompat);
     }
 
@@ -174,7 +223,7 @@ pub fn update_mem_attrs(pe: &PeInfo, boot_services: &BootServices) -> Result<(),
         .open_protocol_exclusive::<MemoryProtection>(handle)
         .map_err(|err| NxError::OpenProtocolFailed(err.status()))?;
 
-    for section in pe.section_iter() {
+    for section in get_section_iter(pe) {
         let attrs = section.memory_attributes()?;
         let byte_region = section.page_aligned_byte_region()?;
 
@@ -222,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_page_aligned_byte_region() {
-        let mut s = PeSectionInfo {
+        let mut s = NxSectionInfo {
             address: 0,
             len: 4096,
             writable: false,

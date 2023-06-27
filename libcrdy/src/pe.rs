@@ -12,9 +12,9 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use core::{mem, slice};
 use log::info;
-use object::pe::{IMAGE_DLLCHARACTERISTICS_NX_COMPAT, IMAGE_FILE_MACHINE_I386};
+use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::{ImageOptionalHeader, PeFile64};
-use object::{LittleEndian, Object, ObjectSection};
+use object::{Object, ObjectSection};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
 use uefi::Status;
@@ -114,24 +114,9 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], Vbpu
     Ok(section_data)
 }
 
-/// Info about a PE section.
-pub struct PeSectionInfo {
-    /// Section's absolute start address.
-    pub address: u64,
-
-    /// Section's size in bytes.
-    pub len: u64,
-
-    /// Whether the section is writable.
-    pub writable: bool,
-
-    /// Whether the section is executable.
-    pub executable: bool,
-}
-
 /// Info about a PE executable.
 pub struct PeInfo<'a> {
-    pe: PeFile64<'a>,
+    pub pe: PeFile64<'a>,
 }
 
 impl<'a> PeInfo<'a> {
@@ -162,41 +147,6 @@ impl<'a> PeInfo<'a> {
     ///    efi/x86: Implement mixed mode boot without the handover protocol
     pub fn ia32_compat_entry_point(&self) -> Option<u32> {
         find_ia32_compat_entry_point(&self.pe)
-    }
-
-    /// Whether the image's DLL characteristics have the `NX_COMPAT` bit set.
-    pub fn is_nx_compat(&self) -> bool {
-        let c = self
-            .pe
-            .nt_headers()
-            .optional_header
-            .dll_characteristics
-            .get(LittleEndian);
-        (c & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) != 0
-    }
-
-    /// Get an iterator over the PE sections.
-    pub fn section_iter(&self) -> impl Iterator<Item = PeSectionInfo> + 'a {
-        // Convert the image data pointer to a u64.
-        let base = self.pe.data().as_ptr() as u64;
-
-        self.pe
-            .section_table()
-            .iter()
-            .enumerate()
-            .map(move |(index, section)| {
-                let c = section.characteristics.get(LittleEndian);
-
-                let (offset, len) = section.pe_address_range();
-                info!("section {index}: offset={offset:#x}, len={len:#x}, characteristics={c:#x}");
-
-                PeSectionInfo {
-                    address: base + u64::from(offset),
-                    len: u64::from(len),
-                    writable: (c & object::pe::IMAGE_SCN_MEM_WRITE) != 0,
-                    executable: (c & object::pe::IMAGE_SCN_MEM_EXECUTE) != 0,
-                }
-            })
     }
 }
 
