@@ -7,7 +7,7 @@ use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use core::ffi::c_void;
 use core::ops::Range;
-use core::{fmt, ptr, slice, str};
+use core::{fmt, mem, ptr, str};
 use log::{error, info};
 use uguid::Guid;
 
@@ -19,6 +19,7 @@ pub struct LoadedKernel<'a> {
 }
 
 /// Errors produced by `load_kernel`.
+#[derive(Clone, Copy)]
 pub enum LoadKernelError {
     /// Failed to convert numeric type.
     BadNumericConversion(&'static str),
@@ -38,11 +39,20 @@ pub enum LoadKernelError {
     /// Call to `LoadKernel` failed.
     LoadKernelFailed(ReturnCode),
 
-    /// Bootloader offset is not valid.
-    BadBootloaderOffset(u64),
+    /// Bootloader range is not valid.
+    BadBootloaderRange {
+        /// Bootloader offset relative to the start of the kernel data.
+        offset: u64,
 
-    /// Bootloader data is larger than the reserved space.
-    BootloaderTooLarge(usize),
+        /// Bootloader size padded to 4K alignment.
+        size: u32,
+    },
+
+    /// The kernel's x86 real-mode header doesn't have the expected magic.
+    BadHeaderMagic([u8; 4]),
+
+    /// The kernel's x86 real-mode header's `setup_sects` field is invalid.
+    BadHeaderSetupSectors(u8),
 
     /// The expected UEFI stub signature was not found.
     MissingUefiStub,
@@ -71,12 +81,17 @@ impl fmt::Display for LoadKernelError {
                 rc,
             ),
             LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
-            BadBootloaderOffset(offset) => {
-                write!(f, "bootloader offset is invalid: {offset:#02x?}")
+            BadBootloaderRange { offset, size } => {
+                write!(
+                    f,
+                    "invalid bootloader offset and/or size: offset={offset:#x}, size={size:#x}"
+                )
             }
-            BootloaderTooLarge(size) => {
-                write!(f, "bootloader data is too large: {size}")
-            }
+            BadHeaderMagic(val) => write!(f, "invalid real-mode header magic: {val:04x?}"),
+            BadHeaderSetupSectors(val) => write!(
+                f,
+                "invalid `setup_sects` field in the read-mode header: {val:#x}"
+            ),
             MissingUefiStub => {
                 write!(
                     f,
@@ -176,47 +191,43 @@ impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
         vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE as usize;
 }
 
-/// Offsets within the kernel buffer divined from
-/// `vboot_sys::vb2_kernel_params`.
-struct KernelBufferOffsets {
-    bootloader: usize,
-    cros_config: Range<usize>,
-}
+/// The bootloader size reported by vboot is rounded up to 4K
+/// alignment. Get the actual bootloader size via the kernel's
+/// real-mode header.
+///
+/// See <https://www.kernel.org/doc/Documentation/x86/boot.txt>
+/// for details of the header.
+fn get_actual_bootloader_size(full_bootloader_data: &[u8]) -> Result<usize, LoadKernelError> {
+    // These constants are derived from the above doc link.
+    const SETUP_SECTS_OFFSET: usize = 0x01f1;
+    const MAGIC_SIGNATURE_START: usize = 0x202;
+    const MAGIC_SIGNATURE_END: usize = MAGIC_SIGNATURE_START + mem::size_of::<u32>();
+    const BYTES_PER_SECTOR: usize = 512;
 
-impl KernelBufferOffsets {
-    fn new(params: &vboot_sys::vb2_kernel_params) -> Option<Self> {
-        // This arithmetic is based on `fill_info_cros` in
-        // depthcharge.
-        //
-        // The additional offset of `bootloader_size` is needed because
-        // we move the bootloader into space at the beginning of the
-        // kernel buffer.
-        //
-        // TODO: would be nice if vboot just provided direct offsets
-        // rather than having to copy these calculations into multiple
-        // projects, could maybe do a CL for that.
-
-        let bootloader = usize::try_from(
-            params
-                .bootloader_offset
-                .checked_add(u64::from(params.bootloader_size))?,
-        )
-        .ok()?;
-
-        let cros_params_size = u32_to_usize(vboot_sys::CROS_PARAMS_SIZE);
-        let cros_config_size = u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
-
-        let cros_config_start = bootloader
-            .checked_sub(cros_params_size)?
-            .checked_sub(cros_config_size)?;
-
-        let cros_config_end = cros_config_start.checked_add(cros_config_size)?;
-
-        Some(Self {
-            bootloader,
-            cros_config: cros_config_start..cros_config_end,
-        })
+    // Check that the header's four-byte magic signature is in the
+    // expected place. This serves to make it immediately obvious if any
+    // offset calculations so far are incorrect.
+    let magic_signature = &full_bootloader_data[MAGIC_SIGNATURE_START..MAGIC_SIGNATURE_END];
+    if magic_signature != b"HdrS" {
+        return Err(LoadKernelError::BadHeaderMagic(
+            magic_signature.try_into().unwrap(),
+        ));
     }
+
+    // Get the one-byte `setup_sects` field. To get the actual
+    // bootloader size, add one more sector to account for the boot
+    // sector, then convert from sectors to bytes.
+    let setup_sectors = full_bootloader_data[SETUP_SECTS_OFFSET];
+    // Add one to `setup_sects` to account for the boot sector, then
+    // convert from sectors to bytes.
+    let setup_sectors_err = LoadKernelError::BadHeaderSetupSectors(setup_sectors);
+    let bootloader_size = (usize::from(setup_sectors)
+        .checked_add(1)
+        .ok_or(setup_sectors_err)?)
+    .checked_mul(BYTES_PER_SECTOR)
+    .ok_or(setup_sectors_err)?;
+
+    Ok(bootloader_size)
 }
 
 /// Find the best kernel. The details are up to the firmware library in
@@ -227,6 +238,13 @@ pub fn load_kernel<'kernel>(
     inputs: LoadKernelInputs<'kernel, '_>,
     disk_io: &mut dyn DiskIo,
 ) -> Result<LoadedKernel<'kernel>, LoadKernelError> {
+    // Reserve space at the beginning of the kernel_buffer so that we
+    // can later copy in the bootloader (UEFI stub).
+    //
+    // The bootloader size as of 2023-06-29 is around 16KiB, reserve
+    // double that to give some headroom.
+    const MAX_BOOTLOADER_SIZE: u32 = 1024 * 32;
+
     let ctx_ptr = unsafe { init_vb2_context(inputs.packed_pubkey, inputs.workbuf) }?;
 
     let full_kernel_buffer = inputs.kernel_buffer.as_mut_ptr();
@@ -236,15 +254,9 @@ pub fn load_kernel<'kernel>(
         .try_into()
         .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?;
 
-    // Reserve space at the beginning of `full_kernel_buffer` so
-    // that we can later copy in the bootloader (UEFI stub).
-    //
-    // The actual size as of 2023-05-30 is 16KiB, allocate double
-    // that to give some headroom.
-    let max_bootloader_size: u32 = 1024 * 32;
-    let kernel_buffer = unsafe { full_kernel_buffer.add(u32_to_usize(max_bootloader_size)) };
+    let kernel_buffer = unsafe { full_kernel_buffer.add(u32_to_usize(MAX_BOOTLOADER_SIZE)) };
     let kernel_buffer_size = full_kernel_buffer_size
-        .checked_sub(max_bootloader_size)
+        .checked_sub(MAX_BOOTLOADER_SIZE)
         .ok_or(LoadKernelError::Overflow("kernel_buffer_size"))?;
 
     let mut params = vboot_sys::vb2_kernel_params {
@@ -275,46 +287,99 @@ pub fn load_kernel<'kernel>(
 
     info!("LoadKernel success");
 
-    if params.bootloader_size > max_bootloader_size {
-        return Err(LoadKernelError::BootloaderTooLarge(u32_to_usize(
-            params.bootloader_size,
-        )));
+    // The layout of the full kernel buffer now looks like this:
+    // +---------------------+--------+--------+--------+-----------------+
+    // | Reserved            | Kernel | Config | Params | Bootloader with |
+    // | max_bootloader_size | data   |        |        | padding         |
+    // |                     |        |        |        | size 4K aligned |
+    // +---------------------+--------+--------+--------+-----------------+
+    //
+    // In order to fill in `LoadedKernel`, we need to modify the kernel
+    // buffer to move the actual bootloader data (without the padding to
+    // 4K) into the reserved space so that it comes just before the
+    // kernel data. Any additional unused reserved space at the start of
+    // the buffer is dropped with a subslice.
+    //
+    // Output buffer layout:
+    // +------------+-------------+--------+--------+
+    // | Bootloader | Kernel data | Config | Params |
+    // +------------+-------------+--------+--------+
+
+    // Construct an error to be used in case any of the following
+    // bootloader steps fail.
+    let bootloader_err = LoadKernelError::BadBootloaderRange {
+        offset: params.bootloader_offset,
+        size: params.bootloader_size,
+    };
+
+    // Ensure that the bootloader fits within the reserved space.
+    if params.bootloader_size > MAX_BOOTLOADER_SIZE {
+        return Err(bootloader_err);
     }
 
-    let offsets = KernelBufferOffsets::new(&params).ok_or(LoadKernelError::BadBootloaderOffset(
-        params.bootloader_offset,
-    ))?;
+    // Bootloader offset from the start of the kernel data (this
+    // excludes the reserved space).
+    let bootloader_offset_from_kernel_data =
+        usize::try_from(params.bootloader_offset).map_err(|_| bootloader_err)?;
+    // Bootloader offset from the start of the reserved space.
+    let full_bootloader_start = u32_to_usize(MAX_BOOTLOADER_SIZE)
+        .checked_add(bootloader_offset_from_kernel_data)
+        .ok_or(bootloader_err)?;
+    let full_bootloader_end = full_bootloader_start
+        .checked_add(u32_to_usize(params.bootloader_size))
+        .ok_or(bootloader_err)?;
+    // Get the bootloader data (this includes the padding to 4K).
+    let full_bootloader_data = inputs
+        .kernel_buffer
+        .get(full_bootloader_start..full_bootloader_end)
+        .ok_or(bootloader_err)?;
 
-    let unused_space = u32_to_usize(
-        max_bootloader_size
-            .checked_sub(params.bootloader_size)
-            .ok_or(LoadKernelError::Overflow("unused_space"))?,
-    );
+    // Get the actual bootloader size, without the 4K rounding.
+    let bootloader_size = get_actual_bootloader_size(full_bootloader_data)?;
+    info!("Actual bootloader size: {bootloader_size:#x} bytes");
 
-    // Turn the kernel data back into a slice, leaving out any
-    // unused space at the beginning.
-    let kernel_buffer = unsafe {
-        slice::from_raw_parts_mut(
-            full_kernel_buffer.add(unused_space),
-            u32_to_usize(full_kernel_buffer_size)
-                .checked_sub(unused_space)
-                .ok_or(LoadKernelError::Overflow("kernel_buffer"))?,
-        )
-    };
+    // Calculate how much of the reserved space is unused.
+    let unused_space = u32_to_usize(MAX_BOOTLOADER_SIZE)
+        .checked_sub(bootloader_size)
+        .ok_or(LoadKernelError::Overflow("unused_space"))?;
+    info!("Unused size: {unused_space} bytes");
+
+    // Get the slice that will be returned at the end, dropping unused
+    // space from the reserved space at the beginning of the full
+    // buffer.
+    let kernel_buffer = &mut inputs.kernel_buffer[unused_space..];
+
+    // Get the bootloader offset within the new `kernel_buffer` size.
+    let bootloader_offset = bootloader_size
+        .checked_add(bootloader_offset_from_kernel_data)
+        .ok_or(bootloader_err)?;
 
     // Copy the bootloader data to the start of the slice,
     // essentially undoing the splitting up of kernel data that
     // futility did when creating the kernel partition.
-    let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader);
+    let (bootloader, rest) = kernel_buffer.split_at_mut(bootloader_offset);
     if &rest[0..2] != b"MZ" {
         return Err(LoadKernelError::MissingUefiStub);
     }
-    let bootloader_size = u32_to_usize(params.bootloader_size);
     bootloader[..bootloader_size].copy_from_slice(&rest[..bootloader_size]);
+
+    // Find the config section of the kernel data (aka the kernel
+    // command line). As shown in the diagram above, config and params
+    // data are packed just before the bootloader data.
+    let cros_config_size = u32_to_usize(vboot_sys::CROS_CONFIG_SIZE);
+    let cros_params_size = u32_to_usize(vboot_sys::CROS_PARAMS_SIZE);
+    let cros_config_start = bootloader_offset
+        .checked_sub(cros_config_size)
+        .ok_or(bootloader_err)?
+        .checked_sub(cros_params_size)
+        .ok_or(bootloader_err)?;
+    let cros_config_end = cros_config_start
+        .checked_add(cros_config_size)
+        .ok_or(bootloader_err)?;
 
     Ok(LoadedKernel {
         data: kernel_buffer,
-        cros_config: offsets.cros_config,
+        cros_config: cros_config_start..cros_config_end,
         unique_partition_guid: Guid::from_bytes(params.partition_guid),
     })
 }
