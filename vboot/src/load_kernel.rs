@@ -227,97 +227,95 @@ pub fn load_kernel<'kernel>(
     inputs: LoadKernelInputs<'kernel, '_>,
     disk_io: &mut dyn DiskIo,
 ) -> Result<LoadedKernel<'kernel>, LoadKernelError> {
-    unsafe {
-        let ctx_ptr = init_vb2_context(inputs.packed_pubkey, inputs.workbuf)?;
+    let ctx_ptr = unsafe { init_vb2_context(inputs.packed_pubkey, inputs.workbuf) }?;
 
-        let full_kernel_buffer = inputs.kernel_buffer.as_mut_ptr();
-        let full_kernel_buffer_size: u32 = inputs
-            .kernel_buffer
-            .len()
-            .try_into()
-            .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?;
+    let full_kernel_buffer = inputs.kernel_buffer.as_mut_ptr();
+    let full_kernel_buffer_size: u32 = inputs
+        .kernel_buffer
+        .len()
+        .try_into()
+        .map_err(|_| LoadKernelError::BadNumericConversion("kernel buffer size"))?;
 
-        // Reserve space at the beginning of `full_kernel_buffer` so
-        // that we can later copy in the bootloader (UEFI stub).
-        //
-        // The actual size as of 2023-05-30 is 16KiB, allocate double
-        // that to give some headroom.
-        let max_bootloader_size: u32 = 1024 * 32;
-        let kernel_buffer = full_kernel_buffer.add(u32_to_usize(max_bootloader_size));
-        let kernel_buffer_size = full_kernel_buffer_size
-            .checked_sub(max_bootloader_size)
-            .ok_or(LoadKernelError::Overflow("kernel_buffer_size"))?;
+    // Reserve space at the beginning of `full_kernel_buffer` so
+    // that we can later copy in the bootloader (UEFI stub).
+    //
+    // The actual size as of 2023-05-30 is 16KiB, allocate double
+    // that to give some headroom.
+    let max_bootloader_size: u32 = 1024 * 32;
+    let kernel_buffer = unsafe { full_kernel_buffer.add(u32_to_usize(max_bootloader_size)) };
+    let kernel_buffer_size = full_kernel_buffer_size
+        .checked_sub(max_bootloader_size)
+        .ok_or(LoadKernelError::Overflow("kernel_buffer_size"))?;
 
-        let mut params = vboot_sys::vb2_kernel_params {
-            // Initialize inputs.
-            kernel_buffer: kernel_buffer.cast(),
-            kernel_buffer_size,
+    let mut params = vboot_sys::vb2_kernel_params {
+        // Initialize inputs.
+        kernel_buffer: kernel_buffer.cast(),
+        kernel_buffer_size,
 
-            // Initialize outputs.
-            disk_handle: ptr::null_mut(),
-            partition_number: 0,
-            bootloader_offset: 0,
-            bootloader_size: 0,
-            partition_guid: [0; 16],
-            flags: 0,
-        };
+        // Initialize outputs.
+        disk_handle: ptr::null_mut(),
+        partition_number: 0,
+        bootloader_offset: 0,
+        bootloader_size: 0,
+        partition_guid: [0; 16],
+        flags: 0,
+    };
 
-        let mut disk = Disk::new(disk_io);
-        let mut disk_info = disk.info();
+    let mut disk = Disk::new(disk_io);
+    let mut disk_info = disk.info();
 
-        info!("LoadKernel");
-        let status = ReturnCode(vboot_sys::vb2api_load_kernel(
-            ctx_ptr,
-            &mut params,
-            disk_info.as_mut_ptr(),
-        ));
-        if status == ReturnCode::VB2_SUCCESS {
-            info!("LoadKernel success");
+    info!("LoadKernel");
+    let status = ReturnCode(unsafe {
+        vboot_sys::vb2api_load_kernel(ctx_ptr, &mut params, disk_info.as_mut_ptr())
+    });
+    if status == ReturnCode::VB2_SUCCESS {
+        info!("LoadKernel success");
 
-            if params.bootloader_size > max_bootloader_size {
-                return Err(LoadKernelError::BootloaderTooLarge(u32_to_usize(
-                    params.bootloader_size,
-                )));
-            }
+        if params.bootloader_size > max_bootloader_size {
+            return Err(LoadKernelError::BootloaderTooLarge(u32_to_usize(
+                params.bootloader_size,
+            )));
+        }
 
-            let offsets = KernelBufferOffsets::new(&params).ok_or(
-                LoadKernelError::BadBootloaderOffset(params.bootloader_offset),
-            )?;
+        let offsets = KernelBufferOffsets::new(&params).ok_or(
+            LoadKernelError::BadBootloaderOffset(params.bootloader_offset),
+        )?;
 
-            let unused_space = u32_to_usize(
-                max_bootloader_size
-                    .checked_sub(params.bootloader_size)
-                    .ok_or(LoadKernelError::Overflow("unused_space"))?,
-            );
+        let unused_space = u32_to_usize(
+            max_bootloader_size
+                .checked_sub(params.bootloader_size)
+                .ok_or(LoadKernelError::Overflow("unused_space"))?,
+        );
 
-            // Turn the kernel data back into a slice, leaving out any
-            // unused space at the beginning.
-            let kernel_buffer = slice::from_raw_parts_mut(
+        // Turn the kernel data back into a slice, leaving out any
+        // unused space at the beginning.
+        let kernel_buffer = unsafe {
+            slice::from_raw_parts_mut(
                 full_kernel_buffer.add(unused_space),
                 u32_to_usize(full_kernel_buffer_size)
                     .checked_sub(unused_space)
                     .ok_or(LoadKernelError::Overflow("kernel_buffer"))?,
-            );
+            )
+        };
 
-            // Copy the bootloader data to the start of the slice,
-            // essentially undoing the splitting up of kernel data that
-            // futility did when creating the kernel partition.
-            let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader);
-            if &rest[0..2] != b"MZ" {
-                return Err(LoadKernelError::MissingUefiStub);
-            }
-            let bootloader_size = u32_to_usize(params.bootloader_size);
-            bootloader[..bootloader_size].copy_from_slice(&rest[..bootloader_size]);
-
-            Ok(LoadedKernel {
-                data: kernel_buffer,
-                cros_config: offsets.cros_config,
-                unique_partition_guid: Guid::from_bytes(params.partition_guid),
-            })
-        } else {
-            error!("LoadKernel failed: 0x{:x}", status.0);
-            Err(LoadKernelError::LoadKernelFailed(status))
+        // Copy the bootloader data to the start of the slice,
+        // essentially undoing the splitting up of kernel data that
+        // futility did when creating the kernel partition.
+        let (bootloader, rest) = kernel_buffer.split_at_mut(offsets.bootloader);
+        if &rest[0..2] != b"MZ" {
+            return Err(LoadKernelError::MissingUefiStub);
         }
+        let bootloader_size = u32_to_usize(params.bootloader_size);
+        bootloader[..bootloader_size].copy_from_slice(&rest[..bootloader_size]);
+
+        Ok(LoadedKernel {
+            data: kernel_buffer,
+            cros_config: offsets.cros_config,
+            unique_partition_guid: Guid::from_bytes(params.partition_guid),
+        })
+    } else {
+        error!("LoadKernel failed: 0x{:x}", status.0);
+        Err(LoadKernelError::LoadKernelFailed(status))
     }
 }
 
