@@ -181,5 +181,24 @@ pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) -> R
         "--output", dst.as_str(),
     ]).run()?;
 
+    // Created a detached Ed25519 signature for the file using
+    // openssl. An Ed25519 is not always available (the first-stage
+    // bootloader is only signed with an RSA key), so skip if the key
+    // does not exist.
+    //
+    // Args based on https://cendyne.dev/posts/2022-03-06-ed25519-signatures.html
+    let priv_ed25519_pem = key_paths.priv_ed25519_pem();
+    if priv_ed25519_pem.exists() {
+        let sig_dst = format!("{dst}.sig");
+        #[rustfmt::skip]
+        Command::with_args("openssl", [
+            "pkeyutl", "-sign",
+            "-rawin",
+            "-in", dst.as_str(),
+            "-inkey", priv_ed25519_pem.as_str(),
+            "-out", sig_dst.as_str(),
+        ]).run()?;
+    }
+
     Ok(())
 }

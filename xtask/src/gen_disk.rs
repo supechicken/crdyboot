@@ -589,6 +589,10 @@ pub fn corrupt_pubkey_section(
             secure_boot::sign(&unsigned, &signed, &conf.secure_boot_shim_key_paths())?;
 
             data = fs::read(signed)?;
+
+            // Write the modified signature out.
+            let sig_data = fs::read(tmp_path.join("signed.sig"))?;
+            fat_write_file(&boot_dir, &format!("{file_name}.sig"), &sig_data)?;
         }
 
         // Write the modified file out.
