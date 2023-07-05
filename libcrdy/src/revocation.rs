@@ -49,8 +49,7 @@
 
 use crate::{Error, Result};
 use core::cmp::Ordering;
-use core::fmt;
-use core::mem;
+use core::{fmt, mem};
 use log::{error, info};
 use uefi::prelude::*;
 use uefi::table::runtime::{RuntimeServices, VariableAttributes, VariableVendor};

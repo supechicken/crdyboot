@@ -17,8 +17,7 @@ use core::ops::Range;
 use log::info;
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
-use uefi::table::boot::PAGE_SIZE;
-use uefi::table::boot::{BootServices, MemoryAttribute};
+use uefi::table::boot::{BootServices, MemoryAttribute, PAGE_SIZE};
 use uefi::Status;
 
 pub enum NxError {

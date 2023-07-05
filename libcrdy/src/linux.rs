@@ -5,11 +5,10 @@
 use crate::arch::Arch;
 use crate::disk::GptDisk;
 use crate::launch::NextStage;
-use crate::nx;
 use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::{get_vbpubk_from_image, PeInfo};
 use crate::tpm::extend_pcr_and_log;
-use crate::{Error, Result};
+use crate::{nx, Error, Result};
 use log::info;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};

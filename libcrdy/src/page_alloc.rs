@@ -17,8 +17,7 @@ use crate::{Error, Result};
 use core::ops::{Deref, DerefMut};
 use core::slice;
 use log::{error, info};
-use uefi::table::boot::PAGE_SIZE;
-use uefi::table::boot::{AllocateType, MemoryType};
+use uefi::table::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::table::{Boot, SystemTable};
 use uefi::Status;
 
