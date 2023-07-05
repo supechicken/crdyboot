@@ -261,8 +261,8 @@ fn run_bootloader_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()
     // Check various properties of the bootloader binaries.
     bin_checks::run_bin_checks(conf)?;
 
-    // Update the disk image with the new executable.
-    gen_disk::copy_in_crdyboot(conf)?;
+    // Update the disk image with the new executables.
+    gen_disk::sign_and_copy_bootloaders(conf)?;
 
     // Add or remove the `crdyboot_verbose` file.
     gen_disk::update_verbose_boot_file(conf, verbose)

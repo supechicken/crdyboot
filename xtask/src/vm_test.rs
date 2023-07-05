@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use command_run::Command;
 use fs_err as fs;
 use std::fs::Permissions;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -180,32 +180,6 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
     launch_test_disk_and_expect_errors(conf, expected_errors)
 }
 
-/// Wrapper that prints `text` when dropped if `print` is true. This is
-/// used for printing test output when a panic occurs.
-struct PrintOutputOnDrop {
-    text: String,
-    print: bool,
-}
-
-impl PrintOutputOnDrop {
-    fn new() -> Self {
-        Self {
-            text: String::new(),
-            print: true,
-        }
-    }
-}
-
-impl Drop for PrintOutputOnDrop {
-    fn drop(&mut self) {
-        if self.print {
-            println!("start output ---");
-            println!("{}", self.text);
-            println!("--- end output");
-        }
-    }
-}
-
 /// This test modifies a byte in the `.vbpubk` section of the
 /// bootloader, then verifies that shim refuses to launch crdyboot due
 /// to the executable's signature no longer being valid.
@@ -220,40 +194,8 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
 
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
-    let opts = QemuOpts {
-        capture_output: true,
-        display: Display::None,
-        image_path: conf.test_disk_path(),
-        ovmf: conf.ovmf_paths(Arch::X64),
-        secure_boot: true,
-        snapshot: true,
-        timeout: Some(VM_ERROR_TIMEOUT),
-        tpm_version: None,
-    };
-    let vm = opts.spawn_disk_image(conf)?;
-    let mut stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
-    let mut output = PrintOutputOnDrop::new();
-    loop {
-        // Read one byte at a time since there's no newline character
-        // after the message we are looking for.
-        let mut byte = [0];
-        if stdout.read(&mut byte)? == 0 {
-            // EOF reached.
-            bail!("QEMU no longer running");
-        }
-        output.text.push(char::try_from(byte[0]).unwrap());
-
-        if output
-            .text
-            .contains("Verification failed: (0x1A) Security Violation")
-        {
-            // The expected failure occurred, test is successful. Kill
-            // the VM.
-            output.print = false;
-            vm.qemu.lock().unwrap().kill().unwrap();
-            return Ok(());
-        }
-    }
+    let expected_errors = &["boot failed: signature verification failed"];
+    launch_test_disk_and_expect_errors(conf, expected_errors)
 }
 
 /// This test modifies a byte in the `.vbpubk` section of crdyboot and

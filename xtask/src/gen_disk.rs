@@ -387,8 +387,24 @@ pub fn update_verbose_boot_file(conf: &Config, verbose: VerboseRuntimeLogs) -> R
     })
 }
 
-/// Sign crdyboot, then copy it into the disk image.
-pub fn copy_in_crdyboot(conf: &Config) -> Result<()> {
+/// Sign the bootloaders (both crdyshim and crdyboot) and copy them into
+/// the disk image.
+pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
+    SignAndUpdateBootloader {
+        disk_path: conf.disk_path(),
+        key_paths: conf.secure_boot_root_key_paths(),
+        mapping: Arch::all()
+            .iter()
+            .map(|arch| {
+                (
+                    conf.target_exec_path(*arch, EfiExe::Crdyshim),
+                    arch.efi_file_name("boot"),
+                )
+            })
+            .collect(),
+    }
+    .run()?;
+
     SignAndUpdateBootloader {
         disk_path: conf.disk_path(),
         key_paths: conf.secure_boot_shim_key_paths(),
