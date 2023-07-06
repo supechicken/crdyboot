@@ -6,7 +6,9 @@
 #![no_std]
 #![no_main]
 
-use libcrdy::{load_and_execute_kernel, self_revocation_check, set_log_level, Result};
+use libcrdy::{
+    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, Result,
+};
 use uefi::prelude::*;
 
 fn run(mut st: SystemTable<Boot>) -> Result<()> {
@@ -34,7 +36,7 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
 //
 // See https://github.com/rhboot/shim/blob/main/SBAT.md for details of what
 // this section is used for.
-include!(concat!(env!("OUT_DIR"), "/sbat_section.rs"));
+embed_section!(SBAT, ".sbat", "../sbat.csv");
 
 // Add `.vbpubk` section to the binary.
 //
@@ -44,4 +46,8 @@ include!(concat!(env!("OUT_DIR"), "/sbat_section.rs"));
 // By default this contains a test key with padding so that the section
 // can also hold larger keys. The real key is filled in during image
 // signing using `objcopy --update-section`.
-include!(concat!(env!("OUT_DIR"), "/vbpubk_section.rs"));
+embed_section!(
+    KERNEL_VERIFICATION_KEY,
+    ".vbpubk",
+    concat!(env!("OUT_DIR"), "/padded_vbpubk")
+);
