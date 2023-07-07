@@ -4,7 +4,9 @@
 
 use crate::arch::Arch;
 use crate::config::Config;
-use crate::gen_disk::{corrupt_kern_a, corrupt_pubkey_section, VerboseRuntimeLogs};
+use crate::gen_disk::{
+    corrupt_kern_a, corrupt_pubkey_section, SignAfterCorrupt, VerboseRuntimeLogs,
+};
 use crate::qemu::{Display, QemuOpts};
 use crate::{copy_file, run_crdyboot_build};
 use anyhow::{bail, Result};
@@ -216,7 +218,7 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
 
     create_test_disk(conf)?;
 
-    corrupt_pubkey_section(&conf.test_disk_path())?;
+    corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
     let opts = QemuOpts {
         capture_output: true,
@@ -254,9 +256,30 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
     }
 }
 
+/// This test modifies a byte in the `.vbpubk` section of crdyboot and
+/// then re-signs crdyboot. It then verifies that crdyboot refuses to
+/// launch the kernel since the pubkey is no longer valid.
+///
+/// This validates two things:
+/// 1. Crdyboot is reading the pubkey from the expected place in the binary.
+/// 2. Vboot will not load a kernel if the pubkey is invalid.
+fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
+    println!(
+        "test that modifying the vbpubk section and re-signing prevents the kernel from launching"
+    );
+
+    create_test_disk(conf)?;
+
+    corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
+
+    let expected_error = "vb2api_inject_kernel_subkey failed";
+    launch_test_disk_and_expect_vboot_error(conf, expected_error)
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_crdyboot_build(conf, VerboseRuntimeLogs(true))?;
 
+    test_signed_vbpubk_mod_breaks_vboot(conf)?;
     test_vbpubk_mod_breaks_signature(conf)?;
     test_corrupt_kern_a(conf)?;
     test_successful_boot(conf)?;

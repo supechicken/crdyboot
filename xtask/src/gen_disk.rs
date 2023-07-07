@@ -517,13 +517,18 @@ pub fn corrupt_kern_a(disk_path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// Modify one byte at the end of crdyboot's `.vbpubk` section in a disk
-/// image.
-///
-/// This is used in a test to verify that the vbpubk section is properly
-/// included in the authenticode hash, so modifying the key prevents
-/// shim from validating crdyboot's signature.
-pub fn corrupt_pubkey_section(disk_path: &Utf8Path) -> Result<()> {
+/// Parameter used in `corrupt_pubkey_section`. If true, the bootloader
+/// will be re-signed after it is modified.
+pub struct SignAfterCorrupt(pub bool);
+
+/// Modify one byte at the start of crdyboot's `.vbpubk` section in a
+/// disk image. If `sign_after_corrupt` is true, crdyboot will be
+/// re-signed after this modification.
+pub fn corrupt_pubkey_section(
+    conf: &Config,
+    disk_path: &Utf8Path,
+    sign_after_corrupt: SignAfterCorrupt,
+) -> Result<()> {
     // Get the expected section data for the vbpubk. This matches the
     // data produced by crdyboot's build.rs.
     let mut expected_pubkey =
@@ -555,12 +560,24 @@ pub fn corrupt_pubkey_section(disk_path: &Utf8Path) -> Result<()> {
         let section_data = &mut data[offset as usize..(offset + size) as usize];
         assert_eq!(section_data, expected_pubkey);
 
-        // Modify a single bit at the end of the section. This bit is
-        // outside of the actual key data, so it doesn't actually break
-        // verification from crdyboot -> kernel. However, it should
-        // break the launch of crdyboot itself since the whole section
-        // is part of the image authenticode hash.
-        section_data[section_data.len() - 1] = 1;
+        // Modify a single byte at the start of the section. Panic if
+        // the byte is already the new value.
+        assert_ne!(section_data[0], 1);
+        section_data[0] = 1;
+
+        // If requested, re-sign crdyboot so that the first-stage
+        // bootloader can still validate it successfully.
+        if sign_after_corrupt.0 {
+            let tmp_dir = tempfile::tempdir()?;
+            let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+            let unsigned = tmp_path.join("unsigned");
+            let signed = tmp_path.join("signed");
+            fs::write(&unsigned, data)?;
+
+            secure_boot::sign(&unsigned, &signed, &conf.secure_boot_shim_key_paths())?;
+
+            data = fs::read(signed)?;
+        }
 
         // Write the modified file out.
         boot_dir.remove(file_name)?;
