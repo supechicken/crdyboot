@@ -112,21 +112,15 @@ fn create_test_disk(conf: &Config) -> Result<()> {
     copy_file(conf.disk_path(), conf.test_disk_path())
 }
 
-/// Test failed boot due to corrupt KERN-A.
+/// Helper for testing vboot errors.
 ///
-/// This test generates an intentionally corrupt disk, where a single
-/// byte in the kernel data has been changed so that the signature is no
-/// longer valid.
+/// This launches the test disk in a VM and monitors the output until
+/// `expected_error` is found. After that error is found, it looks for a
+/// generic "boot failed" error to confirm the boot really is failed.
 ///
-/// The test checks that vboot rejects that kernel with a specific
-/// error, and that crdyboot fails to boot.
-fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
-    println!("test if boot correctly fails when KERN-A is corrupt");
-
-    create_test_disk(conf)?;
-
-    corrupt_kern_a(&conf.test_disk_path())?;
-
+/// If the expected errors are not found, the VM will be killed after a
+/// timeout and an error will be returned.
+fn launch_test_disk_and_expect_vboot_error(conf: &Config, expected_error: &str) -> Result<()> {
     let opts = QemuOpts {
         capture_output: true,
         display: Display::None,
@@ -142,7 +136,7 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
     let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
-    let mut confirmed_kernel_data_error = false;
+    let mut got_expected_error = false;
     loop {
         line.clear();
         if reader.read_line(&mut line)? == 0 {
@@ -150,19 +144,38 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
             bail!("QEMU no longer running");
         }
 
-        if line.contains("Kernel data verification failed") {
-            confirmed_kernel_data_error = true;
+        if line.contains(expected_error) {
+            got_expected_error = true;
         } else if line.contains("boot failed: failed to load kernel") {
-            if confirmed_kernel_data_error {
+            if got_expected_error {
                 // The expected failure occurred, test is
                 // successful. Kill the VM.
                 vm.qemu.lock().unwrap().kill().unwrap();
                 return Ok(());
             } else {
-                bail!("missing the kernel data verification error");
+                bail!("didn't get expected error: {expected_error}");
             }
         }
     }
+}
+
+/// Test failed boot due to corrupt KERN-A.
+///
+/// This test generates an intentionally corrupt disk, where a single
+/// byte in the kernel data has been changed so that the signature is no
+/// longer valid.
+///
+/// The test checks that vboot rejects that kernel with a specific
+/// error, and that crdyboot fails to boot.
+fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
+    println!("test if boot correctly fails when KERN-A is corrupt");
+
+    create_test_disk(conf)?;
+
+    corrupt_kern_a(&conf.test_disk_path())?;
+
+    let expected_error = "Kernel data verification failed";
+    launch_test_disk_and_expect_vboot_error(conf, expected_error)
 }
 
 /// Wrapper that prints `text` when dropped if `print` is true. This is
