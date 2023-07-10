@@ -5,16 +5,16 @@
 use crate::disk::GptDiskError;
 use crate::launch::LaunchError;
 use crate::nx::NxError;
+use crate::page_alloc::PageAllocationError;
 use crate::pe::VbpubkError;
 use crate::revocation::RevocationError;
 use crate::tpm::TpmError;
 use core::fmt;
-use uefi::Status;
 use vboot::LoadKernelError;
 
 pub enum Error {
     /// Failed to allocate memory.
-    Allocation(Status),
+    Allocation(PageAllocationError),
 
     /// Self-revocation check failed.
     Revocation(RevocationError),
@@ -48,10 +48,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
 
-        let mut write_with_status = |msg, status| write!(f, "{msg}: {status:?}");
-
         match self {
-            Allocation(status) => write_with_status("failed to allocate memory", status),
+            Allocation(err) => write!(f, "failed to allocate memory: {err}"),
 
             Revocation(err) => {
                 write!(f, "self-revocation check failed: {err}")

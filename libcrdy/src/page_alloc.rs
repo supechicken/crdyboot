@@ -13,13 +13,37 @@
 //! [`MemoryType::LOADER_CODE`] rather than [`MemoryType::LOADER_DATA`],
 //! since it is executable.
 
-use crate::{Error, Result};
+use core::fmt::{self, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 use core::slice;
 use log::{error, info};
 use uefi::table::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::table::{Boot, SystemTable};
 use uefi::Status;
+
+pub enum PageAllocationError {
+    /// Allocation request is not an even multiple of the page size.
+    InvalidSize(usize),
+
+    /// UEFI page allocator failed.
+    AllocationFailed(usize, Status),
+}
+
+impl Display for PageAllocationError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidSize(num_bytes) => {
+                write!(
+                    f,
+                    "{num_bytes} is not an even multiple of page size ({PAGE_SIZE})"
+                )
+            }
+            Self::AllocationFailed(num_pages, status) => {
+                write!(f, "failed to allocate {num_pages} pages: {status}")
+            }
+        }
+    }
+}
 
 /// Page-aligned memory allocation that will be freed on drop. This
 /// implements [`Deref`] and [`DerefMut`] to provide access to the
@@ -37,11 +61,10 @@ impl<'a> ScopedPageAllocation<'a> {
         allocate_type: AllocateType,
         memory_type: MemoryType,
         num_bytes: usize,
-    ) -> Result<Self> {
+    ) -> Result<Self, PageAllocationError> {
         // Reject the allocation if it's not a multiple of the page size.
         if num_bytes % PAGE_SIZE != 0 {
-            error!("{num_bytes} is not an even multiple of page size");
-            return Err(Error::Allocation(Status::UNSUPPORTED));
+            return Err(PageAllocationError::InvalidSize(num_bytes));
         }
 
         let num_pages = num_bytes / PAGE_SIZE;
@@ -50,7 +73,7 @@ impl<'a> ScopedPageAllocation<'a> {
         let addr = system_table
             .boot_services()
             .allocate_pages(allocate_type, memory_type, num_pages)
-            .map_err(|err| Error::Allocation(err.status()))?;
+            .map_err(|err| PageAllocationError::AllocationFailed(num_pages, err.status()))?;
         info!("allocation address: {addr:#x}");
 
         // Convert the physical address to a pointer.

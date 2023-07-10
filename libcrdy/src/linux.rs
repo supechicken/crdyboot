@@ -71,7 +71,8 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
         LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
-    )?;
+    )
+    .map_err(Error::Allocation)?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot. Allocating 64MiB should be
@@ -89,7 +90,8 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
         MemoryType::LOADER_CODE,
         // 64 MiB.
         64 * 1024 * 1024,
-    )?;
+    )
+    .map_err(Error::Allocation)?;
 
     let boot_services = system_table.boot_services();
 
