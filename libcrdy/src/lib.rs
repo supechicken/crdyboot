@@ -23,7 +23,7 @@ mod tpm;
 
 pub use linux::load_and_execute_kernel;
 pub use logging::set_log_level;
-pub use result::{Error, Result};
+pub use result::Error;
 pub use revocation::self_revocation_check;
 
 /// On the targets we care about, `usize` is always at least as large as `u32`.

@@ -7,11 +7,11 @@
 #![no_main]
 
 use libcrdy::{
-    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, Error, Result,
+    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, Error,
 };
 use uefi::prelude::*;
 
-fn run(mut st: SystemTable<Boot>) -> Result<()> {
+fn run(mut st: SystemTable<Boot>) -> Result<(), Error> {
     uefi_services::init(&mut st).expect("failed to initialize uefi_services");
     set_log_level(st.boot_services());
 

@@ -8,7 +8,7 @@ use crate::launch::NextStage;
 use crate::page_alloc::ScopedPageAllocation;
 use crate::pe::{get_vbpubk_from_image, PeInfo};
 use crate::tpm::extend_pcr_and_log;
-use crate::{nx, Error, Result};
+use crate::{nx, Error};
 use log::info;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
@@ -32,7 +32,10 @@ use vboot::{LoadKernelInputs, LoadedKernel};
 /// would be an unnecessary verification.
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
-fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) -> Result<()> {
+fn execute_linux_kernel(
+    kernel: &LoadedKernel,
+    system_table: SystemTable<Boot>,
+) -> Result<(), Error> {
     let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
     info!("command line: {cmdline}");
 
@@ -61,7 +64,7 @@ fn execute_linux_kernel(kernel: &LoadedKernel, system_table: SystemTable<Boot>) 
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<()> {
+pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Error> {
     let mut workbuf = ScopedPageAllocation::new(
         // Safety: this system table clone will remain valid until
         // ExitBootServices is called. That won't happen until after the
