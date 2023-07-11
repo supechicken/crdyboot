@@ -47,7 +47,6 @@
 //!
 //! [SBAT]: https://github.com/rhboot/shim/blob/main/SBAT.md
 
-use crate::{Error, Result};
 use core::cmp::Ordering;
 use core::{fmt, mem};
 use log::{error, info};
@@ -296,10 +295,8 @@ impl<'a> Revocation<'a> {
 }
 
 /// Check if the currently-running executable has been revoked.
-pub fn self_revocation_check(runtime_services: &RuntimeServices) -> Result<()> {
-    Revocation::new(runtime_services)
-        .check_revocation()
-        .map_err(Error::Revocation)
+pub fn self_revocation_check(runtime_services: &RuntimeServices) -> Result<(), RevocationError> {
+    Revocation::new(runtime_services).check_revocation()
 }
 
 #[cfg(test)]

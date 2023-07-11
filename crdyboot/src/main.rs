@@ -7,7 +7,7 @@
 #![no_main]
 
 use libcrdy::{
-    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, Result,
+    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, Error, Result,
 };
 use uefi::prelude::*;
 
@@ -17,7 +17,7 @@ fn run(mut st: SystemTable<Boot>) -> Result<()> {
 
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
-    self_revocation_check(st.runtime_services())?;
+    self_revocation_check(st.runtime_services()).map_err(Error::Revocation)?;
 
     load_and_execute_kernel(st)
 }
