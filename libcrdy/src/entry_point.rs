@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-//! PE executable parsing.
-//!
-//! This uses the [`object`] library to parse a PE executable and
-//! extract data.
-
 use core::mem;
 use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::{ImageOptionalHeader, PeFile64};

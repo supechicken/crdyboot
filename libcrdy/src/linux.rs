@@ -4,9 +4,9 @@
 
 use crate::arch::Arch;
 use crate::disk::GptDisk;
+use crate::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
 use crate::launch::NextStage;
 use crate::page_alloc::ScopedPageAllocation;
-use crate::pe::{get_ia32_compat_entry_point, get_primary_entry_point};
 use crate::tpm::extend_pcr_and_log;
 use crate::vbpubk::get_vbpubk_from_image;
 use crate::{nx, Error};

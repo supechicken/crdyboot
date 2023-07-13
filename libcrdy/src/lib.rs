@@ -11,12 +11,12 @@
 
 mod arch;
 mod disk;
+mod entry_point;
 mod launch;
 mod linux;
 mod logging;
 mod nx;
 mod page_alloc;
-mod pe;
 mod result;
 mod revocation;
 mod tpm;
