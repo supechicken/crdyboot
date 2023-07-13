@@ -90,9 +90,9 @@ fn round_up_to_page_alignment(addr: PhysicalAddress) -> PhysicalAddress {
 
 /// Memory protection attributes that should be cleared/set for a PE
 /// section.
-pub struct SectionMemoryAttributes {
-    pub clear: MemoryAttribute,
-    pub set: MemoryAttribute,
+struct SectionMemoryAttributes {
+    clear: MemoryAttribute,
+    set: MemoryAttribute,
 }
 
 impl PeSectionInfo {
@@ -110,7 +110,7 @@ impl PeSectionInfo {
     /// Although there are other `MemoryAttribute` values, these
     /// three bits are the only ones that can be used with the memory
     /// protection protocol.
-    pub fn memory_attributes(&self) -> Result<SectionMemoryAttributes, NxError> {
+    fn memory_attributes(&self) -> Result<SectionMemoryAttributes, NxError> {
         const READ_PROTECT: MemoryAttribute = MemoryAttribute::READ_PROTECT;
         const READ_ONLY: MemoryAttribute = MemoryAttribute::READ_ONLY;
         const EXECUTE_PROTECT: MemoryAttribute = MemoryAttribute::EXECUTE_PROTECT;
@@ -141,7 +141,7 @@ impl PeSectionInfo {
     /// aligned, so return an error if that requirement isn't
     /// upheld. The section sizes aren't required to be aligned, so
     /// round the end address up.
-    pub fn page_aligned_byte_region(&self) -> Result<Range<PhysicalAddress>, NxError> {
+    fn page_aligned_byte_region(&self) -> Result<Range<PhysicalAddress>, NxError> {
         if is_page_aligned(self.address) {
             // Panic on overflow.
             let end = self.address.checked_add(self.len).unwrap();

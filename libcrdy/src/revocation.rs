@@ -55,7 +55,7 @@ use uefi::table::runtime::{RuntimeServices, VariableAttributes, VariableVendor};
 use uefi::{guid, CStr16};
 
 /// Revocation level.
-pub type Level = u32;
+type Level = u32;
 
 /// Name of the UEFI variable.
 const REVOCATION_VAR_NAME: &CStr16 = cstr16!("crdyboot_min_lvl");
@@ -94,7 +94,7 @@ const CRDYBOOT_EXECUTABLE_LEVEL: Level = 1;
 /// Trait for reading and writing UEFI variables. The two methods are
 /// identical to the interface provided by `RuntimeServices`. This trait
 /// is used to allow mocking in unit tests.
-pub trait UefiVarAccess {
+trait UefiVarAccess {
     /// Get the value and attributes of a UEFI variable.
     fn get_variable<'a>(
         &self,
@@ -139,10 +139,10 @@ impl UefiVarAccess for RuntimeServices {
 #[derive(Debug, Eq, PartialEq)]
 pub struct RevocationError {
     /// Revocation level of the executable.
-    pub executable_level: Level,
+    executable_level: Level,
 
     /// Revocation level in the UEFI variable.
-    pub stored_minimum_level: Level,
+    stored_minimum_level: Level,
 }
 
 impl fmt::Display for RevocationError {
