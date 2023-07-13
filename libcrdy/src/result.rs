@@ -6,9 +6,9 @@ use crate::disk::GptDiskError;
 use crate::launch::LaunchError;
 use crate::nx::NxError;
 use crate::page_alloc::PageAllocationError;
-use crate::pe::VbpubkError;
 use crate::revocation::RevocationError;
 use crate::tpm::TpmError;
+use crate::vbpubk::VbpubkError;
 use core::fmt;
 use vboot::LoadKernelError;
 

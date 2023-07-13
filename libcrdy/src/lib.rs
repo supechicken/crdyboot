@@ -20,6 +20,7 @@ mod pe;
 mod result;
 mod revocation;
 mod tpm;
+mod vbpubk;
 
 pub use linux::load_and_execute_kernel;
 pub use logging::set_log_level;

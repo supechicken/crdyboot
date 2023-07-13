@@ -45,7 +45,7 @@ To load the key at runtime, crdyboot first uses the [`LoadedImage`] UEFI
 protocol to get the executable's memory. Then it uses the [`object`]
 crate to parse the PE header and get the `.vbpubk` section data.
 
-See [`libcrdy/src/pe.rs`][pe.rs] for details of the implementation.
+See [`libcrdy/src/vbpubk.rs`][vbpubk.rs] for details of the implementation.
 
 ## Load and verify the kernel
 
@@ -118,7 +118,7 @@ See [`libcrdy/src/linux.rs`][linux.rs] for details of the implementation.
 [linux.rs]: ../libcrdy/src/linux.rs
 [load_kernel.rs]: ../vboot/src/load_kernel.rs
 [nx.rs]: ../libcrdy/src/nx.rs
-[pe.rs]: ../libcrdy/src/pe.rs
+[vbpubk.rs]: ../libcrdy/src/vbpubk.rs
 [revocation.rs]: ../libcrdy/src/revocation.rs
 [sbsigntools]: https://git.kernel.org/pub/scm/linux/kernel/git/jejb/sbsigntools.git
 [shim]: https://github.com/rhboot/shim
