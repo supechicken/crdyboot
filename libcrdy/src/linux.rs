@@ -6,11 +6,12 @@ use crate::arch::Arch;
 use crate::disk::GptDisk;
 use crate::launch::NextStage;
 use crate::page_alloc::ScopedPageAllocation;
-use crate::pe::PeInfo;
+use crate::pe::{get_ia32_compat_entry_point, get_primary_entry_point};
 use crate::tpm::extend_pcr_and_log;
 use crate::vbpubk::get_vbpubk_from_image;
 use crate::{nx, Error};
 use log::info;
+use object::read::pe::PeFile64;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::CString16;
@@ -44,15 +45,13 @@ fn execute_linux_kernel(
     let cmdline = CString16::try_from(cmdline.as_str())
         .map_err(|_| Error::CommandLineUcs2ConversionFailed)?;
 
-    let pe = PeInfo::parse(kernel.data()).map_err(Error::InvalidPe)?;
+    let pe = PeFile64::parse(kernel.data()).map_err(Error::InvalidPe)?;
 
-    nx::update_mem_attrs(&pe.pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
+    nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
-        Arch::X86_64 => pe.primary_entry_point(),
-        Arch::Ia32 => pe
-            .ia32_compat_entry_point()
-            .ok_or(Error::MissingIa32CompatEntryPoint)?,
+        Arch::X86_64 => get_primary_entry_point(&pe),
+        Arch::Ia32 => get_ia32_compat_entry_point(&pe).ok_or(Error::MissingIa32CompatEntryPoint)?,
     };
 
     let next_stage = NextStage {

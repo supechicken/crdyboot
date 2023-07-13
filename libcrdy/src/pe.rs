@@ -12,40 +12,23 @@ use object::pe::IMAGE_FILE_MACHINE_I386;
 use object::read::pe::{ImageOptionalHeader, PeFile64};
 use object::{Object, ObjectSection};
 
-/// Info about a PE executable.
-pub struct PeInfo<'a> {
-    pub pe: PeFile64<'a>,
+/// Primary entry point (as an offset).
+///
+/// When booting from a 64-bit UEFI environment, the normal PE entry
+/// point in the PE header can be used.
+pub fn get_primary_entry_point(pe: &PeFile64) -> u32 {
+    pe.nt_headers().optional_header.address_of_entry_point()
 }
 
-impl<'a> PeInfo<'a> {
-    /// Parse a PE executable.
-    pub fn parse(data: &'a [u8]) -> Result<Self, object::Error> {
-        let pe = PeFile64::parse(data)?;
-
-        Ok(Self { pe })
-    }
-
-    /// Primary entry point (as an offset).
-    ///
-    /// When booting from a 64-bit UEFI environment, the normal PE entry
-    /// point in the PE header can be used.
-    pub fn primary_entry_point(&self) -> u32 {
-        self.pe
-            .nt_headers()
-            .optional_header
-            .address_of_entry_point()
-    }
-
-    /// IA32 entry point (as an offset).
-    ///
-    /// When booting from a 32-bit UEFI environment, newer kernels can
-    /// provide a compatibility entry point. This requires a kernel with
-    /// this commit:
-    ///
-    ///    efi/x86: Implement mixed mode boot without the handover protocol
-    pub fn ia32_compat_entry_point(&self) -> Option<u32> {
-        find_ia32_compat_entry_point(&self.pe)
-    }
+/// IA32 entry point (as an offset).
+///
+/// When booting from a 32-bit UEFI environment, newer kernels can
+/// provide a compatibility entry point. This requires a kernel with
+/// this commit:
+///
+///    efi/x86: Implement mixed mode boot without the handover protocol
+pub fn get_ia32_compat_entry_point(pe: &PeFile64) -> Option<u32> {
+    find_ia32_compat_entry_point(pe)
 }
 
 #[derive(Debug, PartialEq)]
