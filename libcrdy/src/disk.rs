@@ -16,6 +16,9 @@ pub enum GptDiskError {
     /// The disk block size is zero.
     InvalidBlockSize,
 
+    /// The number of blocks cannot fit in [`u64`].
+    InvalidLastBlock,
+
     /// No handles support the [`BlockIO`] protocol.
     BlockIoProtocolMissing(Status),
 
@@ -38,6 +41,9 @@ impl Display for GptDiskError {
         match self {
             Self::InvalidBlockSize => {
                 write!(f, "disk block size is zero")
+            }
+            Self::InvalidLastBlock => {
+                write!(f, "number of blocks cannot fit in u64")
             }
             Self::BlockIoProtocolMissing(status) => {
                 write!(f, "no handles support the BlockIO protocol: {status}")
@@ -167,7 +173,11 @@ impl<'a> GptDisk<'a> {
 
         let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
             .ok_or(GptDiskError::InvalidBlockSize)?;
-        let lba_count = block_io.media().last_block() + 1;
+        let lba_count = block_io
+            .media()
+            .last_block()
+            .checked_add(1)
+            .ok_or(GptDiskError::InvalidLastBlock)?;
 
         Ok(GptDisk {
             block_io,
