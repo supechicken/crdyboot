@@ -171,7 +171,9 @@ impl NxSectionInfo {
 }
 
 /// Get an iterator over the PE sections.
-fn get_section_iter<'a>(pe: &PeFile64<'a>) -> impl Iterator<Item = NxSectionInfo> + 'a {
+fn get_section_iter<'a>(
+    pe: &PeFile64<'a>,
+) -> impl Iterator<Item = Result<NxSectionInfo, NxError>> + 'a {
     let data_ptr = pe.data().as_ptr();
     let section_table = pe.section_table();
 
@@ -186,12 +188,12 @@ fn get_section_iter<'a>(pe: &PeFile64<'a>) -> impl Iterator<Item = NxSectionInfo
             let (offset, len) = section.pe_address_range();
             info!("section {index}: offset={offset:#x}, len={len:#x}, characteristics={c:#x}");
 
-            NxSectionInfo {
+            Ok(NxSectionInfo {
                 address: base + u64::from(offset),
                 len: u64::from(len),
                 writable: (c & object::pe::IMAGE_SCN_MEM_WRITE) != 0,
                 executable: (c & object::pe::IMAGE_SCN_MEM_EXECUTE) != 0,
-            }
+            })
         })
 }
 
@@ -224,6 +226,7 @@ pub fn update_mem_attrs(pe: &PeFile64, boot_services: &BootServices) -> Result<(
         .map_err(|err| NxError::OpenProtocolFailed(err.status()))?;
 
     for section in get_section_iter(pe) {
+        let section = section?;
         let attrs = section.memory_attributes()?;
         let byte_region = section.page_aligned_byte_region()?;
 
