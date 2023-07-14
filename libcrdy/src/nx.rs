@@ -83,17 +83,19 @@ fn is_page_aligned(addr: PhysicalAddress) -> bool {
 }
 
 /// Round the address up to the nearest page size (4KiB).
-fn round_up_to_page_alignment(addr: PhysicalAddress) -> PhysicalAddress {
+fn round_up_to_page_alignment(addr: PhysicalAddress) -> Result<PhysicalAddress, NxError> {
+    // OK to unwrap: PAGE_SIZE is always 4096.
     let efi_page_size = u64::try_from(PAGE_SIZE).unwrap();
-    let r = addr % efi_page_size;
+    let r = addr.checked_rem(efi_page_size).unwrap();
+
     if r == 0 {
-        addr
+        Ok(addr)
     } else {
-        // `r` is less than `efi_page_size`, so this unwrap cannot fail.
+        // OK to unwrap: `r` is less than `efi_page_size`.
         let offset = efi_page_size.checked_sub(r).unwrap();
 
-        // Panic on overflow.
-        addr.checked_add(offset).unwrap()
+        addr.checked_add(offset)
+            .ok_or(NxError::InvalidSectionBounds)
     }
 }
 
@@ -167,10 +169,12 @@ impl NxSectionInfo {
     /// round the end address up.
     fn page_aligned_byte_region(&self) -> Result<Range<PhysicalAddress>, NxError> {
         if is_page_aligned(self.address) {
-            // Panic on overflow.
-            let end = self.address.checked_add(self.len).unwrap();
+            let end = self
+                .address
+                .checked_add(self.len)
+                .ok_or(NxError::InvalidSectionBounds)?;
 
-            Ok(self.address..round_up_to_page_alignment(end))
+            Ok(self.address..round_up_to_page_alignment(end)?)
         } else {
             Err(NxError::SectionStartNotPageAligned(self.address))
         }
@@ -274,13 +278,13 @@ mod tests {
 
     #[test]
     fn test_round_up_to_page_alignment() {
-        assert_eq!(round_up_to_page_alignment(0), 0);
-        assert_eq!(round_up_to_page_alignment(1), 4096);
-        assert_eq!(round_up_to_page_alignment(4095), 4096);
-        assert_eq!(round_up_to_page_alignment(4096), 4096);
-        assert_eq!(round_up_to_page_alignment(4097), 8192);
-        assert_eq!(round_up_to_page_alignment(8192), 8192);
-        assert_eq!(round_up_to_page_alignment(8193), 12288);
+        assert_eq!(round_up_to_page_alignment(0), Ok(0));
+        assert_eq!(round_up_to_page_alignment(1), Ok(4096));
+        assert_eq!(round_up_to_page_alignment(4095), Ok(4096));
+        assert_eq!(round_up_to_page_alignment(4096), Ok(4096));
+        assert_eq!(round_up_to_page_alignment(4097), Ok(8192));
+        assert_eq!(round_up_to_page_alignment(8192), Ok(8192));
+        assert_eq!(round_up_to_page_alignment(8193), Ok(12288));
     }
 
     #[test]
