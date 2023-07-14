@@ -22,7 +22,11 @@ use uefi::proto::security::MemoryProtection;
 use uefi::table::boot::{BootServices, MemoryAttribute, PAGE_SIZE};
 use uefi::Status;
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum NxError {
+    /// Arithmetic overflow occurred due to the PE section bounds.
+    InvalidSectionBounds,
+
     /// Failed to open the [`MemoryProtection`] protocol.
     ///
     /// If no handles support the protocol, it is not considered an
@@ -51,6 +55,9 @@ pub enum NxError {
 impl Display for NxError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Self::InvalidSectionBounds => {
+                write!(f, "arithmetic overflow occurred due to section bounds")
+            }
             Self::OpenProtocolFailed(status) => write!(f, "failed to open protocol: {status}"),
             Self::ClearAttributesFailed(status, region) => {
                 write!(f, "failed to clear attributes in {region:#016x?}: {status}")
@@ -188,8 +195,12 @@ fn get_section_iter<'a>(
             let (offset, len) = section.pe_address_range();
             info!("section {index}: offset={offset:#x}, len={len:#x}, characteristics={c:#x}");
 
+            let address = base
+                .checked_add(u64::from(offset))
+                .ok_or(NxError::InvalidSectionBounds)?;
+
             Ok(NxSectionInfo {
-                address: base + u64::from(offset),
+                address,
                 len: u64::from(len),
                 writable: (c & object::pe::IMAGE_SCN_MEM_WRITE) != 0,
                 executable: (c & object::pe::IMAGE_SCN_MEM_EXECUTE) != 0,
