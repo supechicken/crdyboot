@@ -4,17 +4,17 @@
 
 use crate::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
-use core::ops::Range;
 use core::slice;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
 use uefi::Status;
 
+#[derive(Clone, Copy)]
 pub enum VbpubkError {
     ImageTooBig(u64),
     InvalidPe(object::Error),
-    InvalidSectionBounds(Range<usize>),
+    InvalidSectionBounds { addr: usize, len: usize },
     MissingSection,
     MultipleSections,
     OpenLoadedImageProtocolFailed(Status),
@@ -25,8 +25,8 @@ impl Display for VbpubkError {
         match self {
             Self::ImageTooBig(size) => write!(f, "image is larger than usize: {size}"),
             Self::InvalidPe(error) => write!(f, "invalid PE: {error}"),
-            Self::InvalidSectionBounds(range) => {
-                write!(f, "invalid section bounds: {range:#016x?}")
+            Self::InvalidSectionBounds { addr, len } => {
+                write!(f, "invalid section bounds: addr={addr:#016x}, len={len:#x}")
             }
             Self::MissingSection => write!(f, "missing .vbpubk section"),
             Self::MultipleSections => write!(f, "multiple .vbpubk sections"),
@@ -98,10 +98,13 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], Vbpu
     info!("{section_name} section: offset={section_addr:#x}, len={section_len:#x}");
 
     // Get the section's data as a slice.
-    let section_range = section_addr..section_addr + section_len;
-    let section_data = image_data
-        .get(section_range.clone())
-        .ok_or(VbpubkError::InvalidSectionBounds(section_range))?;
+    let err = VbpubkError::InvalidSectionBounds {
+        addr: section_addr,
+        len: section_len,
+    };
+    let section_end = section_addr.checked_add(section_len).ok_or(err)?;
+    let section_range = section_addr..section_end;
+    let section_data = image_data.get(section_range).ok_or(err)?;
 
     Ok(section_data)
 }
