@@ -53,8 +53,9 @@ impl<'a> CompatEntryIter<'a> {
     }
 
     fn read_bytes<const N: usize>(&mut self) -> Option<[u8; N]> {
-        let bytes = self.data.get(self.offset..self.offset + N)?;
-        self.offset += N;
+        let end = self.offset.checked_add(N)?;
+        let bytes = self.data.get(self.offset..end)?;
+        self.offset = end;
         bytes.try_into().ok()
     }
 
@@ -112,7 +113,7 @@ impl<'a> Iterator for CompatEntryIter<'a> {
         };
 
         // Update iterator offset to point at the next entry.
-        self.offset = orig_offset + usize::from(entry_size);
+        self.offset = orig_offset.checked_add(usize::from(entry_size))?;
 
         Some(CompatEntry {
             entry_type,
