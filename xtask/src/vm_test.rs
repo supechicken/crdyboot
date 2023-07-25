@@ -16,6 +16,13 @@ use std::io::{BufRead, BufReader, Read};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 
+/// Timeout used for error tests.
+///
+/// This can be relatively short since error tests fail early in boot
+/// (we don't have to wait for SSH to come up like in the success
+/// tests).
+const VM_ERROR_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Make sure the SSH key is the expected test key.
 fn validate_test_key(key_path: &Utf8Path) -> Result<()> {
     let output = Command::with_args(
@@ -130,7 +137,7 @@ fn launch_test_disk_and_expect_vboot_error(conf: &Config, expected_error: &str) 
         ovmf: conf.ovmf_paths(Arch::X64),
         secure_boot: true,
         snapshot: true,
-        timeout: Some(Duration::from_secs(30)),
+        timeout: Some(VM_ERROR_TIMEOUT),
         tpm_version: None,
     };
     let vm = opts.spawn_disk_image(conf)?;
@@ -228,7 +235,7 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
         ovmf: conf.ovmf_paths(Arch::X64),
         secure_boot: true,
         snapshot: true,
-        timeout: Some(Duration::from_secs(30)),
+        timeout: Some(VM_ERROR_TIMEOUT),
         tpm_version: None,
     };
     let vm = opts.spawn_disk_image(conf)?;
