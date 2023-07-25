@@ -123,13 +123,17 @@ fn create_test_disk(conf: &Config) -> Result<()> {
 
 /// Helper for testing vboot errors.
 ///
-/// This launches the test disk in a VM and monitors the output until
-/// `expected_error` is found. After that error is found, it looks for a
-/// generic "boot failed" error to confirm the boot really is failed.
+/// This launches the test disk in a VM and monitors the output, looking
+/// for each error string in `expected_errors` (in order). Once all
+/// expected errors have been output by the VM, the VM is killed and
+/// `Ok` is returned.
 ///
-/// If the expected errors are not found, the VM will be killed after a
-/// timeout and an error will be returned.
-fn launch_test_disk_and_expect_vboot_error(conf: &Config, expected_error: &str) -> Result<()> {
+/// If the expected errors do not occur within `VM_ERROR_TIMEOUT`, the
+/// VM is killed and an error is returned.
+fn launch_test_disk_and_expect_errors(conf: &Config, expected_errors: &[&str]) -> Result<()> {
+    // At least one expected error is required.
+    assert!(!expected_errors.is_empty());
+
     let opts = QemuOpts {
         capture_output: true,
         display: Display::None,
@@ -144,29 +148,25 @@ fn launch_test_disk_and_expect_vboot_error(conf: &Config, expected_error: &str) 
 
     let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
     let mut reader = BufReader::new(stdout);
-    let mut line = String::new();
-    let mut got_expected_error = false;
-    loop {
-        line.clear();
+    let mut expected_errors = expected_errors.to_vec();
+
+    while let Some(next_expected_error) = expected_errors.first() {
+        let mut line = String::new();
         if reader.read_line(&mut line)? == 0 {
-            // EOF reached,
+            // EOF reached, which means the VM has stopped.
             bail!("QEMU no longer running");
         }
         print!(">>> {line}");
 
-        if line.contains(expected_error) {
-            got_expected_error = true;
-        } else if line.contains("boot failed: failed to load kernel") {
-            if got_expected_error {
-                // The expected failure occurred, test is
-                // successful. Kill the VM.
-                vm.qemu.lock().unwrap().kill().unwrap();
-                return Ok(());
-            } else {
-                bail!("didn't get expected error: {expected_error}");
-            }
+        if line.contains(next_expected_error) {
+            expected_errors.remove(0);
         }
     }
+
+    // The expected errors have all occurred, test is successful. Kill
+    // the VM.
+    vm.qemu.lock().unwrap().kill().unwrap();
+    Ok(())
 }
 
 /// Test failed boot due to corrupt KERN-A.
@@ -184,8 +184,11 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 
     corrupt_kern_a(&conf.test_disk_path())?;
 
-    let expected_error = "Kernel data verification failed";
-    launch_test_disk_and_expect_vboot_error(conf, expected_error)
+    let expected_errors = &[
+        "Kernel data verification failed",
+        "boot failed: failed to load kernel",
+    ];
+    launch_test_disk_and_expect_errors(conf, expected_errors)
 }
 
 /// Wrapper that prints `text` when dropped if `print` is true. This is
@@ -280,8 +283,11 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
 
-    let expected_error = "vb2api_inject_kernel_subkey failed";
-    launch_test_disk_and_expect_vboot_error(conf, expected_error)
+    let expected_errors = &[
+        "vb2api_inject_kernel_subkey failed",
+        "boot failed: failed to load kernel",
+    ];
+    launch_test_disk_and_expect_errors(conf, expected_errors)
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
