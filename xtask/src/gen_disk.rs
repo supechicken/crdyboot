@@ -8,7 +8,7 @@ use crate::secure_boot::{self, SecureBootKeyPaths};
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
-use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
+use fatfs::{FileSystem, FormatVolumeOptions, FsOptions, ReadWriteSeek};
 use fs_err::{self as fs, File, OpenOptions};
 use gpt_disk_types::{guid, BlockSize, GptPartitionType, Guid, Lba, LbaRangeInclusive};
 use gptman::{GPTPartitionEntry, GPT};
@@ -293,6 +293,25 @@ where
     sys_data_range.write_bytes_to_file(&mut disk_file, &sys_part_data)
 }
 
+/// Create a file named `file_name` to a FAT filesystem in `dir`.
+///
+/// If the file already exists, it will be deleted before writing the
+/// new file.
+fn fat_write_file<T: ReadWriteSeek>(
+    dir: &fatfs::Dir<T>,
+    file_name: &str,
+    data: &[u8],
+) -> Result<()> {
+    // Delete the file if it already exists.
+    let _ = dir.remove(file_name);
+
+    // Write out the new data.
+    let mut f = dir.create_file(file_name)?;
+    f.write_all(data)?;
+
+    Ok(())
+}
+
 /// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
 /// system partition in the disk image at `disk_path`.
 pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
@@ -309,12 +328,7 @@ pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()>
 
             let src = fs::read(entry.path())?;
 
-            // Delete the file if it already exists.
-            let _ = dst_boot_dir.remove(file_name);
-
-            // Write out the new data.
-            let mut dst = dst_boot_dir.create_file(file_name)?;
-            dst.write_all(&src)?;
+            fat_write_file(&dst_boot_dir, file_name, &src)?;
         }
 
         Ok(())
@@ -580,9 +594,7 @@ pub fn corrupt_pubkey_section(
         }
 
         // Write the modified file out.
-        boot_dir.remove(file_name)?;
-        let mut f = boot_dir.create_file(file_name)?;
-        f.write_all(&data)?;
+        fat_write_file(&boot_dir, file_name, &data)?;
 
         Ok(())
     })
