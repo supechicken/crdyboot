@@ -210,6 +210,9 @@ impl QemuOpts {
         if let Some(swtpm) = &swtpm {
             cmd.args(swtpm.qemu_args());
         }
+        // Print the qemu command before spawning it.
+        println!("{}", format!("{:?}", cmd).replace('\"', ""));
+
         let process = Arc::new(Mutex::new(ScopedChild::new(cmd.spawn()?)));
 
         // If a timeout is set, launch a background thread to kill the

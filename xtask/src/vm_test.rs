@@ -145,6 +145,7 @@ fn launch_test_disk_and_expect_vboot_error(conf: &Config, expected_error: &str) 
             // EOF reached,
             bail!("QEMU no longer running");
         }
+        print!(">>> {line}");
 
         if line.contains(expected_error) {
             got_expected_error = true;
