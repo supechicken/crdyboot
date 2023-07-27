@@ -3,19 +3,84 @@
 // found in the LICENSE file.
 
 use crate::arch::Arch;
-use crate::disk::GptDisk;
+use crate::disk::{GptDisk, GptDiskError};
 use crate::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
-use crate::launch::NextStage;
-use crate::page_alloc::ScopedPageAllocation;
-use crate::tpm::extend_pcr_and_log;
-use crate::vbpubk::get_vbpubk_from_image;
-use crate::{nx, Error};
+use crate::launch::{LaunchError, NextStage};
+use crate::nx::{self, NxError};
+use crate::page_alloc::{PageAllocationError, ScopedPageAllocation};
+use crate::revocation::RevocationError;
+use crate::tpm::{extend_pcr_and_log, TpmError};
+use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
+use core::fmt::{self, Display, Formatter};
 use log::info;
 use object::read::pe::PeFile64;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::CString16;
-use vboot::{LoadKernelInputs, LoadedKernel};
+use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
+
+pub enum Error {
+    /// Failed to allocate memory.
+    Allocation(PageAllocationError),
+
+    /// Self-revocation check failed.
+    Revocation(RevocationError),
+
+    /// The kernel partition is missing the command line data.
+    GetCommandLineFailed,
+
+    /// The command line contains characters that cannot be encoded as
+    /// UCS-2.
+    CommandLineUcs2ConversionFailed,
+
+    /// Failed to get the current executable's vbpubk section.
+    Vbpubk(VbpubkError),
+
+    /// Failed to open the disk for reads and writes.
+    GptDisk(GptDiskError),
+
+    /// Vboot failed to find a valid kernel partition.
+    LoadKernelFailed(LoadKernelError),
+
+    /// Failed to parse the kernel as a PE executable.
+    InvalidPe(object::Error),
+
+    /// The kernel does not have an entry point for booting from 32-bit
+    /// firmware.
+    MissingIa32CompatEntryPoint,
+
+    /// Failed to update memory attributes.
+    MemoryProtection(NxError),
+
+    /// Failed to launch the kernel.
+    Launch(LaunchError),
+
+    /// Failed to measure the kernel into the TPM.
+    Tpm(TpmError),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Allocation(err) => write!(f, "failed to allocate memory: {err}"),
+            Self::Revocation(err) => write!(f, "self-revocation check failed: {err}"),
+            Self::GetCommandLineFailed => write!(f, "failed to get kernel command line"),
+            Self::CommandLineUcs2ConversionFailed => {
+                write!(f, "failed to convert kernel command line to UCS-2")
+            }
+            Self::Vbpubk(err) => write!(f, "failed to get packed public key: {err}"),
+            Self::GptDisk(err) => write!(f, "failed to open GPT disk: {err}"),
+            Self::LoadKernelFailed(err) => write!(f, "failed to load kernel: {err}"),
+            Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
+            Self::MissingIa32CompatEntryPoint => {
+                write!(f, "missing ia32 compatibility entry point")
+            }
+            Self::MemoryProtection(err) => write!(f, "failed to set up memory protection: {err}"),
+            Self::Launch(err) => write!(f, "failed to launch next stage: {err}"),
+            Self::Tpm(err) => write!(f, "TPM error: {err}"),
+        }
+    }
+}
 
 /// Hand off control to the Linux EFI stub.
 ///

@@ -4,7 +4,6 @@
 
 #![deny(clippy::arithmetic_side_effects)]
 #![deny(clippy::pedantic)]
-#![allow(clippy::enum_glob_use)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::module_name_repetitions)]
 // Turn off std, except when running tests.
@@ -18,14 +17,12 @@ mod linux;
 mod logging;
 mod nx;
 mod page_alloc;
-mod result;
 mod revocation;
 mod tpm;
 mod vbpubk;
 
-pub use linux::load_and_execute_kernel;
+pub use linux::{load_and_execute_kernel, Error};
 pub use logging::set_log_level;
-pub use result::Error;
 pub use revocation::self_revocation_check;
 
 /// On the targets we care about, `usize` is always at least as large as `u32`.
