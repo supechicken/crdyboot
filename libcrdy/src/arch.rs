@@ -27,3 +27,11 @@ impl Arch {
         }
     }
 }
+
+// The PE layout is different between the 32-bit and 64-bit targets.
+// Expose a type alias for a PE file appropriate for the arch of the
+// currently-running executable.
+#[cfg(target_pointer_width = "32")]
+pub type PeFileForCurrentArch<'a> = object::read::pe::PeFile32<'a>;
+#[cfg(target_pointer_width = "64")]
+pub type PeFileForCurrentArch<'a> = object::read::pe::PeFile64<'a>;

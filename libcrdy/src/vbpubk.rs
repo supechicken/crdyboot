@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::arch::PeFileForCurrentArch;
 use crate::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
 use core::slice;
@@ -68,15 +69,8 @@ fn get_loaded_image_data<'boot>(
 /// The returned slice is valid for as long as boot services are active
 /// (as enforced by the lifetime).
 pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
-    // The PE layout is different between the 32-bit and 64-bit targets;
-    // make a `PeFile` type alias to the appropriate type.
-    #[cfg(target_pointer_width = "32")]
-    type PeFile<'a> = object::read::pe::PeFile32<'a>;
-    #[cfg(target_pointer_width = "64")]
-    type PeFile<'a> = object::read::pe::PeFile64<'a>;
-
     let image_data = get_loaded_image_data(boot_services)?;
-    let pe = PeFile::parse(image_data).map_err(VbpubkError::InvalidPe)?;
+    let pe = PeFileForCurrentArch::parse(image_data).map_err(VbpubkError::InvalidPe)?;
 
     // Find the target section.
     let section_name = ".vbpubk";
