@@ -19,7 +19,7 @@ use uefi::table::{Boot, SystemTable};
 use uefi::CString16;
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 
-pub enum Error {
+pub enum CrdybootError {
     /// Failed to allocate memory.
     Allocation(PageAllocationError),
 
@@ -59,7 +59,7 @@ pub enum Error {
     Tpm(TpmError),
 }
 
-impl Display for Error {
+impl Display for CrdybootError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Allocation(err) => write!(f, "failed to allocate memory: {err}"),
@@ -102,21 +102,26 @@ impl Display for Error {
 fn execute_linux_kernel(
     kernel: &LoadedKernel,
     system_table: SystemTable<Boot>,
-) -> Result<(), Error> {
-    let cmdline = kernel.command_line().ok_or(Error::GetCommandLineFailed)?;
+) -> Result<(), CrdybootError> {
+    let cmdline = kernel
+        .command_line()
+        .ok_or(CrdybootError::GetCommandLineFailed)?;
     info!("command line: {cmdline}");
 
     // Convert the command-line to UCS-2.
     let cmdline = CString16::try_from(cmdline.as_str())
-        .map_err(|_| Error::CommandLineUcs2ConversionFailed)?;
+        .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)?;
 
-    let pe = PeFile64::parse(kernel.data()).map_err(Error::InvalidPe)?;
+    let pe = PeFile64::parse(kernel.data()).map_err(CrdybootError::InvalidPe)?;
 
-    nx::update_mem_attrs(&pe, system_table.boot_services()).map_err(Error::MemoryProtection)?;
+    nx::update_mem_attrs(&pe, system_table.boot_services())
+        .map_err(CrdybootError::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
         Arch::X86_64 => get_primary_entry_point(&pe),
-        Arch::Ia32 => get_ia32_compat_entry_point(&pe).ok_or(Error::MissingIa32CompatEntryPoint)?,
+        Arch::Ia32 => {
+            get_ia32_compat_entry_point(&pe).ok_or(CrdybootError::MissingIa32CompatEntryPoint)?
+        }
     };
 
     let next_stage = NextStage {
@@ -124,12 +129,12 @@ fn execute_linux_kernel(
         load_options: cmdline.as_bytes(),
         entry_point_offset,
     };
-    unsafe { next_stage.launch(system_table) }.map_err(Error::Launch)
+    unsafe { next_stage.launch(system_table) }.map_err(CrdybootError::Launch)
 }
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Error> {
+pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         // Safety: this system table clone will remain valid until
         // ExitBootServices is called. That won't happen until after the
@@ -140,7 +145,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Er
         MemoryType::LOADER_DATA,
         LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
     )
-    .map_err(Error::Allocation)?;
+    .map_err(CrdybootError::Allocation)?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot. Allocating 64MiB should be
@@ -159,11 +164,12 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Er
         // 64 MiB.
         64 * 1024 * 1024,
     )
-    .map_err(Error::Allocation)?;
+    .map_err(CrdybootError::Allocation)?;
 
     let boot_services = system_table.boot_services();
 
-    let kernel_verification_key = get_vbpubk_from_image(boot_services).map_err(Error::Vbpubk)?;
+    let kernel_verification_key =
+        get_vbpubk_from_image(boot_services).map_err(CrdybootError::Vbpubk)?;
     info!(
         "kernel_verification_key len={}",
         kernel_verification_key.len()
@@ -175,15 +181,15 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Er
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new(boot_services).map_err(Error::GptDisk)?,
+        &mut GptDisk::new(boot_services).map_err(CrdybootError::GptDisk)?,
     )
-    .map_err(Error::LoadKernelFailed)?;
+    .map_err(CrdybootError::LoadKernelFailed)?;
 
     // Go ahead and free the workbuf, not needed anymore.
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(system_table.boot_services(), kernel.data()).map_err(Error::Tpm)?;
+    extend_pcr_and_log(system_table.boot_services(), kernel.data()).map_err(CrdybootError::Tpm)?;
 
     execute_linux_kernel(&kernel, system_table)
 }

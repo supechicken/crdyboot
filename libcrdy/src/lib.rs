@@ -21,7 +21,7 @@ mod revocation;
 mod tpm;
 mod vbpubk;
 
-pub use linux::{load_and_execute_kernel, Error};
+pub use linux::{load_and_execute_kernel, CrdybootError};
 pub use logging::set_log_level;
 pub use revocation::self_revocation_check;
 
