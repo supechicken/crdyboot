@@ -121,6 +121,11 @@ impl<'a> NextStage<'a> {
     /// Launch the next executable stage. Once the new image is
     /// launched, it is not expected to ever return; if it does then
     /// this function will panic.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the image data and entry point
+    /// provide a valid UEFI target to execute.
     pub unsafe fn launch(self, system_table: SystemTable<Boot>) -> Result<(), LaunchError> {
         let image_handle = system_table.boot_services().image_handle();
         self.modify_loaded_image(system_table.boot_services(), image_handle)?;
