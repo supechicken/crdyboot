@@ -7,7 +7,7 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-log = "0.4.0"
+log = { workspace = true }
 printf-compat = { version = "0.1.1", default-features = false }
 uguid = "2.0.0"
 

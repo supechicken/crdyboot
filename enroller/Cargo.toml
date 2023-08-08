@@ -7,9 +7,9 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-log = "0.4.0"
-uefi = { version = "0.23.0", default-features = false, features = ["alloc"] }
-uefi-services = "0.20.0"
+log = { workspace = true }
+uefi = { workspace = true }
+uefi-services = { workspace = true }
 
 [features]
 shim_verbose = []
