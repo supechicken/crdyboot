@@ -11,6 +11,7 @@ use object::{Object, ObjectSection};
 ///
 /// When booting from a 64-bit UEFI environment, the normal PE entry
 /// point in the PE header can be used.
+#[must_use]
 pub fn get_primary_entry_point(pe: &PeFile64) -> u32 {
     pe.nt_headers().optional_header.address_of_entry_point()
 }
@@ -22,6 +23,7 @@ pub fn get_primary_entry_point(pe: &PeFile64) -> u32 {
 /// this commit:
 ///
 ///    efi/x86: Implement mixed mode boot without the handover protocol
+#[must_use]
 pub fn get_ia32_compat_entry_point(pe: &PeFile64) -> Option<u32> {
     find_ia32_compat_entry_point(pe)
 }

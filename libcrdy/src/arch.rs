@@ -15,6 +15,7 @@ impl Arch {
     /// Get the architecture of the currently-running executable.
     ///
     /// This will fail to compile on unsupported targets.
+    #[must_use]
     pub fn get_current_exe_arch() -> Self {
         #[cfg(target_arch = "x86")]
         {

@@ -5,6 +5,7 @@
 /// Convert a `u32` to a `usize`.
 ///
 /// On the targets we care about, `usize` is always at least as large as `u32`.
+#[must_use]
 pub fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
 }
@@ -12,6 +13,7 @@ pub fn u32_to_usize(v: u32) -> usize {
 /// Convert a `usize` to a `u64`.
 ///
 /// On the targets we care about, `u64` is always at least as large as `usize`.
+#[must_use]
 pub fn usize_to_u64(v: usize) -> u64 {
     v.try_into().expect("size of u64 is smaller than usize")
 }
