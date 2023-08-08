@@ -400,13 +400,16 @@ fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
 }
 
 fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
-    run_tests_for_package(Package::Xtask, Miri(false))?;
-    run_tests_for_package(Package::Vboot, Miri(false))?;
-    run_tests_for_package(Package::Libcrdy, Miri(false))?;
+    let packages = [Package::Xtask, Package::Vboot, Package::Libcrdy];
+
+    for package in packages {
+        run_tests_for_package(package, Miri(false))?;
+    }
 
     if !action.no_miri {
-        run_tests_for_package(Package::Vboot, Miri(true))?;
-        run_tests_for_package(Package::Libcrdy, Miri(true))?;
+        for package in packages {
+            run_tests_for_package(package, Miri(true))?;
+        }
     }
 
     if action.vm_tests {
