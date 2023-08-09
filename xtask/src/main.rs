@@ -400,7 +400,12 @@ fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
 }
 
 fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
-    let packages = [Package::Xtask, Package::Vboot, Package::Libcrdy];
+    let packages = [
+        Package::Xtask,
+        Package::Vboot,
+        Package::Libcrdy,
+        Package::Crdyboot,
+    ];
 
     for package in packages {
         run_tests_for_package(package, Miri(false))?;
