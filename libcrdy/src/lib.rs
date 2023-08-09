@@ -19,6 +19,7 @@ mod nx;
 mod page_alloc;
 mod revocation;
 mod tpm;
+pub mod uefi_services;
 mod util;
 mod vbpubk;
 
