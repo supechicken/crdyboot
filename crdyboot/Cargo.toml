@@ -8,5 +8,5 @@ version.workspace = true
 
 [dependencies]
 libcrdy = { path = "../libcrdy" }
-uefi = { workspace = true }
-uefi-services = { workspace = true }
+uefi.workspace = true
+uefi-services.workspace = true

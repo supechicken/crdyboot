@@ -7,7 +7,7 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-log = { workspace = true }
-object = { workspace = true }
-uefi = { workspace = true }
+log.workspace = true
+object.workspace = true
+uefi.workspace = true
 vboot = { path = "../vboot" }
