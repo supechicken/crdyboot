@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::u32_to_usize;
+use crate::util::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use log::info;

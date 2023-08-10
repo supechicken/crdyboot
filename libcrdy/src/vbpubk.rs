@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use crate::arch::PeFileForCurrentArch;
-use crate::u32_to_usize;
+use crate::util::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
 use core::slice;
 use log::info;
