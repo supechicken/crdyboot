@@ -11,6 +11,7 @@
 //! more information:
 //! <https://techcommunity.microsoft.com/t5/hardware-dev-center/new-uefi-ca-memory-mitigation-requirements-for-signing/ba-p/3608714>
 
+use crate::util::usize_to_u64;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
@@ -84,8 +85,8 @@ fn is_page_aligned(addr: PhysicalAddress) -> bool {
 
 /// Round the address up to the nearest page size (4KiB).
 fn round_up_to_page_alignment(addr: PhysicalAddress) -> Result<PhysicalAddress, NxError> {
+    let efi_page_size = usize_to_u64(PAGE_SIZE);
     // OK to unwrap: PAGE_SIZE is always 4096.
-    let efi_page_size = u64::try_from(PAGE_SIZE).unwrap();
     let r = addr.checked_rem(efi_page_size).unwrap();
 
     if r == 0 {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::util::u32_to_usize;
+use crate::util::{u32_to_usize, usize_to_u64};
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use log::info;
@@ -110,7 +110,7 @@ impl<'a> NextStage<'a> {
         }
 
         // Set image data.
-        let image_size = u64::try_from(self.image_data.len()).expect("usize is larger than u64");
+        let image_size = usize_to_u64(self.image_data.len());
         unsafe {
             li.set_image(self.image_data.as_ptr().cast(), image_size);
         }

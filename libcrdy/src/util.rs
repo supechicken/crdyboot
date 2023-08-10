@@ -9,6 +9,13 @@ pub fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
 }
 
+/// Convert a `usize` to a `u64`.
+///
+/// On the targets we care about, `u64` is always at least as large as `usize`.
+pub fn usize_to_u64(v: usize) -> u64 {
+    v.try_into().expect("size of u64 is smaller than usize")
+}
+
 /// Embed data in a section of the executable.
 ///
 /// This macro takes three arguments:
