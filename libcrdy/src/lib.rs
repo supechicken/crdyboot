@@ -10,7 +10,6 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod arch;
-pub mod disk;
 pub mod entry_point;
 pub mod launch;
 mod logging;

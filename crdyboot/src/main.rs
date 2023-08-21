@@ -9,6 +9,7 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
+mod disk;
 mod linux;
 mod revocation;
 

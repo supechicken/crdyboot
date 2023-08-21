@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::disk::{GptDisk, GptDiskError};
 use crate::revocation::RevocationError;
 use core::fmt::{self, Display, Formatter};
 use libcrdy::arch::Arch;
-use libcrdy::disk::{GptDisk, GptDiskError};
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
