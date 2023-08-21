@@ -177,8 +177,11 @@ name = "crdyboot"
 version = "1.0.0"
 dependencies = [
  "libcrdy",
+ "log",
+ "object",
  "uefi",
  "uefi-services",
+ "vboot",
 ]
 
 [[package]]

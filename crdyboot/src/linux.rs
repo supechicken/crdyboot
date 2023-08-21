@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::arch::Arch;
-use crate::disk::{GptDisk, GptDiskError};
-use crate::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
-use crate::launch::{LaunchError, NextStage};
-use crate::nx::{self, NxError};
-use crate::page_alloc::{PageAllocationError, ScopedPageAllocation};
-use crate::revocation::RevocationError;
-use crate::tpm::{extend_pcr_and_log, TpmError};
-use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use core::fmt::{self, Display, Formatter};
+use libcrdy::arch::Arch;
+use libcrdy::disk::{GptDisk, GptDiskError};
+use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
+use libcrdy::launch::{LaunchError, NextStage};
+use libcrdy::nx::{self, NxError};
+use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
+use libcrdy::revocation::RevocationError;
+use libcrdy::tpm::{extend_pcr_and_log, TpmError};
+use libcrdy::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use log::info;
 use object::read::pe::PeFile64;
 use uefi::table::boot::{AllocateType, MemoryType};

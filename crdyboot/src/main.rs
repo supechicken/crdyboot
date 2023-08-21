@@ -9,9 +9,10 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
-use libcrdy::{
-    embed_section, load_and_execute_kernel, self_revocation_check, set_log_level, CrdybootError,
-};
+mod linux;
+
+use libcrdy::{embed_section, self_revocation_check, set_log_level};
+use linux::{load_and_execute_kernel, CrdybootError};
 use uefi::prelude::*;
 
 #[cfg(not(target_os = "uefi"))]

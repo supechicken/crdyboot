@@ -9,20 +9,18 @@
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 
-mod arch;
-mod disk;
-mod entry_point;
-mod launch;
-mod linux;
+pub mod arch;
+pub mod disk;
+pub mod entry_point;
+pub mod launch;
 mod logging;
-mod nx;
-mod page_alloc;
-mod revocation;
-mod tpm;
+pub mod nx;
+pub mod page_alloc;
+pub mod revocation;
+pub mod tpm;
 pub mod uefi_services;
 mod util;
-mod vbpubk;
+pub mod vbpubk;
 
-pub use linux::{load_and_execute_kernel, CrdybootError};
 pub use logging::set_log_level;
 pub use revocation::self_revocation_check;
