@@ -16,11 +16,9 @@ pub mod launch;
 mod logging;
 pub mod nx;
 pub mod page_alloc;
-pub mod revocation;
 pub mod tpm;
 pub mod uefi_services;
 mod util;
 pub mod vbpubk;
 
 pub use logging::set_log_level;
-pub use revocation::self_revocation_check;
