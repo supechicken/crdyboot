@@ -17,7 +17,6 @@ pub mod nx;
 pub mod page_alloc;
 pub mod tpm;
 pub mod uefi_services;
-mod util;
-pub mod vbpubk;
+pub mod util;
 
 pub use logging::set_log_level;

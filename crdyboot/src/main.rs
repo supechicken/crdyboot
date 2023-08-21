@@ -12,6 +12,7 @@
 mod disk;
 mod linux;
 mod revocation;
+mod vbpubk;
 
 use libcrdy::{embed_section, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
