@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "uefi", no_main)]
+#![cfg_attr(target_os = "uefi", no_std)]
 
 use core::mem;
 use log::info;
 use uefi::guid;
 use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
+
+#[cfg(not(target_os = "uefi"))]
+use libcrdy::uefi_services;
 
 #[entry]
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {

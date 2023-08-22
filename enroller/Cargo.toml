@@ -7,8 +7,11 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+libcrdy = { path = "../libcrdy" }
 log.workspace = true
 uefi.workspace = true
+
+[target.'cfg(target_os = "uefi")'.dependencies]
 uefi-services.workspace = true
 
 [features]

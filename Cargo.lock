@@ -210,6 +210,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 name = "enroller"
 version = "1.0.0"
 dependencies = [
+ "libcrdy",
  "log",
  "uefi",
  "uefi-services",
