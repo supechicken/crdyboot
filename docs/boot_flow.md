@@ -28,7 +28,7 @@ hashes or certificates to revoke. That requires more space to store than
 component revocation, which is a problem given the space constraints of
 UEFI's NVRAM.
 
-See [`libcrdy/src/revocation.rs`][revocation.rs] for details of the
+See [`crdyboot/src/revocation.rs`][revocation.rs] for details of the
 implementation.
 
 ## Load the embedded public key
@@ -45,7 +45,7 @@ To load the key at runtime, crdyboot first uses the [`LoadedImage`] UEFI
 protocol to get the executable's memory. Then it uses the [`object`]
 crate to parse the PE header and get the `.vbpubk` section data.
 
-See [`libcrdy/src/vbpubk.rs`][vbpubk.rs] for details of the implementation.
+See [`crdyboot/src/vbpubk.rs`][vbpubk.rs] for details of the implementation.
 
 ## Load and verify the kernel
 
@@ -58,7 +58,7 @@ predates it.
 
 In order to perform disk IO operations, vboot requires the calling code
 to provide certain callbacks. The actual disk operations are implemented
-using the UEFI [`BlockIO`] protocol in [libcrdy/src/disk.rs][disk.rs].
+using the UEFI [`BlockIO`] protocol in [crdyboot/src/disk.rs][disk.rs].
 
 Vboot uses partition attributes to determine which partition is
 preferred, and verifies the signature of the contents against a public
@@ -101,7 +101,7 @@ header of the kernel (which is present thanks to the EFI boot stub). For
 section contains additional entry points. We parse that data to get the
 32-bit one.
 
-See [`libcrdy/src/linux.rs`][linux.rs] for details of the implementation.
+See [`crdyboot/src/linux.rs`][linux.rs] for details of the implementation.
 
 [EFI boot stub]: https://docs.kernel.org/admin-guide/efi-stub.html
 [GPT]: https://en.wikipedia.org/wiki/GUID_Partition_Table
@@ -112,14 +112,14 @@ See [`libcrdy/src/linux.rs`][linux.rs] for details of the implementation.
 [`BlockIO`]: https://uefi.org/specs/UEFI/2.10/13_Protocols_Media_Access.html#block-i-o-protocol
 [`LoadedImage`]: https://uefi.org/specs/UEFI/2.10/09_Protocols_EFI_Loaded_Image.html
 [`object`]: https://crates.io/crates/object
-[disk.rs]: ../libcrdy/src/disk.rs
+[disk.rs]: ../crdyboot/src/disk.rs
 [futility]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/+/refs/heads/main/futility/
 [kernel partition format]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/disk_format.md#Kernel-partition-format
-[linux.rs]: ../libcrdy/src/linux.rs
+[linux.rs]: ../crdyboot/src/linux.rs
 [load_kernel.rs]: ../vboot/src/load_kernel.rs
 [nx.rs]: ../libcrdy/src/nx.rs
-[vbpubk.rs]: ../libcrdy/src/vbpubk.rs
-[revocation.rs]: ../libcrdy/src/revocation.rs
+[vbpubk.rs]: ../crdyboot/src/vbpubk.rs
+[revocation.rs]: ../crdyboot/src/revocation.rs
 [sbsigntools]: https://git.kernel.org/pub/scm/linux/kernel/git/jejb/sbsigntools.git
 [shim]: https://github.com/rhboot/shim
 [tpm.rs]: ../libcrdy/src/tpm.rs
