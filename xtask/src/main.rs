@@ -141,8 +141,6 @@ struct SetupAction {
     ovmf32_vars: Option<Utf8PathBuf>,
 }
 
-struct Miri(bool);
-
 /// Run tests.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "test")]
@@ -388,33 +386,11 @@ fn run_clippy() -> Result<()> {
     Ok(())
 }
 
-fn run_tests_for_package(package: Package, miri: Miri) -> Result<()> {
-    let mut cmd = Command::new("cargo");
-    if miri.0 {
-        cmd.add_arg("miri");
-    }
-    cmd.add_args(["test", "--package", package.name()]);
-    cmd.run()?;
-
-    Ok(())
-}
-
 fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
-    let packages = [
-        Package::Xtask,
-        Package::Vboot,
-        Package::Libcrdy,
-        Package::Crdyboot,
-    ];
-
-    for package in packages {
-        run_tests_for_package(package, Miri(false))?;
-    }
+    Command::new("cargo").add_arg("test").run()?;
 
     if !action.no_miri {
-        for package in packages {
-            run_tests_for_package(package, Miri(true))?;
-        }
+        Command::new("cargo").add_args(["miri", "test"]).run()?;
     }
 
     if action.vm_tests {
