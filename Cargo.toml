@@ -1,5 +1,5 @@
 [workspace]
-members = ["crdyboot", "enroller", "libcrdy", "vboot", "xtask"]
+members = ["crdyboot", "crdyshim", "enroller", "libcrdy", "vboot", "xtask"]
 resolver = "2"
 
 [workspace.package]
