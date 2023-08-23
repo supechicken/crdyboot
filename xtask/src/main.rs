@@ -368,29 +368,27 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
     gen_disk::sign_kernel_partition(conf, "KERN-B")
 }
 
-fn run_clippy_for_package(package: Package) -> Result<()> {
-    let mut cmd = Command::with_args("cargo", ["clippy", "--package", package.name()]);
-
+fn run_clippy() -> Result<()> {
     // Use a UEFI target for everything but xtask. This gives slightly
     // better coverage (for example, third_party/malloc.rs is not
     // included on the host target), and is required in newer versions
     // of uefi-rs due to `eh_personality` no longer being set.
-    if package != Package::Xtask {
-        cmd.add_args([
+    Command::with_args(
+        "cargo",
+        [
+            "clippy",
+            "--workspace",
+            "--exclude",
+            Package::Xtask.name(),
+            // Arbitrarily choose the 64-bit UEFI target.
             "--target",
-            // Arbitrarily choose the 64-bit target.
             Arch::X64.uefi_target(),
-        ]);
-    }
-    cmd.run()?;
+        ],
+    )
+    .run()?;
 
-    Ok(())
-}
-
-fn run_clippy() -> Result<()> {
-    for package in Package::all() {
-        run_clippy_for_package(package)?;
-    }
+    // Use the default host target for xtask since it requires `std`.
+    Command::with_args("cargo", ["clippy", "--package", Package::Xtask.name()]).run()?;
 
     Ok(())
 }

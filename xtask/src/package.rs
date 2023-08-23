@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 /// Packages in the root workspace.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Package {
     Crdyboot,
@@ -13,21 +14,14 @@ pub enum Package {
 }
 
 impl Package {
-    /// Get all packages.
-    pub fn all() -> [Package; 5] {
-        use Package::*;
-        [Crdyboot, Enroller, Libcrdy, Vboot, Xtask]
-    }
-
     /// Get the package's crate name.
     pub fn name(&self) -> &'static str {
-        use Package::*;
         match self {
-            Crdyboot => "crdyboot",
-            Enroller => "enroller",
-            Libcrdy => "libcrdy",
-            Vboot => "vboot",
-            Xtask => "xtask",
+            Self::Crdyboot => "crdyboot",
+            Self::Enroller => "enroller",
+            Self::Libcrdy => "libcrdy",
+            Self::Vboot => "vboot",
+            Self::Xtask => "xtask",
         }
     }
 }
