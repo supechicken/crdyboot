@@ -11,13 +11,6 @@ use core::{fmt, mem, ptr, str};
 use log::{error, info};
 use uguid::Guid;
 
-/// Fully verified kernel loaded into memory.
-pub struct LoadedKernel<'a> {
-    data: &'a [u8],
-    cros_config: Range<usize>,
-    unique_partition_guid: Guid,
-}
-
 /// Errors produced by `load_kernel`.
 #[derive(Clone, Copy)]
 pub enum LoadKernelError {
@@ -104,6 +97,13 @@ impl fmt::Display for LoadKernelError {
 
 fn u32_to_usize(v: u32) -> usize {
     v.try_into().expect("size of usize is smaller than u32")
+}
+
+/// Fully verified kernel loaded into memory.
+pub struct LoadedKernel<'a> {
+    data: &'a [u8],
+    cros_config: Range<usize>,
+    unique_partition_guid: Guid,
 }
 
 impl<'a> LoadedKernel<'a> {
