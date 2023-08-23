@@ -26,6 +26,7 @@ use object::pe::{ImageNtHeaders32, ImageNtHeaders64, IMAGE_DLLCHARACTERISTICS_NX
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use package::Package;
 use qemu::{Display, QemuOpts};
+use sha2::{Digest, Sha256};
 use std::{env, process};
 use swtpm::TpmVersion;
 use tempfile::TempDir;
@@ -51,6 +52,7 @@ enum Action {
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     Writedisk(WritediskAction),
+    GenTestDataTarball(GenTestDataTarballAction),
     GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
 }
 
@@ -199,6 +201,11 @@ impl QemuAction {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "writedisk")]
 struct WritediskAction {}
+
+/// Generate a tarball of test data for upload to GS.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "gen-test-data-tarball")]
+struct GenTestDataTarballAction {}
 
 /// Regenerate vboot/src/return_codes.rs.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -510,6 +517,65 @@ fn build_futility(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Generate a tarball in the current directory named
+/// `crdyboot_test_data_<hash>.tar.xz`, where `<hash>` is a truncated
+/// sha256 hash of the tarball.
+///
+/// The file is not uploaded by this action since new files should be
+/// tested before upload.
+///
+/// Once the file is tested, upload it to
+/// `gs://chromeos-localmirror/distfiles/` as described here:
+/// https://chromium.googlesource.com/chromiumos/docs/+/HEAD/archive_mirrors.md
+fn gen_test_data_tarball(conf: &Config) -> Result<()> {
+    gen_disk::gen_vboot_test_disk(conf)?;
+
+    let tmp_dir = TempDir::new()?;
+    let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+    let data_dir_name = "crdyboot_test_data";
+    let data_dir = tmp_dir.join(data_dir_name);
+
+    let orig_tarball_name = "tmp.tar.xz";
+    let orig_tarball_path = tmp_dir.join(orig_tarball_name);
+
+    // Create and fill the directory that will be in the tarball.
+    fs::create_dir(&data_dir)?;
+    fs::copy(
+        conf.vboot_test_disk_path(),
+        data_dir.join("vboot_test_disk.bin"),
+    )?;
+
+    // Create the tarball.
+    Command::with_args(
+        "tar",
+        [
+            // Set an arbitrary but consistent time to make the output
+            // reproducible.
+            "--mtime=UTC 2020-01-01",
+            "-C",
+            tmp_dir.as_str(),
+            "-cJf",
+            orig_tarball_path.as_str(),
+            data_dir_name,
+        ],
+    )
+    .run()?;
+
+    // Get the sha256 hash of the tarball.
+    let digest = Sha256::digest(fs::read(&orig_tarball_path)?);
+    let digest = format!("{digest:x}");
+
+    // Rename the tarball to include the abbreviated hash and place it
+    // in the current directory.
+    let new_tarball_path = format!("{data_dir_name}_{}.tar.xz", &digest[..8]);
+    fs::copy(orig_tarball_path, &new_tarball_path)?;
+
+    println!("created {new_tarball_path}");
+
+    Ok(())
+}
+
 fn download_latest_reven(conf: &Config) -> Result<()> {
     let gsutil = "gsutil";
     let bucket = "chromeos-image-archive";
@@ -680,6 +746,7 @@ fn main() -> Result<()> {
         Action::Test(action) => run_tests(&conf, action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
+        Action::GenTestDataTarball(_) => gen_test_data_tarball(&conf),
         Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),
     }
 }
