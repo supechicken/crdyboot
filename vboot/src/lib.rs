@@ -13,7 +13,6 @@
 #![allow(clippy::enum_glob_use)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::module_name_repetitions)]
-#![allow(clippy::wildcard_imports)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 // Needed by the printf module.
