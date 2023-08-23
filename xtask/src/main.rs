@@ -277,13 +277,15 @@ fn ensure_nx_compat_impl<Pe: ImageNtHeaders>(bin_data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the NX-compat bit is set in all crdyboot executables.
+/// Ensure that the NX-compat bit is set in all executables.
 fn ensure_nx_compat(conf: &Config) -> Result<()> {
     for arch in Arch::all() {
-        let bin_data = fs::read(conf.target_exec_path(arch, EfiExe::Crdyboot))?;
-        match arch {
-            Arch::Ia32 => ensure_nx_compat_impl::<ImageNtHeaders32>(&bin_data)?,
-            Arch::X64 => ensure_nx_compat_impl::<ImageNtHeaders64>(&bin_data)?,
+        for exe in EfiExe::all() {
+            let bin_data = fs::read(conf.target_exec_path(arch, *exe))?;
+            match arch {
+                Arch::Ia32 => ensure_nx_compat_impl::<ImageNtHeaders32>(&bin_data)?,
+                Arch::X64 => ensure_nx_compat_impl::<ImageNtHeaders64>(&bin_data)?,
+            }
         }
     }
     Ok(())

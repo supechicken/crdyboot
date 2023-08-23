@@ -161,6 +161,10 @@ pub enum EfiExe {
 }
 
 impl EfiExe {
+    pub fn all() -> &'static [EfiExe] {
+        &[Self::Crdyboot, Self::Enroller]
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             EfiExe::Crdyboot => "crdyboot.efi",
