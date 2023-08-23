@@ -53,39 +53,37 @@ pub enum LoadKernelError {
 
 impl fmt::Display for LoadKernelError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use LoadKernelError::*;
-
         let mut write_with_rc =
             |msg, rc: &ReturnCode| write!(f, "{msg}: 0x{:x} ({})", rc.0, return_code_to_str(*rc));
 
         match self {
-            BadNumericConversion(info) => {
+            Self::BadNumericConversion(info) => {
                 write!(f, "failed to convert numeric type: {info}")
             }
-            Overflow(info) => {
+            Self::Overflow(info) => {
                 write!(f, "overflow: {info}")
             }
-            PubkeyTooSmall(size) => {
+            Self::PubkeyTooSmall(size) => {
                 write!(f, "packed pubkey buffer is too small: {size}")
             }
-            ApiInitFailed(rc) => write_with_rc("call to vb2api_init failed", rc),
-            ApiKernelInitFailed(rc) => write_with_rc(
+            Self::ApiInitFailed(rc) => write_with_rc("call to vb2api_init failed", rc),
+            Self::ApiKernelInitFailed(rc) => write_with_rc(
                 "call to vb2api_init_ctx_for_kernel_verification_only failed",
                 rc,
             ),
-            LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
-            BadBootloaderRange { offset, size } => {
+            Self::LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
+            Self::BadBootloaderRange { offset, size } => {
                 write!(
                     f,
                     "invalid bootloader offset and/or size: offset={offset:#x}, size={size:#x}"
                 )
             }
-            BadHeaderMagic(val) => write!(f, "invalid real-mode header magic: {val:04x?}"),
-            BadHeaderSetupSectors(val) => write!(
+            Self::BadHeaderMagic(val) => write!(f, "invalid real-mode header magic: {val:04x?}"),
+            Self::BadHeaderSetupSectors(val) => write!(
                 f,
                 "invalid `setup_sects` field in the read-mode header: {val:#x}"
             ),
-            MissingUefiStub => {
+            Self::MissingUefiStub => {
                 write!(
                     f,
                     "the UEFI stub is missing or not in the expected location"

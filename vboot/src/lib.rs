@@ -10,7 +10,6 @@
 
 #![deny(missing_docs)]
 #![deny(clippy::pedantic)]
-#![allow(clippy::enum_glob_use)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::module_name_repetitions)]
 // Turn off std, except when running tests.
