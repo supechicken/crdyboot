@@ -628,6 +628,31 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
 fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
     init_submodules(conf)?;
 
+    // Download and unpack test data.
+    let tmp_dir = TempDir::new()?;
+    let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
+    let test_data_file_name = "crdyboot_test_data_5b6c09e4.tar.xz";
+    let test_data_src_path = tmp_dir.join(test_data_file_name);
+    Command::with_args(
+        "gsutil",
+        [
+            "cp",
+            &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
+            test_data_src_path.as_str(),
+        ],
+    )
+    .run()?;
+    Command::with_args(
+        "tar",
+        [
+            "-C",
+            conf.workspace_path().as_str(),
+            "-xvf",
+            test_data_src_path.as_str(),
+        ],
+    )
+    .run()?;
+
     // If the user has provided their own disk image on the command
     // line, use that.
     if let Some(disk_image) = &action.disk_image {
@@ -680,7 +705,7 @@ fn run_writedisk(conf: &Config) -> Result<()> {
 
 fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 6;
+    let current_version = 7;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
