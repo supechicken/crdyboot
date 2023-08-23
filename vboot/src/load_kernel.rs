@@ -388,7 +388,6 @@ pub fn load_kernel<'kernel>(
 mod tests {
     use super::*;
     use core::num::NonZeroU64;
-    use regex::Regex;
     use uguid::guid;
 
     struct MemDisk {
@@ -428,37 +427,17 @@ mod tests {
         );
     }
 
-    /// Replace verity args in the kernel command line with hardcoded
-    /// values. This allows the test to run against a more or less
-    /// arbitrary reven kernel partition.
-    #[must_use]
-    fn replace_command_line_verity_args(cmdline: &str) -> String {
-        let r = Regex::new("root_hexdigest=[[:xdigit:]]{64}").unwrap();
-        let cmdline = r.replace(
-            &cmdline,
-            "root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630",
-        );
-
-        let r = Regex::new("salt=[[:xdigit:]]{64}").unwrap();
-        let cmdline = r.replace(
-            &cmdline,
-            "salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476",
-        );
-
-        cmdline.into()
-    }
-
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_load_kernel() {
         let test_key_vbpubk =
             include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk");
-        let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=%U/PARTNROFF=1 hashtree=PARTUUID=%U/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630 salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=%U add_efi_memmap boot=local noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
-        let expected_command_line = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashtree=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=0e795f91ea7cff737a31cdc3cd1cf0ebbcbcd482812c46e424a0dd7b2e302630 salt=a4ba1dee84e2e3eb1a5aaa67f9c0a54bfb5d597ba78ae8ef634ab13141e81476\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap boot=local noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
+        let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=%U/PARTNROFF=1 hashtree=PARTUUID=%U/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=01ca247da5417e52b6bd4854a611cef7dba48b60290c34495b32c162558c7a98 salt=5b36609e1c37c7df9dcadea77ef84694b0c09dd4c558a1debf7c97c14b784274\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=%U add_efi_memmap boot=local noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
+        let expected_command_line = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashtree=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=01ca247da5417e52b6bd4854a611cef7dba48b60290c34495b32c162558c7a98 salt=5b36609e1c37c7df9dcadea77ef84694b0c09dd4c558a1debf7c97c14b784274\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap boot=local noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
 
         let mut disk = MemDisk {
-            // This file was generated during `cargo xtask setup`.
-            data: include_bytes!("../../workspace/vboot_test_disk.bin"),
+            // This file was downloaded during `cargo xtask setup`.
+            data: include_bytes!("../../workspace/crdyboot_test_data/vboot_test_disk.bin"),
         };
 
         let mut workbuf = vec![0; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
@@ -476,16 +455,11 @@ mod tests {
                 );
 
                 assert_eq!(
-                    replace_command_line_verity_args(
-                        loaded_kernel.command_line_with_placeholders().unwrap()
-                    ),
+                    loaded_kernel.command_line_with_placeholders().unwrap(),
                     expected_command_line_with_placeholders
                 );
 
-                assert_eq!(
-                    replace_command_line_verity_args(&loaded_kernel.command_line().unwrap()),
-                    expected_command_line
-                );
+                assert_eq!(loaded_kernel.command_line().unwrap(), expected_command_line);
             }
             Err(err) => {
                 panic!("load_kernel failed: {err}");

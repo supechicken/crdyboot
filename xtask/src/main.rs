@@ -672,10 +672,7 @@ fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
 
     // Build and install shim, and sign the kernel partitions with a
     // local key.
-    run_prep_disk(conf)?;
-
-    // Generate a disk image used by the `test_load_kernel` vboot test.
-    gen_disk::gen_vboot_test_disk(conf)
+    run_prep_disk(conf)
 }
 
 fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
