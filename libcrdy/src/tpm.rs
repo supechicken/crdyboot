@@ -41,10 +41,6 @@ use uefi::proto::tcg::{v1, v2, EventType, PcrIndex};
 use uefi::table::boot::BootServices;
 use uefi::{Handle, Status};
 
-/// Measure into PCR 8. See module docstring for more information on how
-/// this PCR was chosen.
-const PCR_INDEX: PcrIndex = PcrIndex(8);
-
 const EVENT_TYPE: EventType = EventType::IPL;
 const EVENT_DATA: &[u8] = b"ChromeOS kernel partition data";
 
@@ -158,6 +154,7 @@ impl TpmHandle {
 
 fn extend_pcr_and_log_v1(
     boot_services: &BootServices,
+    pcr_index: PcrIndex,
     data_to_hash: &[u8],
     handle: Handle,
 ) -> Result<(), TpmError> {
@@ -170,7 +167,7 @@ fn extend_pcr_and_log_v1(
 
     let event = v1::PcrEvent::new_in_buffer(
         &mut event_buf,
-        PCR_INDEX,
+        pcr_index,
         EVENT_TYPE,
         // The digest will be filled in by passing `data_to_hash` into
         // `hash_log_extend_event`.
@@ -187,6 +184,7 @@ fn extend_pcr_and_log_v1(
 
 fn extend_pcr_and_log_v2(
     boot_services: &BootServices,
+    pcr_index: PcrIndex,
     data_to_hash: &[u8],
     handle: Handle,
 ) -> Result<(), TpmError> {
@@ -198,7 +196,7 @@ fn extend_pcr_and_log_v2(
     let mut event_buf = [MaybeUninit::uninit(); 64];
 
     let event =
-        v2::PcrEventInputs::new_in_buffer(&mut event_buf, PCR_INDEX, EVENT_TYPE, EVENT_DATA)
+        v2::PcrEventInputs::new_in_buffer(&mut event_buf, pcr_index, EVENT_TYPE, EVENT_DATA)
             .map_err(|err| TpmError::v2(TpmErrorKind::InvalidPcrEvent, err))?;
 
     tcg.hash_log_extend_event(v2::HashLogExtendEventFlags::empty(), data_to_hash, event)
@@ -210,16 +208,17 @@ fn extend_pcr_and_log_v2(
 /// Extend PCR 8 with a measurement of `data_to_hash` and add to the event log.
 pub fn extend_pcr_and_log(
     boot_services: &BootServices,
+    pcr_index: PcrIndex,
     data_to_hash: &[u8],
 ) -> Result<(), TpmError> {
     match TpmHandle::find(boot_services)? {
         TpmHandle::V1(handle) => {
             info!("measuring to v1 TPM");
-            extend_pcr_and_log_v1(boot_services, data_to_hash, handle)?;
+            extend_pcr_and_log_v1(boot_services, pcr_index, data_to_hash, handle)?;
         }
         TpmHandle::V2(handle) => {
             info!("measuring to v2 TPM");
-            extend_pcr_and_log_v2(boot_services, data_to_hash, handle)?;
+            extend_pcr_and_log_v2(boot_services, pcr_index, data_to_hash, handle)?;
         }
         TpmHandle::None => {
             info!("no TPM device found");

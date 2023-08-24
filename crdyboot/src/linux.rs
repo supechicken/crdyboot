@@ -14,10 +14,22 @@ use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::tpm::{extend_pcr_and_log, TpmError};
 use log::info;
 use object::read::pe::PeFile64;
+use uefi::proto::tcg::PcrIndex;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
 use uefi::CString16;
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
+
+/// TPM PCR to measure into.
+///
+/// PCRs 0-7 are for the firmware. Other than that, the choice is
+/// somewhat arbitrary. On a typical Linux setup PCR 8 is used by GRUB,
+/// which crdyboot is an alternative to, so the uses are not
+/// conflicting.
+///
+/// See also the Linux TPM PCR Registry:
+/// <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
+const PCR_INDEX: PcrIndex = PcrIndex(8);
 
 pub enum CrdybootError {
     /// Failed to allocate memory.
@@ -189,7 +201,8 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(system_table.boot_services(), kernel.data()).map_err(CrdybootError::Tpm)?;
+    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, kernel.data())
+        .map_err(CrdybootError::Tpm)?;
 
     execute_linux_kernel(&kernel, system_table)
 }
