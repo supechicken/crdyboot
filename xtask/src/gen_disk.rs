@@ -545,9 +545,7 @@ pub fn corrupt_pubkey_section(
 ) -> Result<()> {
     // Get the expected section data for the vbpubk. This matches the
     // data produced by crdyboot's build.rs.
-    let mut expected_pubkey =
-        include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk")
-            .to_vec();
+    let mut expected_pubkey = fs::read(conf.kernel_key_paths().vbpubk)?;
     expected_pubkey.resize(8192, 0);
 
     modify_system_partition(disk_path, |root_dir| {
