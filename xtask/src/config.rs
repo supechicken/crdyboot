@@ -152,6 +152,11 @@ impl Config {
     pub fn ssh_port() -> u16 {
         9322
     }
+
+    /// Path of the private key for SSHing into test images.
+    pub fn ssh_key_path(&self) -> Utf8PathBuf {
+        self.workspace_path().join("testing_rsa")
+    }
 }
 
 #[derive(Clone, Copy)]

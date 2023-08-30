@@ -10,11 +10,14 @@ use crate::gen_disk::{
 use crate::qemu::{Display, QemuOpts};
 use crate::{copy_file, run_crdyboot_build};
 use anyhow::{bail, Result};
-use camino::Utf8Path;
+use base64::Engine;
 use command_run::Command;
+use fs_err as fs;
+use std::fs::Permissions;
 use std::io::{BufRead, BufReader, Read};
+use std::os::unix::fs::PermissionsExt;
+use std::thread;
 use std::time::{Duration, Instant};
-use std::{env, thread};
 
 /// Timeout used for error tests.
 ///
@@ -23,38 +26,24 @@ use std::{env, thread};
 /// tests).
 const VM_ERROR_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Make sure the SSH key is the expected test key.
-fn validate_test_key(key_path: &Utf8Path) -> Result<()> {
-    let output = Command::with_args(
-        "ssh-keygen",
-        [
-            // Show the fingerprint.
-            "-l",
-            // Set the file path.
-            "-f",
-            key_path.as_str(),
-        ],
-    )
-    .enable_capture()
-    .run()?;
-    let stdout = String::from_utf8(output.stdout)?;
-    let expected = "Fp1qWjFLyK1cTpiI5rdk7iEJwoK9lcnYAgbQtGC3jzU";
-    if !stdout.contains(expected) {
-        bail!("incorrect key; expected {expected}, got {}", stdout.trim());
-    }
+/// Download the well-known testing_rsa key for ChromeOS test images.
+fn download_test_key(conf: &Config) -> Result<()> {
+    let url = "https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa?format=TEXT";
+    // Use curl to download to avoid adding a bunch of dependencies to xtask.
+    let output = Command::with_args("curl", [url]).enable_capture().run()?;
+    let key =
+        String::from_utf8(base64::engine::general_purpose::STANDARD_NO_PAD.decode(output.stdout)?)?;
+    fs::write(conf.ssh_key_path(), key)?;
+
+    // Set key permissions.
+    fs::set_permissions(conf.ssh_key_path(), Permissions::from_mode(0o600)).unwrap();
+
     Ok(())
 }
 
 /// Wait for SSH to come up on the VM (indicating a successful
 /// boot). Times out after one minute.
-fn wait_for_ssh() -> Result<()> {
-    // Get the standard testing key. Fail early with an error if it
-    // doesn't exist.
-    let identity_path = Utf8Path::new(&env::var("HOME").unwrap()).join(".ssh/testing_rsa");
-    if let Err(err) = validate_test_key(&identity_path) {
-        bail!("missing or invalid test key in {identity_path}; copy it from https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa and set the permissions with `chmod 600` ({err})");
-    }
-
+fn wait_for_ssh(conf: &Config) -> Result<()> {
     println!("waiting for SSH");
     let mut cmd = Command::with_args(
         "ssh",
@@ -65,7 +54,7 @@ fn wait_for_ssh() -> Result<()> {
             // key is misconfigured.
             "-oBatchMode=yes",
             "-i",
-            identity_path.as_str(),
+            conf.ssh_key_path().as_str(),
             "-p",
             &Config::ssh_port().to_string(),
             "root@localhost",
@@ -109,7 +98,7 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
         let _vm = opts.spawn_disk_image(conf)?;
 
         // Check that SSH comes up, indicating a successful boot.
-        wait_for_ssh()?;
+        wait_for_ssh(conf)?;
     }
 
     Ok(())
@@ -292,6 +281,7 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_crdyboot_build(conf, VerboseRuntimeLogs(true))?;
+    download_test_key(conf)?;
 
     test_signed_vbpubk_mod_breaks_vboot(conf)?;
     test_vbpubk_mod_breaks_signature(conf)?;
