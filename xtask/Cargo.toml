@@ -13,6 +13,7 @@ argh = "0.1.7"
 base64 = "0.21.3"
 camino = { version = "1.0.9", features = ["serde1"] }
 command-run = "1.1.1"
+ed25519-compact = { workspace = true, features = ["pem", "std"] }
 fatfs = { version = "0.3.6", default-features = false, features = ["alloc", "std"] }
 fs-err = "2.7.0"
 gpt_disk_types = { version = "0.15.0", features = ["std"] }

@@ -408,8 +408,15 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
 }
 
 fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
-    secure_boot::generate_key(&conf.secure_boot_root_key_paths(), "SecureBootRootTestKey")?;
-    secure_boot::generate_key(&conf.secure_boot_shim_key_paths(), "SecureBootShimTestKey")?;
+    // Generate an RSA key for signing the first-stage bootloader. The
+    // public half will be enrolled in the firmware.
+    secure_boot::generate_rsa_key(&conf.secure_boot_root_key_paths(), "SecureBootRootTestKey")?;
+
+    // Generate both RSA and Ed25519 keys for signing the second-stage
+    // bootloader. The RSA key is used when booting from shim, and the
+    // Ed25519 is used when booting from crdyshim.
+    secure_boot::generate_rsa_key(&conf.secure_boot_shim_key_paths(), "SecureBootShimTestKey")?;
+    secure_boot::generate_ed25519_key(&conf.secure_boot_shim_key_paths())?;
 
     let root_key_paths = conf.secure_boot_root_key_paths();
     // Generate the PK/KEK and db vars for use with the enroller.
@@ -702,7 +709,7 @@ fn run_writedisk(conf: &Config) -> Result<()> {
 
 fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
     // Bump this version any time the setup step needs to be re-run.
-    let current_version = 7;
+    let current_version = 8;
 
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {

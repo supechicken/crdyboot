@@ -43,13 +43,25 @@ impl SecureBootKeyPaths {
     pub fn db_var(&self) -> Utf8PathBuf {
         self.dir.join("key.db.var")
     }
+
+    pub fn priv_ed25519_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key_ed25519.priv.pem")
+    }
+
+    pub fn pub_ed25519_pem(&self) -> Utf8PathBuf {
+        self.dir.join("key_ed25519.pub.pem")
+    }
+
+    pub fn pub_ed25519_raw(&self) -> Utf8PathBuf {
+        self.dir.join("key_ed25519.pub.raw")
+    }
 }
 
-pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
+pub fn generate_rsa_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     paths.create_dir()?;
 
     if paths.priv_pem().exists() && paths.pub_pem().exists() && paths.pub_der().exists() {
-        println!("using existing {} key", paths.dir);
+        println!("using existing rsa {} key", paths.dir);
         return Ok(());
     }
 
@@ -65,6 +77,45 @@ pub fn generate_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     ]).run()?;
 
     convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())
+}
+
+pub fn generate_ed25519_key(paths: &SecureBootKeyPaths) -> Result<()> {
+    paths.create_dir()?;
+
+    if paths.priv_ed25519_pem().exists()
+        && paths.pub_ed25519_pem().exists()
+        && paths.pub_ed25519_raw().exists()
+    {
+        println!("using existing ed25519 {} key", paths.dir);
+        return Ok(());
+    }
+
+    // Generate private key.
+    #[rustfmt::skip]
+    Command::with_args("openssl", [
+        "genpkey",
+        "-algorithm", "ed25519",
+        "-out", paths.priv_ed25519_pem().as_str(),
+    ]).run()?;
+
+    // Extract the public key.
+    #[rustfmt::skip]
+    Command::with_args("openssl", [
+        "pkey",
+        "-in", paths.priv_ed25519_pem().as_str(),
+        "-outform", "PEM",
+        "-pubout",
+        "-out", paths.pub_ed25519_pem().as_str(),
+    ]).run()?;
+
+    // Create a raw version of the pubkey that can be loaded with
+    // `ed25519_compact::PublicKey::from_slice`.
+    let pub_pem = fs::read_to_string(paths.pub_ed25519_pem())?;
+    let pub_key = ed25519_compact::PublicKey::from_pem(&pub_pem)?;
+    let pub_raw: &[u8] = &*pub_key;
+    fs::write(paths.pub_ed25519_raw(), pub_raw)?;
+
+    Ok(())
 }
 
 pub fn generate_signed_vars(paths: &SecureBootKeyPaths, var_name: &str) -> Result<()> {
