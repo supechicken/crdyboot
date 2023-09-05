@@ -630,16 +630,14 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-// Run various setup operations. This must be run once before running
-// any other xtask commands.
-fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
-    init_submodules(conf)?;
-
-    // Download and unpack test data.
+fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
-    let test_data_file_name = "crdyboot_test_data_5b6c09e4.tar.xz";
-    let test_data_src_path = tmp_dir.join(test_data_file_name);
+    let hash = "5b6c09e4400e9ad1423c2bc530d059c2b3de93bd0e151a8640ef249abc86612d";
+    let test_data_file_name = format!("crdyboot_test_data_{}.tar.xz", &hash[..8]);
+    let test_data_src_path = tmp_dir.join(&test_data_file_name);
+
+    // Download the test data tarball.
     Command::with_args(
         "gsutil",
         [
@@ -649,6 +647,14 @@ fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
         ],
     )
     .run()?;
+
+    // Check the SHA-256 hash of the tarball.
+    let actual_hash = format!("{:x}", Sha256::digest(fs::read(&test_data_src_path)?));
+    if actual_hash != hash {
+        bail!("unexpected SHA-256 hash of {test_data_src_path}: {actual_hash} != {hash}");
+    }
+
+    // Unpack the test data.
     Command::with_args(
         "tar",
         [
@@ -659,6 +665,16 @@ fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
         ],
     )
     .run()?;
+
+    Ok(())
+}
+
+// Run various setup operations. This must be run once before running
+// any other xtask commands.
+fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
+    init_submodules(conf)?;
+
+    download_and_unpack_test_data(conf)?;
 
     // If the user has provided their own disk image on the command
     // line, use that.
