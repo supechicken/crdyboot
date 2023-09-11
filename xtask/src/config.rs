@@ -10,6 +10,11 @@ use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 
+/// SHA-256 hash of the test data tarball.
+///
+/// See `docs/test_data.md` for full instructions on updating the test data.
+pub const TEST_DATA_HASH: &str = "5b6c09e4400e9ad1423c2bc530d059c2b3de93bd0e151a8640ef249abc86612d";
+
 pub struct Config {
     disk_path: Utf8PathBuf,
 

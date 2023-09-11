@@ -633,7 +633,7 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
-    let hash = "5b6c09e4400e9ad1423c2bc530d059c2b3de93bd0e151a8640ef249abc86612d";
+    let hash = config::TEST_DATA_HASH;
     let test_data_file_name = format!("crdyboot_test_data_{}.tar.xz", &hash[..8]);
     let test_data_src_path = tmp_dir.join(&test_data_file_name);
 
