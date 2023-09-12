@@ -13,23 +13,26 @@ rm workspace/disk.bin
 # Download a fresh disk image from GE (among other things).
 cargo xtask setup
 
-# Generate the test data tarball.
+# Generate the test data tarball in the repo root directory.
+# The file will be named like this: `crdyboot_test_data_<XXXXXX>.tar.xz`.
 cargo xtask gen-test-data-tarball
 
-# Check if any updates to the test are needed.
+# Check what updates to the test are needed.
 cp workspace/vboot_test_disk.bin workspace/crdyboot_test_data/vboot_test_disk.bin
 cargo xtask check
 ```
 
-The tests may fail if the command line in the image has changed. In that
-case, the tests' expectations should be updated, and the CL(s) for that
-will need to be submitted at the same time that the test data URL is
-changed (as described later).
+The tests will need to be updated to match the kernel command line in
+the test data. Since the command line includes the rootfs hash and salt,
+which are unique to every image, every update to the test data will
+require at least one update to the tests. The changes should be in the
+same CL where the test data URL is updated (as described later).
 
 Now upload the file to GS with public read permissions (based on the
 instructions in [ChromiumOS Archive Mirrors]):
 
 ```console
+# Fill in `<XXXXXX>` from the actual name of the tarball.
 gsutil cp -n -a public-read crdyboot_test_data_<XXXXXX>.tar.xz gs://chromeos-localmirror/distfiles/
 ```
 
@@ -45,6 +48,7 @@ modifications needed to actually switch over to the new tarball.
 First, get the SHA-256 hash of the tarball:
 
 ```console
+# Fill in `<XXXXXX>` from the actual name of the tarball.
 sha256sum crdyboot_test_data_<XXXXXX>.tar.xz
 ```
 
@@ -59,9 +63,13 @@ the new hash. Then update the package manifest:
 ebuild ../third_party/chromiumos-overlay/sys-boot/crdyboot/crdyboot-9999.ebuild manifest
 ```
 
-If any changes were needed to the test code to work with the new test
-tarball, those can go in the same CL that updates `TEST_DATA_HASH`. Make
-sure to `Cq-Depend` the crdyboot and chromiumos-overlay CLs in that case.
+Any changes that were needed to the test code to work with the new test
+tarball should go in the same CL that updates `TEST_DATA_HASH`. Make
+sure to `Cq-Depend` the crdyboot and chromiumos-overlay CLs.
+
+Example CLs: [crdyboot CL], [chromiumos-overlay CL]
 
 [ChromiumOS Archive Mirrors]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/archive_mirrors.md#updating-localmirror-localmirror_private-getting-files-onto-localmirror-command-line-interface
 [`crdyboot-9999.ebuild`]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/sys-boot/crdyboot/crdyboot-9999.ebuild
+[crdyboot CL]: https://chromium-review.googlesource.com/c/chromiumos/platform/crdyboot/+/4855545
+[chromiumos-overlay CL]: https://chromium-review.googlesource.com/c/chromiumos/overlays/chromiumos-overlay/+/4853856
