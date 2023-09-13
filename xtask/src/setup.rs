@@ -44,6 +44,11 @@ fn sha256sum(path: &Utf8Path) -> Result<String> {
     Ok(String::from_utf8(hash.to_vec())?)
 }
 
+fn download_from_gs(src: &str, dst: &Utf8Path) -> Result<()> {
+    Command::with_args(GSUTIL, ["cp", src, dst.as_str()]).run()?;
+    Ok(())
+}
+
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
@@ -52,15 +57,10 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let test_data_src_path = tmp_dir.join(&test_data_file_name);
 
     // Download the test data tarball.
-    Command::with_args(
-        GSUTIL,
-        [
-            "cp",
-            &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
-            test_data_src_path.as_str(),
-        ],
-    )
-    .run()?;
+    download_from_gs(
+        &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
+        &test_data_src_path,
+    )?;
 
     // Check the SHA-256 hash of the tarball.
     let actual_hash = sha256sum(&test_data_src_path)?;
@@ -101,7 +101,7 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
     let compressed_name = "chromiumos_test_image.tar.xz";
     let download_path = tmp_path.join(compressed_name);
     let test_image_path = format!("gs://{bucket}/{board_dir}/{latest_version}/{compressed_name}");
-    Command::with_args(GSUTIL, ["cp", &test_image_path, download_path.as_str()]).run()?;
+    download_from_gs(&test_image_path, &download_path)?;
 
     // Extract the image.
     Command::with_args(
