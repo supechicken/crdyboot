@@ -11,6 +11,8 @@ use camino::Utf8Path;
 use command_run::Command;
 use tempfile::TempDir;
 
+const GSUTIL: &str = "gsutil";
+
 fn init_submodules(conf: &Config) -> Result<()> {
     Command::with_args(
         "git",
@@ -51,7 +53,7 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
 
     // Download the test data tarball.
     Command::with_args(
-        "gsutil",
+        GSUTIL,
         [
             "cp",
             &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
@@ -82,14 +84,13 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
 }
 
 fn download_latest_reven(conf: &Config) -> Result<()> {
-    let gsutil = "gsutil";
     let bucket = "chromeos-image-archive";
     let board_dir = "reven-release";
 
     // Find the latest version using the LATEST-main file, which
     // contains a string like "R114-15410.0.0".
     let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
-    let output = Command::with_args(gsutil, ["cat", &latest_main_path])
+    let output = Command::with_args(GSUTIL, ["cat", &latest_main_path])
         .enable_capture()
         .run()?;
     let latest_version = String::from_utf8(output.stdout)?;
@@ -100,7 +101,7 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
     let compressed_name = "chromiumos_test_image.tar.xz";
     let download_path = tmp_path.join(compressed_name);
     let test_image_path = format!("gs://{bucket}/{board_dir}/{latest_version}/{compressed_name}");
-    Command::with_args(gsutil, ["cp", &test_image_path, download_path.as_str()]).run()?;
+    Command::with_args(GSUTIL, ["cp", &test_image_path, download_path.as_str()]).run()?;
 
     // Extract the image.
     Command::with_args(
