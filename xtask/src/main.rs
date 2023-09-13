@@ -8,6 +8,7 @@ mod gen_disk;
 mod package;
 mod qemu;
 mod secure_boot;
+mod setup;
 mod shim;
 mod swtpm;
 mod util;
@@ -354,14 +355,6 @@ fn run_rustfmt(action: &FormatAction) -> Result<()> {
     Ok(())
 }
 
-fn run_prep_disk(conf: &Config) -> Result<()> {
-    shim::update_shim(conf)?;
-
-    // Sign both kernel partitions.
-    gen_disk::sign_kernel_partition(conf, "KERN-A")?;
-    gen_disk::sign_kernel_partition(conf, "KERN-B")
-}
-
 fn run_clippy() -> Result<()> {
     // Use a UEFI target for everything but xtask. This gives slightly
     // better coverage (for example, third_party/malloc.rs is not
@@ -397,123 +390,6 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
     if action.vm_tests {
         vm_test::run_vm_tests(conf)?;
     }
-
-    Ok(())
-}
-
-fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
-    // Generate an RSA key for signing the first-stage bootloader. The
-    // public half will be enrolled in the firmware.
-    secure_boot::generate_rsa_key(&conf.secure_boot_root_key_paths(), "SecureBootRootTestKey")?;
-
-    // Generate both RSA and Ed25519 keys for signing the second-stage
-    // bootloader. The RSA key is used when booting from shim, and the
-    // Ed25519 is used when booting from crdyshim.
-    secure_boot::generate_rsa_key(&conf.secure_boot_shim_key_paths(), "SecureBootShimTestKey")?;
-    secure_boot::generate_ed25519_key(&conf.secure_boot_shim_key_paths())?;
-
-    let root_key_paths = conf.secure_boot_root_key_paths();
-    // Generate the PK/KEK and db vars for use with the enroller.
-    secure_boot::generate_signed_vars(&root_key_paths, "PK")?;
-    secure_boot::generate_signed_vars(&root_key_paths, "db")
-}
-
-fn init_submodules(conf: &Config) -> Result<()> {
-    Command::with_args(
-        "git",
-        [
-            "-C",
-            conf.repo_path().as_str(),
-            "submodule",
-            "update",
-            "--init",
-        ],
-    )
-    .run()?;
-
-    Ok(())
-}
-
-/// Run the enroller in a VM to set up UEFI variables for secure boot.
-fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
-    for arch in Arch::all() {
-        let ovmf = conf.ovmf_paths(arch);
-
-        // Get the system path of the OVMF files installed via apt.
-        let system_ovmf_dir = Utf8Path::new("/usr/share/OVMF/");
-        let (system_code, system_vars) = match arch {
-            Arch::Ia32 => ("OVMF32_CODE_4M.secboot.fd", "OVMF32_VARS_4M.fd"),
-            Arch::X64 => ("OVMF_CODE_4M.secboot.fd", "OVMF_VARS_4M.fd"),
-        };
-        let system_code = system_ovmf_dir.join(system_code);
-        let system_vars = system_ovmf_dir.join(system_vars);
-
-        let (args_code, args_vars) = match arch {
-            Arch::Ia32 => (action.ovmf32_code.as_ref(), action.ovmf32_vars.as_ref()),
-            Arch::X64 => (action.ovmf64_code.as_ref(), action.ovmf64_vars.as_ref()),
-        };
-
-        // Copy the OVMF files to a local directory.
-        let src_code_path = args_code.unwrap_or(&system_code);
-        let src_vars_path = args_vars.unwrap_or(&system_vars);
-        copy_file(src_code_path, ovmf.code())?;
-        copy_file(src_vars_path, ovmf.original_vars())?;
-
-        // Keep a copy of the original vars for running QEMU in
-        // non-secure-boot mode.
-        copy_file(ovmf.original_vars(), ovmf.secure_boot_vars())?;
-
-        // Run the enroller in QEMU to set up secure boot UEFI variables.
-        let qemu = QemuOpts {
-            capture_output: false,
-            display: Display::None,
-            image_path: conf.enroller_disk_path(),
-            ovmf,
-            secure_boot: true,
-            snapshot: false,
-            timeout: None,
-            tpm_version: None,
-        };
-        qemu.run_disk_image(conf)?;
-    }
-
-    Ok(())
-}
-
-/// Fix build errors caused by a vboot upgrade.
-fn clean_futility_build(conf: &Config) -> Result<()> {
-    Command::with_args(
-        "make",
-        ["-C", conf.vboot_reference_path().as_str(), "clean"],
-    )
-    .run()?;
-
-    Ok(())
-}
-
-/// Build futility, the firmware utility executable that is part of
-/// vboot_reference.
-fn build_futility(conf: &Config) -> Result<()> {
-    let mut cmd = Command::with_args(
-        "make",
-        [
-            "-C",
-            conf.vboot_reference_path().as_str(),
-            "USE_FLASHROM=0",
-            conf.futility_executable_path().as_str(),
-        ],
-    );
-    let cflags = [
-        // For compatiblity with openssl3, allow use of deprecated
-        // functions.
-        "-Wno-deprecated-declarations",
-        // Disable this error to match the default chromeos build
-        // flags. See b/231987783.
-        "-Wno-int-conversion",
-    ];
-
-    cmd.env.insert("CFLAGS".into(), cflags.join(" ").into());
-    cmd.run()?;
 
     Ok(())
 }
@@ -577,121 +453,6 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-fn download_latest_reven(conf: &Config) -> Result<()> {
-    let gsutil = "gsutil";
-    let bucket = "chromeos-image-archive";
-    let board_dir = "reven-release";
-
-    // Find the latest version using the LATEST-main file, which
-    // contains a string like "R114-15410.0.0".
-    let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
-    let output = Command::with_args(gsutil, ["cat", &latest_main_path])
-        .enable_capture()
-        .run()?;
-    let latest_version = String::from_utf8(output.stdout)?;
-
-    // Download the compressed test image to a temporary directory.
-    let tmp_dir = TempDir::new()?;
-    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
-    let compressed_name = "chromiumos_test_image.tar.xz";
-    let download_path = tmp_path.join(compressed_name);
-    let test_image_path = format!("gs://{bucket}/{board_dir}/{latest_version}/{compressed_name}");
-    Command::with_args(gsutil, ["cp", &test_image_path, download_path.as_str()]).run()?;
-
-    // Extract the image.
-    Command::with_args(
-        "tar",
-        [
-            "xf",
-            download_path.as_str(),
-            // Change directory to the temporary directory.
-            "-C",
-            tmp_path.as_str(),
-        ],
-    )
-    .run()?;
-
-    // Move the image to the workspace.
-    Command::with_args(
-        "mv",
-        [
-            &tmp_path.join("chromiumos_test_image.bin"),
-            conf.disk_path(),
-        ],
-    )
-    .run()?;
-
-    Ok(())
-}
-
-fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
-    let tmp_dir = TempDir::new()?;
-    let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
-    let hash = config::TEST_DATA_HASH;
-    let test_data_file_name = format!("crdyboot_test_data_{}.tar.xz", &hash[..8]);
-    let test_data_src_path = tmp_dir.join(&test_data_file_name);
-
-    // Download the test data tarball.
-    Command::with_args(
-        "gsutil",
-        [
-            "cp",
-            &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
-            test_data_src_path.as_str(),
-        ],
-    )
-    .run()?;
-
-    // Check the SHA-256 hash of the tarball.
-    let actual_hash = format!("{:x}", Sha256::digest(fs::read(&test_data_src_path)?));
-    if actual_hash != hash {
-        bail!("unexpected SHA-256 hash of {test_data_src_path}: {actual_hash} != {hash}");
-    }
-
-    // Unpack the test data.
-    Command::with_args(
-        "tar",
-        [
-            "-C",
-            conf.workspace_path().as_str(),
-            "-xvf",
-            test_data_src_path.as_str(),
-        ],
-    )
-    .run()?;
-
-    Ok(())
-}
-
-// Run various setup operations. This must be run once before running
-// any other xtask commands.
-fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
-    init_submodules(conf)?;
-
-    download_and_unpack_test_data(conf)?;
-
-    // If the user has provided their own disk image on the command
-    // line, use that.
-    if let Some(disk_image) = &action.disk_image {
-        copy_file(disk_image, conf.disk_path())?;
-    }
-
-    // If we don't have a disk image, download one from GS.
-    if !conf.disk_path().exists() {
-        download_latest_reven(conf)?;
-    }
-
-    build_futility(conf)?;
-
-    generate_secure_boot_keys(conf)?;
-    run_build_enroller(conf)?;
-    enroll_secure_boot_keys(conf, action)?;
-
-    // Build and install shim, and sign the kernel partitions with a
-    // local key.
-    run_prep_disk(conf)
-}
-
 fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
     let ovmf = if action.ia32 {
         conf.ovmf_paths(Arch::Ia32)
@@ -717,40 +478,6 @@ fn run_writedisk(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
-    // Bump this version any time the setup step needs to be re-run.
-    let current_version = 8;
-
-    // Don't run setup if the user is already doing it.
-    if matches!(action, Action::Setup(_)) {
-        return Ok(());
-    }
-
-    // Don't try to run setup if the workspace doesn't exist yet.
-    if !conf.workspace_path().exists() {
-        return Ok(());
-    }
-
-    // Nothing to do if the version is already high enough.
-    let existing_version = conf.read_setup_version();
-    if existing_version >= current_version {
-        return Ok(());
-    }
-
-    println!("Re-running setup: upgrading from {existing_version} to {current_version}");
-
-    // Put any version-specific cleanup operations here.
-
-    if conf.read_setup_version() < 4 {
-        clean_futility_build(conf)?;
-    }
-
-    // End version-specific cleanup operations.
-
-    run_setup(conf, &SetupAction::default())?;
-    conf.write_setup_version(current_version)
-}
-
 /// Get the repo root path. This assumes this executable is located at
 /// <repo>/target/<buildmode>/<exe>.
 fn get_repo_path() -> Result<Utf8PathBuf> {
@@ -772,7 +499,7 @@ fn main() -> Result<()> {
     let conf = Config::new(repo_root);
 
     // Re-run setup if something has changed that requires it.
-    rerun_setup_if_needed(&opt.action, &conf)?;
+    setup::rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
         Action::Build(action) => run_crdyboot_build(&conf, action.verbose()),
@@ -780,7 +507,7 @@ fn main() -> Result<()> {
         Action::Check(action) => run_check(&conf, action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
-        Action::Setup(action) => run_setup(&conf, action),
+        Action::Setup(action) => setup::run_setup(&conf, action),
         Action::Test(action) => run_tests(&conf, action),
         Action::Qemu(action) => run_qemu(&conf, action),
         Action::Writedisk(_) => run_writedisk(&conf),
