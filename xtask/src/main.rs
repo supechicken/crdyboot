@@ -48,7 +48,6 @@ enum Action {
     Lint(LintAction),
     Test(TestAction),
     Build(BuildAction),
-    PrepDisk(PrepDiskAction),
     Qemu(QemuAction),
     BuildEnroller(BuildEnrollerAction),
     Writedisk(WritediskAction),
@@ -112,11 +111,6 @@ struct FormatAction {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "lint")]
 struct LintAction {}
-
-/// Sign shim and the kernel partitions.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "prep-disk")]
-struct PrepDiskAction {}
 
 /// Initialize the workspace.
 #[derive(FromArgs, PartialEq, Debug, Default)]
@@ -786,7 +780,6 @@ fn main() -> Result<()> {
         Action::Check(action) => run_check(&conf, action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
-        Action::PrepDisk(_) => run_prep_disk(&conf),
         Action::Setup(action) => run_setup(&conf, action),
         Action::Test(action) => run_tests(&conf, action),
         Action::Qemu(action) => run_qemu(&conf, action),
