@@ -80,11 +80,11 @@ command:
 
     cargo xtask setup [<disk-path>]
 
-This will prepare a reven image to use with various tests. By default
-the latest reven release is downloaded from a GS bucket. You can also
-provide a path to use a local image. Any kind of image (`base`, `dev`,
-or `test`) is allowed, but the image must have rootfs verification
-enabled.
+This will prepare a reven image to use with VM tests. By default a build
+of the public reven board is downloaded from a GS bucket. If you are a
+Googler, you can pass `--reven-private` to get a recent build of the
+private reven board. Alternatively, you can provide a file path to use a
+local image. The image should be a `test` image with verity enabled.
 
 To check formatting, lint, test, build crdyboot, and install to the image:
 

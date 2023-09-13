@@ -93,25 +93,23 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-fn download_latest_reven(conf: &Config) -> Result<()> {
-    let bucket = "chromeos-image-archive";
-    let board_dir = "reven-release";
-
-    // Find the latest version using the LATEST-main file, which
-    // contains a string like "R114-15410.0.0".
-    let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
-    let output = Command::with_args(GSUTIL, ["cat", &latest_main_path])
-        .enable_capture()
-        .run()?;
-    let latest_version = String::from_utf8(output.stdout)?;
-
+/// Download `gs_path` using gsutil. If `expected_hash` is provided,
+/// check that it matches the SHA-256 of the downlodaed file. Unpack the
+/// tarball and move chromiumos_test_image.bin to workspace/disk.bin.
+fn download_and_extract_disk_image(
+    conf: &Config,
+    gs_path: &str,
+    expected_hash: Option<&str>,
+) -> Result<()> {
     // Download the compressed test image to a temporary directory.
     let tmp_dir = TempDir::new()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
-    let compressed_name = "chromiumos_test_image.tar.xz";
-    let download_path = tmp_path.join(compressed_name);
-    let test_image_path = format!("gs://{bucket}/{board_dir}/{latest_version}/{compressed_name}");
-    download_from_gs(&test_image_path, &download_path)?;
+    let download_path = tmp_path.join("chromiumos_test_image.tar.xz");
+    download_from_gs(gs_path, &download_path)?;
+
+    if let Some(expected_hash) = expected_hash {
+        check_sha256_hash(&download_path, expected_hash)?;
+    }
 
     // Extract the image.
     Command::with_args(
@@ -137,6 +135,36 @@ fn download_latest_reven(conf: &Config) -> Result<()> {
     .run()?;
 
     Ok(())
+}
+
+/// Find the latest ToT build of reven-private and download it. Requires
+/// internal Google credentials.
+fn download_latest_reven(conf: &Config) -> Result<()> {
+    let bucket = "chromeos-image-archive";
+    let board_dir = "reven-release";
+
+    // Find the latest version using the LATEST-main file, which
+    // contains a string like "R114-15410.0.0".
+    let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
+    let output = Command::with_args("gsutil", ["cat", &latest_main_path])
+        .enable_capture()
+        .run()?;
+    let latest_version = String::from_utf8(output.stdout)?;
+
+    let test_image_path =
+        format!("gs://{bucket}/{board_dir}/{latest_version}/chromiumos_test_image.tar.xz");
+    download_and_extract_disk_image(conf, &test_image_path, None)
+}
+
+/// Download a pinned build of the public reven board.
+fn download_pinned_public_reven(conf: &Config) -> Result<()> {
+    let hash = "d3ef6564c8716218441ca956139878928c0f368a326d5b5be0df6ad2184be66e";
+
+    let test_image_path = format!(
+        "gs://chromeos-localmirror/distfiles/reven-public-test-image-{}.tar.xz",
+        &hash[..8]
+    );
+    download_and_extract_disk_image(conf, &test_image_path, Some(hash))
 }
 
 /// Fix build errors caused by a vboot upgrade.
@@ -263,7 +291,11 @@ pub(super) fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
 
     // If we don't have a disk image, download one from GS.
     if !conf.disk_path().exists() {
-        download_latest_reven(conf)?;
+        if action.reven_private {
+            download_latest_reven(conf)?;
+        } else {
+            download_pinned_public_reven(conf)?;
+        }
     }
 
     build_futility(conf)?;

@@ -136,6 +136,10 @@ struct SetupAction {
     /// OVMF 32-bit vars file.
     #[argh(option)]
     ovmf32_vars: Option<Utf8PathBuf>,
+
+    /// download a reven-private image (requires Google credentials).
+    #[argh(switch)]
+    reven_private: bool,
 }
 
 /// Run tests.
