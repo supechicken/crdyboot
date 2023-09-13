@@ -49,6 +49,20 @@ fn download_from_gs(src: &str, dst: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
+/// Validate that the contents of the file at `path` have a SHA-256 hash
+/// matching `expected_hash`.
+///
+/// This is used to ensure that downloaded files have the expected
+/// contents.
+fn check_sha256_hash(path: &Utf8Path, expected_hash: &str) -> Result<()> {
+    assert_eq!(expected_hash.len(), 64);
+    let actual_hash = sha256sum(path)?;
+    if actual_hash != expected_hash {
+        bail!("unexpected SHA-256 hash of {path}: {actual_hash} != {expected_hash}");
+    }
+    Ok(())
+}
+
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
@@ -62,11 +76,7 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
         &test_data_src_path,
     )?;
 
-    // Check the SHA-256 hash of the tarball.
-    let actual_hash = sha256sum(&test_data_src_path)?;
-    if actual_hash != hash {
-        bail!("unexpected SHA-256 hash of {test_data_src_path}: {actual_hash} != {hash}");
-    }
+    check_sha256_hash(&test_data_src_path, config::TEST_DATA_HASH)?;
 
     // Unpack the test data.
     Command::with_args(
