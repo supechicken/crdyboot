@@ -454,8 +454,9 @@ mod tests {
     fn test_load_kernel() {
         let test_key_vbpubk =
             include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk");
-        let expected_command_line_with_placeholders = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=%U/PARTNROFF=1 hashtree=PARTUUID=%U/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=c2887f00d6254551c1baa2c90c074f966ad89eafa9de9666a5085cca920b6d55 salt=810d51dd3e3ddef7ab1a46e0d9acbce7e17b7fe6946dbbe771bc20557d85222e\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=%U add_efi_memmap noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
-        let expected_command_line = "console= loglevel=7 init=/sbin/init cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 dm=\"1 vroot none ro 1,0 4710400 verity payload=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashtree=PARTUUID=c6fbb888-1b6d-4988-a66e-ace443df68f4/PARTNROFF=1 hashstart=4710400 alg=sha256 root_hexdigest=c2887f00d6254551c1baa2c90c074f966ad89eafa9de9666a5085cca920b6d55 salt=810d51dd3e3ddef7ab1a46e0d9acbce7e17b7fe6946dbbe771bc20557d85222e\" noinitrd cros_debug vt.global_cursor_default=0 kern_guid=c6fbb888-1b6d-4988-a66e-ace443df68f4 add_efi_memmap noresume i915.modeset=1 kvm-intel.vmentry_l1d_flush=always ";
+        let expected_command_line_with_placeholders =
+            include_str!("../test_data/expected_cmdline_with_placeholders.txt");
+        let expected_command_line = include_str!("../test_data/expected_cmdline.txt");
 
         let mut disk = read_test_disk();
 
@@ -474,11 +475,17 @@ mod tests {
                 );
 
                 assert_eq!(
-                    loaded_kernel.command_line_with_placeholders().unwrap(),
-                    expected_command_line_with_placeholders
+                    loaded_kernel
+                        .command_line_with_placeholders()
+                        .unwrap()
+                        .trim_end(),
+                    expected_command_line_with_placeholders.trim_end()
                 );
 
-                assert_eq!(loaded_kernel.command_line().unwrap(), expected_command_line);
+                assert_eq!(
+                    loaded_kernel.command_line().unwrap().trim_end(),
+                    expected_command_line.trim_end()
+                );
             }
             Err(err) => {
                 panic!("load_kernel failed: {err}");
