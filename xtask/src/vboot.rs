@@ -37,7 +37,6 @@ pub fn parse_return_codes(conf: &Config) -> Result<Vec<String>> {
         .add_arg(header_path)
         .enable_capture()
         .run()?;
-    assert!(output.status.success(), "failed to get AST (clang failed)");
 
     // Parse the JSON.
     let ast: AstNode = serde_json::from_slice(&output.stdout)?;
