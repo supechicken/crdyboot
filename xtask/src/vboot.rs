@@ -7,22 +7,12 @@ use anyhow::Result;
 use camino::Utf8PathBuf;
 use command_run::Command;
 use fs_err as fs;
-use serde::Deserialize;
+use tempfile::TempDir;
 
 pub struct VbootKeyPaths {
     pub vbprivk: Utf8PathBuf,
     pub vbpubk: Utf8PathBuf,
     pub keyblock: Option<Utf8PathBuf>,
-}
-
-/// Clang AST node.
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct AstNode {
-    kind: String,
-    name: Option<String>,
-    #[serde(default)]
-    inner: Vec<AstNode>,
 }
 
 /// Parse the C header containing return codes to get a `Vec` containing
@@ -32,32 +22,40 @@ pub fn parse_return_codes(conf: &Config) -> Result<Vec<String>> {
         .vboot_reference_path()
         .join("firmware/2lib/include/2return_codes.h");
 
+    let temp_dir = TempDir::new()?;
+    let ast_path = temp_dir.path().join("ast.json");
+
     // Use clang to get an AST in JSON.
     let output = Command::with_args("clang", ["-Xclang", "-ast-dump=json", "-fsyntax-only"])
         .add_arg(header_path)
         .enable_capture()
         .run()?;
+    fs::write(&ast_path, output.stdout)?;
 
-    // Parse the JSON.
-    let ast: AstNode = serde_json::from_slice(&output.stdout)?;
+    // Use the `jq` program to parse the output rather than pulling in
+    // the `serde_json` crate, since nothing else needs it.
+    let output = Command::new("jq")
+        .add_arg(
+            // Find the enum declaration node named `vb2_return_code`,
+            // then get a list of each member's name. This produces a
+            // list of double-quoted strings, one per line.
+            r#".inner[] | select(.kind=="EnumDecl" and .name=="vb2_return_code") | .inner[].name"#,
+        )
+        .add_arg(&ast_path)
+        .enable_capture()
+        .run()?;
 
-    // Find the vb2_return_code enum.
-    let enum_node = ast
-        .inner
-        .iter()
-        .find(|node| node.kind == "EnumDecl" && node.name.as_deref() == Some("vb2_return_code"))
-        .expect("failed to find vb2_return_code");
+    // Convert the output to UTF-8.
+    let stdout = std::str::from_utf8(&output.stdout)?;
+    // Strip the quotes around each string.
+    let stdout = stdout.replace('\"', "");
 
-    // Get an iterator of enum member names.
-    Ok(enum_node
-        .inner
-        .iter()
-        .map(|node| {
-            assert_eq!(node.kind, "EnumConstantDecl");
-            node.name.as_ref().expect("missing node name")
-        })
-        .cloned()
-        .collect())
+    let lines: Vec<_> = stdout.lines().map(str::to_string).collect();
+
+    // Smoke test: make sure that a known enum member is in the output.
+    assert!(lines.contains(&"VB2_SUCCESS".to_string()));
+
+    Ok(lines)
 }
 
 /// Generate a Rust function that converts from a `ReturnCode` numeric
