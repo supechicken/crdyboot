@@ -17,8 +17,8 @@ mod vm_test;
 
 use anyhow::{anyhow, bail, Result};
 use arch::Arch;
-use argh::FromArgs;
 use camino::{Utf8Path, Utf8PathBuf};
+use clap::{Parser, Subcommand};
 use command_run::Command;
 use config::{Config, EfiExe};
 use fs_err as fs;
@@ -33,18 +33,18 @@ use swtpm::TpmVersion;
 use tempfile::TempDir;
 
 /// Tools for crdyboot.
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Parser)]
 pub struct Opt {
     /// action to run
-    #[argh(subcommand)]
+    #[command(subcommand)]
     action: Action,
 }
 
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand)]
+#[derive(Subcommand)]
 enum Action {
     Setup(SetupAction),
     Check(CheckAction),
+    #[command(name = "fmt")]
     Format(FormatAction),
     Lint(LintAction),
     Test(TestAction),
@@ -57,11 +57,10 @@ enum Action {
 }
 
 /// Build crdyboot.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "build")]
+#[derive(Parser)]
 struct BuildAction {
     /// only log warnings and errors
-    #[argh(switch)]
+    #[arg(long)]
     disable_verbose_logs: bool,
 }
 
@@ -72,24 +71,22 @@ impl BuildAction {
 }
 
 /// Build enroller.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "build-enroller")]
+#[derive(Parser)]
 struct BuildEnrollerAction {}
 
 /// Check formating, lint, test, and build.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "check")]
+#[derive(Parser)]
 struct CheckAction {
     /// only log warnings and errors
-    #[argh(switch)]
+    #[arg(long)]
     disable_verbose_logs: bool,
 
     /// disable miri tests
-    #[argh(switch)]
+    #[arg(long)]
     no_miri: bool,
 
     /// enable slow VM tests
-    #[argh(switch)]
+    #[arg(long)]
     vm_tests: bool,
 }
 
@@ -100,83 +97,77 @@ impl CheckAction {
 }
 
 /// Run "cargo fmt" on all the code.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "fmt")]
+#[derive(Parser)]
 struct FormatAction {
     /// don't format the code, just check if it's already formatted
-    #[argh(switch)]
+    #[arg(long)]
     check: bool,
 }
 
 /// Run "cargo clippy" on all the code.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "lint")]
+#[derive(Parser)]
 struct LintAction {}
 
 /// Initialize the workspace.
-#[derive(FromArgs, PartialEq, Debug, Default)]
-#[argh(subcommand, name = "setup")]
+#[derive(Parser, Default)]
 struct SetupAction {
     /// path of the reven disk image to copy.
-    #[argh(positional)]
     disk_image: Option<Utf8PathBuf>,
 
     /// OVMF 64-bit code file.
-    #[argh(option)]
+    #[arg(long)]
     ovmf64_code: Option<Utf8PathBuf>,
 
     /// OVMF 64-bit vars file.
-    #[argh(option)]
+    #[arg(long)]
     ovmf64_vars: Option<Utf8PathBuf>,
 
     /// OVMF 32-bit code file.
-    #[argh(option)]
+    #[arg(long)]
     ovmf32_code: Option<Utf8PathBuf>,
 
     /// OVMF 32-bit vars file.
-    #[argh(option)]
+    #[arg(long)]
     ovmf32_vars: Option<Utf8PathBuf>,
 
     /// download a reven-private image (requires Google credentials).
-    #[argh(switch)]
+    #[arg(long)]
     reven_private: bool,
 }
 
 /// Run tests.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "test")]
+#[derive(Parser)]
 struct TestAction {
     /// disable miri tests
-    #[argh(switch)]
+    #[arg(long)]
     no_miri: bool,
 
     /// enable slow VM tests
-    #[argh(switch)]
+    #[arg(long)]
     vm_tests: bool,
 }
 
 /// Run crdyboot under qemu.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "qemu")]
+#[derive(Parser)]
 struct QemuAction {
     /// use 32-bit UEFI instead of 64-bit
-    #[argh(switch)]
+    #[arg(long)]
     ia32: bool,
 
     /// disable secure boot
-    #[argh(switch)]
+    #[arg(long)]
     no_secure_boot: bool,
 
     /// type of qemu display to use none, gtk, sdl (default=sdl)
-    #[argh(option, default = "Display::Sdl")]
+    #[arg(long, default_value = "sdl")]
     display: Display,
 
     /// enable emulated TPM v1.2
-    #[argh(switch)]
+    #[arg(long)]
     tpm1: bool,
 
     /// enable emulated TPM v2.0
-    #[argh(switch)]
+    #[arg(long)]
     tpm2: bool,
 }
 
@@ -197,18 +188,15 @@ impl QemuAction {
 }
 
 /// Write the disk binary to a USB with `writedisk`.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "writedisk")]
+#[derive(Parser)]
 struct WritediskAction {}
 
 /// Generate a tarball of test data for upload to GS.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "gen-test-data-tarball")]
+#[derive(Parser)]
 struct GenTestDataTarballAction {}
 
 /// Regenerate vboot/src/return_codes.rs.
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "gen-vboot-return-code-strings")]
+#[derive(Parser)]
 struct GenVbootReturnCodeStringsAction {}
 
 fn run_cargo_deny() -> Result<()> {
@@ -497,7 +485,7 @@ fn get_repo_path() -> Result<Utf8PathBuf> {
 }
 
 fn main() -> Result<()> {
-    let opt: Opt = argh::from_env();
+    let opt = Opt::parse();
     let repo_root = get_repo_path()?;
 
     let conf = Config::new(repo_root);
