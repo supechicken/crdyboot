@@ -32,6 +32,52 @@ fn init_submodules(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+struct GsResource {
+    bucket: String,
+    key: String,
+}
+
+impl GsResource {
+    /// Create a new `GsResource`.
+    fn new(bucket: &str, key: String) -> Self {
+        Self {
+            bucket: bucket.to_string(),
+            key,
+        }
+    }
+
+    /// Format the resource as a "gs://" URL.
+    fn gs_url(&self) -> String {
+        format!("gs://{}/{}", self.bucket, self.key)
+    }
+
+    /// Download a file from GS into a `Vec<u8>`.
+    fn download_to_vec(&self) -> Result<Vec<u8>> {
+        let output = Command::with_args(GSUTIL, ["cat", &self.gs_url()])
+            .enable_capture()
+            .run()?;
+        Ok(output.stdout)
+    }
+
+    /// Download a file from GS into a `String`.
+    fn download_to_string(&self) -> Result<String> {
+        let data = self.download_to_vec()?;
+        Ok(String::from_utf8(data)?)
+    }
+
+    /// Download a file from GS directly to disk.
+    ///
+    /// `dst` must be a full file path, not a directory, and it must not
+    /// already exist.
+    fn download_to_file(&self, dst: &Utf8Path) -> Result<()> {
+        // Check that we're not accidentally overwriting an existing file.
+        assert!(!dst.exists());
+
+        Command::with_args(GSUTIL, ["cp", &self.gs_url(), dst.as_str()]).run()?;
+        Ok(())
+    }
+}
+
 /// Get the SHA-256 hash of the given file.
 fn sha256sum(path: &Utf8Path) -> Result<String> {
     // Run the sha256sum program rather than using the sha2 crate, since
@@ -45,11 +91,6 @@ fn sha256sum(path: &Utf8Path) -> Result<String> {
         .get(..64)
         .context("invalid sha256sum output")?;
     Ok(String::from_utf8(hash.to_vec())?)
-}
-
-fn download_from_gs(src: &str, dst: &Utf8Path) -> Result<()> {
-    Command::with_args(GSUTIL, ["cp", src, dst.as_str()]).run()?;
-    Ok(())
 }
 
 /// Validate that the contents of the file at `path` have a SHA-256 hash
@@ -74,10 +115,11 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
     let test_data_src_path = tmp_dir.join(&test_data_file_name);
 
     // Download the test data tarball.
-    download_from_gs(
-        &format!("gs://{CHROMEOS_LOCALMIRROR_BUCKET}/distfiles/{test_data_file_name}"),
-        &test_data_src_path,
-    )?;
+    GsResource::new(
+        CHROMEOS_LOCALMIRROR_BUCKET,
+        format!("distfiles/{test_data_file_name}"),
+    )
+    .download_to_file(&test_data_src_path)?;
 
     check_sha256_hash(&test_data_src_path, config::TEST_DATA_HASH)?;
 
@@ -101,14 +143,14 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
 /// tarball and move chromiumos_test_image.bin to workspace/disk.bin.
 fn download_and_extract_disk_image(
     conf: &Config,
-    gs_path: &str,
+    gs_resource: GsResource,
     expected_hash: Option<&str>,
 ) -> Result<()> {
     // Download the compressed test image to a temporary directory.
     let tmp_dir = TempDir::new()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let download_path = tmp_path.join("chromiumos_test_image.tar.xz");
-    download_from_gs(gs_path, &download_path)?;
+    gs_resource.download_to_file(&download_path)?;
 
     if let Some(expected_hash) = expected_hash {
         check_sha256_hash(&download_path, expected_hash)?;
@@ -143,31 +185,32 @@ fn download_and_extract_disk_image(
 /// Find the latest ToT build of reven-private and download it. Requires
 /// internal Google credentials.
 fn download_latest_reven(conf: &Config) -> Result<()> {
-    let bucket = CHROMEOS_IMAGE_ARCHIVE_BUCKET;
     let board_dir = "reven-release";
 
     // Find the latest version using the LATEST-main file, which
     // contains a string like "R114-15410.0.0".
-    let latest_main_path = format!("gs://{bucket}/{board_dir}/LATEST-main");
-    let output = Command::with_args("gsutil", ["cat", &latest_main_path])
-        .enable_capture()
-        .run()?;
-    let latest_version = String::from_utf8(output.stdout)?;
+    let latest_main_resource = GsResource::new(
+        CHROMEOS_IMAGE_ARCHIVE_BUCKET,
+        format!("{board_dir}/LATEST-main"),
+    );
+    let latest_version = latest_main_resource.download_to_string()?;
 
-    let test_image_path =
-        format!("gs://{bucket}/{board_dir}/{latest_version}/chromiumos_test_image.tar.xz");
-    download_and_extract_disk_image(conf, &test_image_path, None)
+    let test_image_resource = GsResource::new(
+        CHROMEOS_IMAGE_ARCHIVE_BUCKET,
+        format!("{board_dir}/{latest_version}/chromiumos_test_image.tar.xz"),
+    );
+    download_and_extract_disk_image(conf, test_image_resource, None)
 }
 
 /// Download a pinned build of the public reven board.
 fn download_pinned_public_reven(conf: &Config) -> Result<()> {
     let hash = "d3ef6564c8716218441ca956139878928c0f368a326d5b5be0df6ad2184be66e";
 
-    let test_image_path = format!(
-        "gs://{CHROMEOS_LOCALMIRROR_BUCKET}/distfiles/reven-public-test-image-{}.tar.xz",
-        &hash[..8]
+    let test_image_resource = GsResource::new(
+        CHROMEOS_LOCALMIRROR_BUCKET,
+        format!("distfiles/reven-public-test-image-{}.tar.xz", &hash[..8]),
     );
-    download_and_extract_disk_image(conf, &test_image_path, Some(hash))
+    download_and_extract_disk_image(conf, test_image_resource, Some(hash))
 }
 
 /// Fix build errors caused by a vboot upgrade.
