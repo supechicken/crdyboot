@@ -18,6 +18,11 @@ const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
 
 fn init_submodules(conf: &Config) -> Result<()> {
+    if !conf.repo_path().join(".git").exists() {
+        println!("not a git repo; skipping submodule init");
+        return Ok(());
+    }
+
     Command::with_args(
         "git",
         [
