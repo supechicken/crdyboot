@@ -6,7 +6,7 @@ use crate::swtpm::{Swtpm, TpmVersion};
 use crate::util::ScopedChild;
 use crate::Config;
 use anyhow::{anyhow, Error, Result};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -121,11 +121,15 @@ pub struct QemuOpts {
 impl QemuOpts {
     fn create_command(&self) -> Command {
         let mut cmd = Command::new("qemu-system-x86_64");
-        cmd.arg("-enable-kvm");
         cmd.arg("-nodefaults");
         cmd.args(["-vga", "virtio"]);
         cmd.args(["-serial", "stdio"]);
         cmd.args(["-display", self.display.as_arg_str()]);
+
+        // Enable KVM acceleration if the KVM device exists.
+        if Utf8Path::new("/dev/kvm").exists() {
+            cmd.arg("-enable-kvm");
+        }
 
         if self.snapshot {
             cmd.arg("-snapshot");
