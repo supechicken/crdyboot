@@ -13,6 +13,9 @@ use tempfile::TempDir;
 
 const GSUTIL: &str = "gsutil";
 
+const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
+const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
+
 fn init_submodules(conf: &Config) -> Result<()> {
     Command::with_args(
         "git",
@@ -72,7 +75,7 @@ fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
 
     // Download the test data tarball.
     download_from_gs(
-        &format!("gs://chromeos-localmirror/distfiles/{test_data_file_name}"),
+        &format!("gs://{CHROMEOS_LOCALMIRROR_BUCKET}/distfiles/{test_data_file_name}"),
         &test_data_src_path,
     )?;
 
@@ -140,7 +143,7 @@ fn download_and_extract_disk_image(
 /// Find the latest ToT build of reven-private and download it. Requires
 /// internal Google credentials.
 fn download_latest_reven(conf: &Config) -> Result<()> {
-    let bucket = "chromeos-image-archive";
+    let bucket = CHROMEOS_IMAGE_ARCHIVE_BUCKET;
     let board_dir = "reven-release";
 
     // Find the latest version using the LATEST-main file, which
@@ -161,7 +164,7 @@ fn download_pinned_public_reven(conf: &Config) -> Result<()> {
     let hash = "d3ef6564c8716218441ca956139878928c0f368a326d5b5be0df6ad2184be66e";
 
     let test_image_path = format!(
-        "gs://chromeos-localmirror/distfiles/reven-public-test-image-{}.tar.xz",
+        "gs://{CHROMEOS_LOCALMIRROR_BUCKET}/distfiles/reven-public-test-image-{}.tar.xz",
         &hash[..8]
     );
     download_and_extract_disk_image(conf, &test_image_path, Some(hash))
