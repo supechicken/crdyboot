@@ -42,11 +42,11 @@ impl GsResource {
 
     /// Format the resource as an "https://" URL. This URL is only valid
     /// for public objects.
-    fn https_url(&self) -> String {
-        format!(
+    fn https_resource(&self) -> HttpsResource {
+        HttpsResource::new(format!(
             "https://storage.googleapis.com/{}/{}",
             self.bucket, self.key
-        )
+        ))
     }
 
     /// Download a file from GS into a `Vec<u8>`.
@@ -75,21 +75,56 @@ impl GsResource {
         // gsutil. This avoids needing to install gsutil at all for the
         // default behavior of `cargo xtask setup`.
         if self.public {
-            Command::with_args(
-                CURL,
-                [
-                    "--fail",
-                    "--location",
-                    "--output",
-                    dst.as_str(),
-                    &self.https_url(),
-                ],
-            )
-            .run()?;
+            self.https_resource().download_to_file(dst)?;
         } else {
             Command::with_args(GSUTIL, ["cp", &self.gs_url(), dst.as_str()]).run()?;
         }
 
+        Ok(())
+    }
+}
+
+fn curl_command() -> Command {
+    Command::with_args(
+        CURL,
+        [
+            // Exit non-zero if the server returns an error.
+            "--fail",
+            // Follow redirects.
+            "--location",
+        ],
+    )
+}
+
+/// Downloader for HTTPS resources.
+///
+/// Internally this uses the `curl` program to avoid adding a bunch of
+/// dependencies to xtask.
+pub struct HttpsResource {
+    url: String,
+}
+
+impl HttpsResource {
+    pub fn new<S: Into<String>>(url: S) -> Self {
+        let url: String = url.into();
+
+        // Make sure everything is downloaded over https.
+        assert!(url.starts_with("https://"));
+
+        Self { url }
+    }
+
+    /// Download a file to disk.
+    ///
+    /// `dst` must be a full file path, not a directory, and it must not
+    /// already exist.
+    pub fn download_to_file(&self, dst: &Utf8Path) -> Result<()> {
+        // Check that we're not accidentally overwriting an existing file.
+        assert!(!dst.exists());
+
+        curl_command()
+            .add_args(["--output", dst.as_str(), &self.url])
+            .run()?;
         Ok(())
     }
 }
