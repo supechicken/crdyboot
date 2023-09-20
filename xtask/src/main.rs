@@ -292,27 +292,6 @@ fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> 
     gen_disk::update_verbose_boot_file(conf, verbose)
 }
 
-pub fn update_local_repo(path: &Utf8Path, url: &str, rev: &str) -> Result<()> {
-    // Clone repo if not already cloned, otherwise just fetch.
-    if path.exists() {
-        Command::with_args("git", ["-C", path.as_str(), "fetch"]).run()?;
-    } else {
-        Command::with_args("git", ["clone", url, path.as_str()]).run()?;
-    }
-
-    // Check out a known-working commit.
-    Command::with_args("git", ["-C", path.as_str(), "checkout", rev]).run()?;
-
-    // Init/update submodules.
-    Command::with_args(
-        "git",
-        ["-C", path.as_str(), "submodule", "update", "--init"],
-    )
-    .run()?;
-
-    Ok(())
-}
-
 fn run_build_enroller(conf: &Config) -> Result<()> {
     let features = if conf.workspace_path().join("shim_verbose").exists() {
         vec!["shim_verbose"]

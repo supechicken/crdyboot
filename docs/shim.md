@@ -11,10 +11,8 @@ second-stage bootloader properly used shim's verification protocol to
 check the signature of the next stage. Since crdyboot verifies the next
 stage through vboot, the EBS check would fail if enabled.
 
-Shim itself is built automatically during `cargo xtask setup`. This
-requires podman, because we build from the [ChromeOS Flex
-shim-review][shim-review] repo to match our real shim as closely as
-possible. See [`shim.rs`] for details.
+Shim itself is built automatically during `cargo xtask setup`. See
+[`shim.rs`] for details.
 
 ## Logging
 
@@ -27,4 +25,3 @@ build-enroller.`
 
 [shim]: https://github.com/rhboot/shim
 [`shim.rs`]: ../xtask/src/shim.rs
-[shim-review]: https://chromium.googlesource.com/chromiumos/shim-review

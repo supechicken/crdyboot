@@ -153,6 +153,10 @@ impl Config {
         self.target_path().join("shim")
     }
 
+    pub fn shim_build_version_path(&self) -> Utf8PathBuf {
+        self.shim_build_path().join("shim-build-version")
+    }
+
     /// SSH port for VMs.
     pub fn ssh_port() -> u16 {
         9322
