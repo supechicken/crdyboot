@@ -4,15 +4,13 @@
 
 use crate::arch::Arch;
 use crate::config::{self, Config};
+use crate::network::GsResource;
 use crate::qemu::{Display, QemuOpts};
 use crate::{copy_file, gen_disk, run_build_enroller, secure_boot, shim, Action, SetupAction};
 use anyhow::{bail, Context, Result};
 use camino::Utf8Path;
 use command_run::Command;
 use tempfile::TempDir;
-
-const CURL: &str = "curl";
-const GSUTIL: &str = "gsutil";
 
 const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
@@ -36,91 +34,6 @@ fn init_submodules(conf: &Config) -> Result<()> {
     .run()?;
 
     Ok(())
-}
-
-struct GsResource {
-    bucket: String,
-    key: String,
-    public: bool,
-}
-
-impl GsResource {
-    /// Create a new `GsResource`.
-    fn new(bucket: &str, key: String) -> Self {
-        Self {
-            bucket: bucket.to_string(),
-            key,
-            public: false,
-        }
-    }
-
-    /// Create a new `GsResource` for an object that is known to be
-    /// public.
-    fn new_public(bucket: &str, key: String) -> Self {
-        Self {
-            bucket: bucket.to_string(),
-            key,
-            public: true,
-        }
-    }
-
-    /// Format the resource as a "gs://" URL.
-    fn gs_url(&self) -> String {
-        format!("gs://{}/{}", self.bucket, self.key)
-    }
-
-    /// Format the resource as an "https://" URL. This URL is only valid
-    /// for public objects.
-    fn https_url(&self) -> String {
-        format!(
-            "https://storage.googleapis.com/{}/{}",
-            self.bucket, self.key
-        )
-    }
-
-    /// Download a file from GS into a `Vec<u8>`.
-    fn download_to_vec(&self) -> Result<Vec<u8>> {
-        let output = Command::with_args(GSUTIL, ["cat", &self.gs_url()])
-            .enable_capture()
-            .run()?;
-        Ok(output.stdout)
-    }
-
-    /// Download a file from GS into a `String`.
-    fn download_to_string(&self) -> Result<String> {
-        let data = self.download_to_vec()?;
-        Ok(String::from_utf8(data)?)
-    }
-
-    /// Download a file from GS directly to disk.
-    ///
-    /// `dst` must be a full file path, not a directory, and it must not
-    /// already exist.
-    fn download_to_file(&self, dst: &Utf8Path) -> Result<()> {
-        // Check that we're not accidentally overwriting an existing file.
-        assert!(!dst.exists());
-
-        // If the file is public, download it with curl instead of
-        // gsutil. This avoids needing to install gsutil at all for the
-        // default behavior of `cargo xtask setup`.
-        if self.public {
-            Command::with_args(
-                CURL,
-                [
-                    "--fail",
-                    "--location",
-                    "--output",
-                    dst.as_str(),
-                    &self.https_url(),
-                ],
-            )
-            .run()?;
-        } else {
-            Command::with_args(GSUTIL, ["cp", &self.gs_url(), dst.as_str()]).run()?;
-        }
-
-        Ok(())
-    }
 }
 
 /// Get the SHA-256 hash of the given file.

@@ -5,6 +5,7 @@
 mod arch;
 mod config;
 mod gen_disk;
+mod network;
 mod package;
 mod qemu;
 mod secure_boot;
