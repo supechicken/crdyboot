@@ -6,8 +6,9 @@ use crate::arch::Arch;
 use crate::config::{self, Config};
 use crate::network::GsResource;
 use crate::qemu::{Display, QemuOpts};
+use crate::util::check_sha256_hash;
 use crate::{copy_file, gen_disk, run_build_enroller, secure_boot, shim, Action, SetupAction};
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use camino::Utf8Path;
 use command_run::Command;
 use tempfile::TempDir;
@@ -33,35 +34,6 @@ fn init_submodules(conf: &Config) -> Result<()> {
     )
     .run()?;
 
-    Ok(())
-}
-
-/// Get the SHA-256 hash of the given file.
-fn sha256sum(path: &Utf8Path) -> Result<String> {
-    // Run the sha256sum program rather than using the sha2 crate, since
-    // sha256sum makes it easy to be efficient (avoid loading the full
-    // file into memory, etc).
-    let output = Command::with_args("sha256sum", [path])
-        .enable_capture()
-        .run()?;
-    let hash = output
-        .stdout
-        .get(..64)
-        .context("invalid sha256sum output")?;
-    Ok(String::from_utf8(hash.to_vec())?)
-}
-
-/// Validate that the contents of the file at `path` have a SHA-256 hash
-/// matching `expected_hash`.
-///
-/// This is used to ensure that downloaded files have the expected
-/// contents.
-fn check_sha256_hash(path: &Utf8Path, expected_hash: &str) -> Result<()> {
-    assert_eq!(expected_hash.len(), 64);
-    let actual_hash = sha256sum(path)?;
-    if actual_hash != expected_hash {
-        bail!("unexpected SHA-256 hash of {path}: {actual_hash} != {expected_hash}");
-    }
     Ok(())
 }
 
@@ -345,24 +317,4 @@ pub(super) fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()
 
     run_setup(conf, &SetupAction::default())?;
     conf.write_setup_version(current_version)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fs_err as fs;
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn test_sha256sum() -> Result<()> {
-        let tmp_dir = TempDir::new()?;
-        let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
-        let path = tmp_dir.join("file");
-        fs::write(&path, "abc")?;
-        assert_eq!(
-            sha256sum(&path)?,
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-        Ok(())
-    }
 }
