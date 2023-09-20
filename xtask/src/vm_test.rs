@@ -67,7 +67,7 @@ fn wait_for_ssh(conf: &Config) -> Result<()> {
 
     // Wait up to one minute for SSH to come up.
     let start_time = Instant::now();
-    while start_time.elapsed() < Duration::from_secs(60) {
+    while start_time.elapsed() < Duration::from_secs(120) {
         let output = cmd.run()?;
         if output.status.success() {
             return Ok(());
