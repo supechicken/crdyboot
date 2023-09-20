@@ -30,6 +30,8 @@ const VM_ERROR_TIMEOUT: Duration = Duration::from_secs(30);
 fn download_test_key(conf: &Config) -> Result<()> {
     let mut resource = HttpsResource::new("https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa?format=TEXT");
     resource.enable_base64_decode();
+    resource
+        .set_expected_sha256("ebd33984c3b671f8aa82f73ab12dd1fe5af6af7080bd6361e3ec814f60c335be");
     let key = resource.download_to_vec()?;
     fs::write(conf.ssh_key_path(), key)?;
 

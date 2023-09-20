@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use anyhow::Result;
+use crate::util::check_sha256_hash;
+use anyhow::{bail, Result};
 use base64::Engine;
 use camino::Utf8Path;
 use command_run::Command;
+use sha2::{Digest, Sha256};
 
 const CURL: &str = "curl";
 const GSUTIL: &str = "gsutil";
@@ -104,6 +106,7 @@ fn curl_command() -> Command {
 pub struct HttpsResource {
     url: String,
     base64_decode: bool,
+    expected_sha256: Option<String>,
 }
 
 impl HttpsResource {
@@ -115,6 +118,7 @@ impl HttpsResource {
 
         Self {
             url,
+            expected_sha256: None,
             base64_decode: false,
         }
     }
@@ -124,12 +128,26 @@ impl HttpsResource {
         self.base64_decode = true;
     }
 
+    /// Check the SHA-256 of the downloaded resource.
+    ///
+    /// If base64 decoding is enabled, this is the hash after decoding.
+    pub fn set_expected_sha256(&mut self, sha256: &str) {
+        assert_eq!(sha256.len(), 64);
+        self.expected_sha256 = Some(sha256.to_string());
+    }
+
     /// Download a file into a `Vec<u8>`.
     pub fn download_to_vec(&self) -> Result<Vec<u8>> {
         let url = &self.url;
         let mut data = curl_command().add_arg(url).enable_capture().run()?.stdout;
         if self.base64_decode {
             data = base64::engine::general_purpose::STANDARD_NO_PAD.decode(data)?
+        }
+        if let Some(expected_sha256) = &self.expected_sha256 {
+            let actual_sha256 = format!("{:x}", Sha256::digest(&data));
+            if actual_sha256 != *expected_sha256 {
+                bail!("unexpected SHA-256 hash of {url}: {actual_sha256} != {expected_sha256}");
+            }
         }
         Ok(data)
     }
@@ -148,6 +166,11 @@ impl HttpsResource {
         curl_command()
             .add_args(["--output", dst.as_str(), &self.url])
             .run()?;
+
+        if let Some(expected_sha256) = &self.expected_sha256 {
+            check_sha256_hash(dst, expected_sha256)?;
+        }
+
         Ok(())
     }
 }
