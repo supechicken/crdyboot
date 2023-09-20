@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use anyhow::Result;
+use base64::Engine;
 use camino::Utf8Path;
 use command_run::Command;
 
@@ -102,6 +103,7 @@ fn curl_command() -> Command {
 /// dependencies to xtask.
 pub struct HttpsResource {
     url: String,
+    base64_decode: bool,
 }
 
 impl HttpsResource {
@@ -111,7 +113,25 @@ impl HttpsResource {
         // Make sure everything is downloaded over https.
         assert!(url.starts_with("https://"));
 
-        Self { url }
+        Self {
+            url,
+            base64_decode: false,
+        }
+    }
+
+    /// Decode a base64 file after downloading it.
+    pub fn enable_base64_decode(&mut self) {
+        self.base64_decode = true;
+    }
+
+    /// Download a file into a `Vec<u8>`.
+    pub fn download_to_vec(&self) -> Result<Vec<u8>> {
+        let url = &self.url;
+        let mut data = curl_command().add_arg(url).enable_capture().run()?.stdout;
+        if self.base64_decode {
+            data = base64::engine::general_purpose::STANDARD_NO_PAD.decode(data)?
+        }
+        Ok(data)
     }
 
     /// Download a file to disk.
@@ -121,6 +141,9 @@ impl HttpsResource {
     pub fn download_to_file(&self, dst: &Utf8Path) -> Result<()> {
         // Check that we're not accidentally overwriting an existing file.
         assert!(!dst.exists());
+
+        // Not supported yet.
+        assert!(!self.base64_decode);
 
         curl_command()
             .add_args(["--output", dst.as_str(), &self.url])

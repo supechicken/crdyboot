@@ -7,10 +7,10 @@ use crate::config::Config;
 use crate::gen_disk::{
     corrupt_kern_a, corrupt_pubkey_section, SignAfterCorrupt, VerboseRuntimeLogs,
 };
+use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
 use crate::{copy_file, run_crdyboot_build};
 use anyhow::{bail, Result};
-use base64::Engine;
 use command_run::Command;
 use fs_err as fs;
 use std::fs::Permissions;
@@ -28,11 +28,9 @@ const VM_ERROR_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Download the well-known testing_rsa key for ChromeOS test images.
 fn download_test_key(conf: &Config) -> Result<()> {
-    let url = "https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa?format=TEXT";
-    // Use curl to download to avoid adding a bunch of dependencies to xtask.
-    let output = Command::with_args("curl", [url]).enable_capture().run()?;
-    let key =
-        String::from_utf8(base64::engine::general_purpose::STANDARD_NO_PAD.decode(output.stdout)?)?;
+    let mut resource = HttpsResource::new("https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa?format=TEXT");
+    resource.enable_base64_decode();
+    let key = resource.download_to_vec()?;
     fs::write(conf.ssh_key_path(), key)?;
 
     // Set key permissions.
