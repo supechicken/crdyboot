@@ -13,6 +13,9 @@ use camino::Utf8Path;
 use command_run::Command;
 use tempfile::TempDir;
 
+/// Bump this version any time the setup step needs to be re-run.
+const SETUP_VERSION: u32 = 8;
+
 const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
 
@@ -282,13 +285,13 @@ pub(super) fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
 
     // Build and install shim, and sign the kernel partitions with a
     // local key.
-    run_prep_disk(conf)
+    run_prep_disk(conf)?;
+
+    // Record that the latest version of the setup has succeeded.
+    conf.write_setup_version(SETUP_VERSION)
 }
 
 pub(super) fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()> {
-    // Bump this version any time the setup step needs to be re-run.
-    let current_version = 8;
-
     // Don't run setup if the user is already doing it.
     if matches!(action, Action::Setup(_)) {
         return Ok(());
@@ -301,11 +304,11 @@ pub(super) fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()
 
     // Nothing to do if the version is already high enough.
     let existing_version = conf.read_setup_version();
-    if existing_version >= current_version {
+    if existing_version >= SETUP_VERSION {
         return Ok(());
     }
 
-    println!("Re-running setup: upgrading from {existing_version} to {current_version}");
+    println!("Re-running setup: upgrading from {existing_version} to {SETUP_VERSION}");
 
     // Put any version-specific cleanup operations here.
 
@@ -315,6 +318,5 @@ pub(super) fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()
 
     // End version-specific cleanup operations.
 
-    run_setup(conf, &SetupAction::default())?;
-    conf.write_setup_version(current_version)
+    run_setup(conf, &SetupAction::default())
 }
