@@ -9,6 +9,7 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
+use libcrdy::embed_section;
 use uefi::prelude::*;
 
 #[cfg(not(target_os = "uefi"))]
@@ -20,3 +21,9 @@ fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     todo!()
 }
+
+// Add `.sbat` section to the binary.
+//
+// See https://github.com/rhboot/shim/blob/main/SBAT.md for details of what
+// this section is used for.
+embed_section!(SBAT, ".sbat", "../sbat.csv");
