@@ -12,8 +12,11 @@
 // to split up changes into separate CLs.
 #![allow(dead_code)]
 
+extern crate alloc;
+
 mod fs;
 mod relocation;
+mod sbat_revocation;
 
 use libcrdy::embed_section;
 use uefi::prelude::*;
