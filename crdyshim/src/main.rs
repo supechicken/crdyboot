@@ -8,6 +8,11 @@
 #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
+// TODO(nicholasbishop): temporarily allow dead_code to make it easier
+// to split up changes into separate CLs.
+#![allow(dead_code)]
+
+mod fs;
 
 use libcrdy::embed_section;
 use uefi::prelude::*;
