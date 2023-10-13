@@ -250,6 +250,8 @@ name = "crdyshim"
 version = "1.0.0"
 dependencies = [
  "libcrdy",
+ "log",
+ "object",
  "uefi",
  "uefi-services",
 ]

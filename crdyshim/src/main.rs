@@ -13,6 +13,7 @@
 #![allow(dead_code)]
 
 mod fs;
+mod relocation;
 
 use libcrdy::embed_section;
 use uefi::prelude::*;
