@@ -11,7 +11,7 @@ version = "1.0.0"
 [workspace.dependencies]
 ed25519-compact = { version = "1.0.0", default-features = false }
 log = { version = "0.4.0", default-features = false }
-object = { version = "0.30.0", default-features = false, features = ["pe", "read_core", "unaligned"] }
+object = { version = "0.31.1", default-features = false, features = ["pe", "read_core", "unaligned"] }
 uefi = { version = "0.23.0", default-features = false, features = ["alloc"] }
 uefi-services = "0.20.0"
 
