@@ -31,6 +31,9 @@ pub enum GptDiskError {
     /// Failed to open the [`LoadedImage`] protocol.
     OpenLoadedImageProtocolFailed(Status),
 
+    /// The [`LoadedImage`] does not have a device handle set.
+    LoadedImageHasNoDevice,
+
     /// Failed to find the handle for the disk that the current
     /// executable was booted from.
     ParentDiskNotFound,
@@ -56,6 +59,9 @@ impl Display for GptDiskError {
             }
             Self::OpenLoadedImageProtocolFailed(status) => {
                 write!(f, "failed to open the LoadedImage protocol: {status}")
+            }
+            Self::LoadedImageHasNoDevice => {
+                write!(f, "the LoadedImage does not have a device handle set")
             }
             Self::ParentDiskNotFound => {
                 write!(f, "failed to get parent disk")
@@ -146,7 +152,9 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptD
     let loaded_image = bt
         .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
         .map_err(|err| GptDiskError::OpenLoadedImageProtocolFailed(err.status()))?;
-    let partition_handle = loaded_image.device();
+    let partition_handle = loaded_image
+        .device()
+        .ok_or(GptDiskError::LoadedImageHasNoDevice)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.

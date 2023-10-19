@@ -4,28 +4,15 @@
 
 use log::{error, LevelFilter};
 use uefi::prelude::cstr16;
-use uefi::proto::device_path::DevicePath;
-use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
-use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::table::boot::{BootServices, ScopedProtocol};
-use uefi::{CStr16, Result, Status};
-
-/// Open the `SimpleFileSystem` protocol for the file system containing
-/// the currently-running executable.
-fn get_image_file_system(boot_services: &BootServices) -> Result<ScopedProtocol<SimpleFileSystem>> {
-    let loaded_image =
-        boot_services.open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())?;
-    let device_path = boot_services.open_protocol_exclusive::<DevicePath>(loaded_image.device())?;
-    let device_handle = boot_services.locate_device_path::<SimpleFileSystem>(&mut &*device_path)?;
-    boot_services.open_protocol_exclusive(device_handle)
-}
+use uefi::table::boot::BootServices;
+use uefi::{CStr16, Status};
 
 /// Check if `efi\boot\crdyboot_verbose` exists on the boot
 /// filesystem. If any error occurs when checking for this file, `false`
 /// is returned.
 fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
-    let mut sfs = match get_image_file_system(boot_services) {
+    let mut sfs = match boot_services.get_image_file_system(boot_services.image_handle()) {
         Ok(sfs) => sfs,
         Err(err) => {
             error!("failed to open SimpleFileSystem: {err:?}");
