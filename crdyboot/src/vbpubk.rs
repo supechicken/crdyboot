@@ -63,13 +63,9 @@ fn get_loaded_image_data<'boot>(
     Ok(image_data)
 }
 
-/// Read the packed public key data from the `.vbpubk` section of the
-/// currently-executing image.
-///
-/// The returned slice is valid for as long as boot services are active
-/// (as enforced by the lifetime).
-pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
-    let image_data = get_loaded_image_data(boot_services)?;
+/// Parse `image_data` as a PE, then extract the packed public key data
+/// from the `.vbpubk` section.
+fn get_vbpubk_from_image_data(image_data: &[u8]) -> Result<&[u8], VbpubkError> {
     let pe = PeFileForCurrentArch::parse(image_data).map_err(VbpubkError::InvalidPe)?;
 
     // Find the target section.
@@ -101,4 +97,14 @@ pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], Vbpu
     let section_data = image_data.get(section_range).ok_or(err)?;
 
     Ok(section_data)
+}
+
+/// Read the packed public key data from the `.vbpubk` section of the
+/// currently-executing image.
+///
+/// The returned slice is valid for as long as boot services are active
+/// (as enforced by the lifetime).
+pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
+    let image_data = get_loaded_image_data(boot_services)?;
+    get_vbpubk_from_image_data(image_data)
 }
