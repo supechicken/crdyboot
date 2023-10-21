@@ -15,3 +15,6 @@ vboot = { path = "../vboot" }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi-services.workspace = true
+
+[dev-dependencies]
+object = { workspace = true, features = [ "write_core" ] }

@@ -11,7 +11,7 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
 use uefi::Status;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum VbpubkError {
     ImageTooBig(u64),
     InvalidPe(object::Error),
@@ -107,4 +107,92 @@ fn get_vbpubk_from_image_data(image_data: &[u8]) -> Result<&[u8], VbpubkError> {
 pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
     let image_data = get_loaded_image_data(boot_services)?;
     get_vbpubk_from_image_data(image_data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_VBPUBK_SECTION_DATA: &[u8] = b"some test data";
+
+    fn create_test_pe(num_vbpubk_sections: u16) -> Vec<u8> {
+        let mut image_data = Vec::new();
+        let mut writer = object::write::pe::Writer::new(
+            /*is_64=*/ true,
+            /*section_alignment=*/ 4096,
+            /*file_alignment=*/ 4096,
+            &mut image_data,
+        );
+
+        writer.reserve_dos_header();
+        writer.reserve_nt_headers(16);
+        writer.reserve_section_headers(num_vbpubk_sections);
+
+        let mut vbpubk_sections = Vec::new();
+        for _ in 0..num_vbpubk_sections {
+            vbpubk_sections.push(writer.reserve_section(
+                *b".vbpubk\0",
+                /*characteristics=*/ 0,
+                /*virtual_size=*/ 4096,
+                /*data_size=*/ TEST_VBPUBK_SECTION_DATA.len().try_into().unwrap(),
+            ));
+        }
+
+        writer.write_empty_dos_header().unwrap();
+        writer.write_nt_headers(object::write::pe::NtHeaders {
+            machine: object::pe::IMAGE_FILE_MACHINE_I386,
+            time_date_stamp: 0,
+            characteristics: object::pe::IMAGE_FILE_EXECUTABLE_IMAGE,
+            major_linker_version: 0,
+            minor_linker_version: 0,
+            // TODO?
+            address_of_entry_point: 0,
+            image_base: 0,
+            major_operating_system_version: 0,
+            minor_operating_system_version: 0,
+            major_image_version: 0,
+            minor_image_version: 0,
+            major_subsystem_version: 0,
+            minor_subsystem_version: 0,
+            subsystem: object::pe::IMAGE_SUBSYSTEM_EFI_APPLICATION,
+            dll_characteristics: 0,
+            size_of_stack_reserve: 0,
+            size_of_stack_commit: 0,
+            size_of_heap_reserve: 0,
+            size_of_heap_commit: 0,
+        });
+        writer.write_section_headers();
+
+        for section in vbpubk_sections {
+            writer.write_section(section.file_offset, TEST_VBPUBK_SECTION_DATA);
+        }
+
+        image_data
+    }
+
+    #[test]
+    fn test_get_vbpubk_from_image_data() {
+        assert!(matches!(
+            get_vbpubk_from_image_data(&[]),
+            Err(VbpubkError::InvalidPe(_))
+        ));
+
+        assert!(matches!(
+            get_vbpubk_from_image_data(&create_test_pe(0)),
+            Err(VbpubkError::MissingSection)
+        ));
+
+        assert!(matches!(
+            get_vbpubk_from_image_data(&create_test_pe(2)),
+            Err(VbpubkError::MultipleSections)
+        ));
+
+        let mut expected_data = TEST_VBPUBK_SECTION_DATA.to_vec();
+        // Pad the size up to the section alignment.
+        expected_data.resize(4096, 0);
+        assert_eq!(
+            get_vbpubk_from_image_data(&create_test_pe(1)).unwrap(),
+            expected_data,
+        );
+    }
 }
