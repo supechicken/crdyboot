@@ -7,6 +7,7 @@ notice = "warn"
 [licenses]
 unlicensed = "deny"
 allow = [
+    "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
     "MIT",
