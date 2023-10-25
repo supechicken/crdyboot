@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 mod arch;
+mod bin_checks;
 mod config;
 mod gen_disk;
 mod network;
@@ -16,16 +17,14 @@ mod util;
 mod vboot;
 mod vm_test;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use arch::Arch;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
 use command_run::Command;
-use config::{Config, EfiExe};
+use config::Config;
 use fs_err as fs;
 use gen_disk::VerboseRuntimeLogs;
-use object::pe::{ImageNtHeaders32, ImageNtHeaders64, IMAGE_DLLCHARACTERISTICS_NX_COMPAT};
-use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use package::Package;
 use qemu::{Display, QemuOpts};
 use sha2::{Digest, Sha256};
@@ -255,35 +254,11 @@ fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the NX-compat bit is set in a crdyboot executable.
-fn ensure_nx_compat_impl<Pe: ImageNtHeaders>(bin_data: &[u8]) -> Result<()> {
-    let pe = PeFile::<Pe>::parse(bin_data)?;
-    let characteristics = pe.nt_headers().optional_header().dll_characteristics();
-    if (characteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT) == 0 {
-        bail!("nx-compat is not set")
-    }
-    Ok(())
-}
-
-/// Ensure that the NX-compat bit is set in all executables.
-fn ensure_nx_compat(conf: &Config) -> Result<()> {
-    for arch in Arch::all() {
-        for exe in EfiExe::all() {
-            let bin_data = fs::read(conf.target_exec_path(arch, *exe))?;
-            match arch {
-                Arch::Ia32 => ensure_nx_compat_impl::<ImageNtHeaders32>(&bin_data)?,
-                Arch::X64 => ensure_nx_compat_impl::<ImageNtHeaders64>(&bin_data)?,
-            }
-        }
-    }
-    Ok(())
-}
-
 fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_uefi_build(Package::Crdyboot, vec![])?;
 
-    // Ensure that the NX-compat bit is set in all crdyboot executables.
-    ensure_nx_compat(conf)?;
+    // Check various properties of the bootloader binaries.
+    bin_checks::run_bin_checks(conf)?;
 
     // Update the disk image with the new executable.
     gen_disk::copy_in_crdyboot(conf)?;
