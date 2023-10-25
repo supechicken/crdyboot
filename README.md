@@ -36,15 +36,11 @@ packages:
 
 * The `vboot` package is a thin wrapper around the C [vboot] library. It
   also exposes a `DiskIo` trait through which it can read and write
-  blocks to a disk. This package is `no_std`, and can be built for both
-  the UEFI targets and the host target. Building for the host allows
-  tests to be run on the host.
+  blocks to a disk.
 * The `libcrdy` package is where most of the bootloader is
   implemented. It implements the `DiskIo` trait using the [uefi crate],
   and uses the `vboot` package to load and verify a kernel. It then
-  boots into that kernel using the EFI stub. This package is also
-  `no_std` and can also be built for both UEFI targets and the host
-  target for testing purposes.
+  boots into that kernel using the EFI stub.
 * The `crdyboot` package provides the actual bootloader executable. It
   contains the embedded key used to verify the kernel data, the SBAT
   data used for revocation, and sets up logging and allocation. Then it
