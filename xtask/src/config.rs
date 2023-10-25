@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::arch::Arch;
+use crate::package::Package;
 use crate::qemu::OvmfPaths;
 use crate::secure_boot::SecureBootKeyPaths;
 use crate::vboot::VbootKeyPaths;
@@ -168,7 +169,7 @@ impl Config {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum EfiExe {
     Crdyboot,
     Enroller,
@@ -183,6 +184,13 @@ impl EfiExe {
         match self {
             EfiExe::Crdyboot => "crdyboot.efi",
             EfiExe::Enroller => "enroller.efi",
+        }
+    }
+
+    pub fn package(self) -> Package {
+        match self {
+            EfiExe::Crdyboot => Package::Crdyboot,
+            EfiExe::Enroller => Package::Enroller,
         }
     }
 }
