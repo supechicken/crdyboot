@@ -9,6 +9,7 @@ use fs_err as fs;
 use object::pe::{ImageNtHeaders32, ImageNtHeaders64, IMAGE_DLLCHARACTERISTICS_NX_COMPAT};
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use object::{Object, ObjectSection};
+use sbat::ImageSbat;
 
 /// Ensure that the NX-compat bit is set in an executable.
 fn ensure_nx_compat<N: ImageNtHeaders>(pe: &PeFile<N>) -> Result<()> {
@@ -21,8 +22,11 @@ fn ensure_nx_compat<N: ImageNtHeaders>(pe: &PeFile<N>) -> Result<()> {
 
 /// Check that the SBAT data in a binary looks correct.
 ///
-/// This checks that there is exactly one `.sbat` section in the binary,
-/// and that the section contains the expected CSV data.
+/// This checks the following:
+/// * There is exactly one `.sbat` section in the binary
+/// * That section contains the expected CSV data
+/// * The CSV data can be parsed as SBAT image data
+/// * The SBAT package entry version matches the version in Cargo.toml
 fn check_sbat<N: ImageNtHeaders>(conf: &Config, exe: EfiExe, pe: &PeFile<N>) -> Result<()> {
     // The enroller does not have SBAT data.
     if exe == EfiExe::Enroller {
@@ -43,12 +47,39 @@ fn check_sbat<N: ImageNtHeaders>(conf: &Config, exe: EfiExe, pe: &PeFile<N>) -> 
     let section_data = section.data()?;
 
     // Load the SBAT CSV file.
-    let sbat_csv_path = conf.repo_path().join(exe.package().name()).join("sbat.csv");
+    let package_name = exe.package().name();
+    let package_path = conf.repo_path().join(package_name);
+    let sbat_csv_path = package_path.join("sbat.csv");
     let sbat_csv = fs::read(sbat_csv_path)?;
 
     // Validate the section data matches the CSV file.
     if sbat_csv != section_data {
         bail!("SBAT mismatch: {sbat_csv:?} != {section_data:?}");
+    }
+
+    // Check that the CSV parses.
+    let sbat = ImageSbat::parse(&sbat_csv)?;
+
+    // Get the package's version from Cargo.toml.
+    let package_cargo = fs::read_to_string(package_path.join("Cargo.toml"))?;
+    let package_version = package_cargo
+        .lines()
+        .find_map(|line| line.strip_prefix("version = "))
+        .ok_or(anyhow!("failed to find version for package {package_name}"))?
+        .replace('"', "");
+
+    // Check that the SBAT version matches the package version.
+    let entry = sbat
+        .entries()
+        .find(|entry| entry.component.name == package_name)
+        .ok_or_else(|| anyhow!("missing package {package_name} in SBAT"))?;
+    let entry_version = entry
+        .vendor
+        .version
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    if entry_version != package_version {
+        bail!("mismatch in package {package_name} version: {entry_version} != {package_version}");
     }
 
     Ok(())
