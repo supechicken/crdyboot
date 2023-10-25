@@ -37,14 +37,15 @@ packages:
 * The `vboot` package is a thin wrapper around the C [vboot] library. It
   also exposes a `DiskIo` trait through which it can read and write
   blocks to a disk.
-* The `libcrdy` package is where most of the bootloader is
-  implemented. It implements the `DiskIo` trait using the [uefi crate],
-  and uses the `vboot` package to load and verify a kernel. It then
-  boots into that kernel using the EFI stub.
-* The `crdyboot` package provides the actual bootloader executable. It
+* The `libcrdy` package contains shared code that is used by both the
+  `crdyboot` and `crdyshim` packages.
+* The `crdyboot` package produces the actual `crdyboot` executable. It
   contains the embedded key used to verify the kernel data, the SBAT
   data used for revocation, and sets up logging and allocation. Then it
-  uses `libcrdy` to load, verify, and run the kernel.
+  loads, verifies, and runs the kernel.
+* The `crdyshim` package produces an optional first-stage bootloader
+  similar to [`shim`]. Its purpose is to load, verify, and run the
+  second stage bootloader.
 * The `xtask` package contains a host executable that provides the
   various `xtask` commands shown below. It's like a fancy Makefile for
   running various dev and test operations.
@@ -82,13 +83,15 @@ Googler, you can pass `--reven-private` to get a recent build of the
 private reven board. Alternatively, you can provide a file path to use a
 local image. The image should be a `test` image with verity enabled.
 
-To check formatting, lint, test, build crdyboot, and install to the image:
+To check formatting, lint, test, build crdyboot/crdyshim, and install to
+the image:
 
     cargo xtask check [--vm-tests]
 
 The `--vm-tests` option enables slow tests that run under QEMU.
 
-To just build crdyboot and install to the image (a quicker subset of `check`):
+To just build and install the bootloaders to the image (a quicker subset
+of `check`):
 
     cargo xtask build
 
@@ -119,6 +122,7 @@ See the [docs](docs) subdirectory.
 [EFI stub]: https://docs.kernel.org/admin-guide/efi-stub.html
 [go/crdyboot-internal]: http://go/crdyboot-internal
 [kernel partition]: https://chromium.googlesource.com/chromiumos/docs/+/HEAD/disk_format.md#Kernel-partition-format
+[`shim`]: https://github.com/rhboot/shim
 [uefi crate]: https://docs.rs/uefi/latest/uefi/
 [vboot]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/+/HEAD/README
 [workspace]: https://doc.rust-lang.org/cargo/reference/workspaces.html
