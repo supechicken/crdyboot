@@ -6,7 +6,6 @@ resolver = "2"
 edition = "2021"
 license = "BSD-3-Clause"
 repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
-version = "1.0.0"
 
 [workspace.dependencies]
 ed25519-compact = { version = "1.0.0", default-features = false }
