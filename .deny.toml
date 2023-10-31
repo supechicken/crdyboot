@@ -28,4 +28,4 @@ skip = [
 ]
 
 [sources]
-unknown-git = "allow"
+unknown-git = "deny"
