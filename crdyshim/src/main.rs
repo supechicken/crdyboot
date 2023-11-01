@@ -8,9 +8,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
-// TODO(nicholasbishop): temporarily allow dead_code to make it easier
+// TODO(nicholasbishop): temporarily allow some lints to make it easier
 // to split up changes into separate CLs.
 #![allow(dead_code)]
+#![allow(clippy::needless_pass_by_value)]
 
 extern crate alloc;
 
@@ -20,11 +21,11 @@ mod sbat_revocation;
 
 use core::fmt::{self, Display, Formatter};
 use fs::FsError;
-use libcrdy::embed_section;
 use libcrdy::launch::LaunchError;
 use libcrdy::nx::NxError;
 use libcrdy::page_alloc::PageAllocationError;
 use libcrdy::tpm::TpmError;
+use libcrdy::{embed_section, set_log_level};
 use log::info;
 use relocation::RelocationError;
 use sbat_revocation::RevocationError;
@@ -151,11 +152,45 @@ fn is_secure_boot_enabled(runtime_services: &RuntimeServices) -> bool {
     }
 }
 
-#[entry]
-fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut st).expect("failed to initialize uefi_services");
+/// The main application.
+///
+/// The following operations are performed:
+/// 1. Get revocations, updating if necessary.
+/// 2. Perform the self-revocation check.
+/// 3. Load, verify, and execute the next stage.
+///
+/// This is separated out from `efi_main` so that it can return a
+/// `Result` and propagate errors with `?`.
+fn run(system_table: SystemTable<Boot>) -> Result<(), CrdyshimError> {
+    let embedded_revocations = include_bytes!("../revocations.csv");
+    let revocations = sbat_revocation::update_and_get_revocations(
+        system_table.runtime_services(),
+        embedded_revocations,
+    )
+    .map_err(CrdyshimError::RevocationDataError)?;
 
+    // IMPORTANT: this self revocation check must happen as early in the
+    // program as possible. If a security flaw is found that
+    // necessitates a revocation of crdyshim, that revocation can only
+    // occur via SBAT if the flaw is _after_ this point, so we want as
+    // little code as possible prior to this point.
+    sbat_revocation::validate_image(&SBAT, &revocations).map_err(CrdyshimError::SelfRevoked)?;
+
+    // TODO(nicholasbishop): load, verify, and execute the next stage here.
     todo!()
+}
+
+#[entry]
+fn efi_main(image: Handle, mut system_table: SystemTable<Boot>) -> Status {
+    uefi_services::init(&mut system_table).expect("failed to initialize uefi_services");
+    set_log_level(system_table.boot_services());
+
+    match run(system_table) {
+        Ok(()) => unreachable!("next stage did not take control"),
+        Err(err) => {
+            panic!("boot failed: {err}");
+        }
+    }
 }
 
 // Add `.sbat` section to the binary.
