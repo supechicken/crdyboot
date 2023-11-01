@@ -258,6 +258,7 @@ dependencies = [
 name = "crdyshim"
 version = "1.0.0"
 dependencies = [
+ "ed25519-compact",
  "libcrdy",
  "log",
  "mockall",

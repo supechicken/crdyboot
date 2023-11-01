@@ -21,18 +21,22 @@ mod sbat_revocation;
 
 use core::fmt::{self, Display, Formatter};
 use fs::FsError;
+use libcrdy::arch::Arch;
 use libcrdy::launch::LaunchError;
 use libcrdy::nx::NxError;
 use libcrdy::page_alloc::PageAllocationError;
 use libcrdy::tpm::TpmError;
 use libcrdy::{embed_section, set_log_level};
-use log::info;
+use log::{error, info};
 use relocation::RelocationError;
 use sbat_revocation::RevocationError;
-use uefi::cstr16;
 use uefi::prelude::*;
+use uefi::proto::media::file::Directory;
+use uefi::proto::media::fs::SimpleFileSystem;
+use uefi::table::boot::ScopedProtocol;
 use uefi::table::runtime::VariableVendor;
 use uefi::table::{Boot, SystemTable};
+use uefi::{cstr16, CStr16, CString16};
 
 #[cfg(not(target_os = "uefi"))]
 use libcrdy::uefi_services;
@@ -152,6 +156,67 @@ fn is_secure_boot_enabled(runtime_services: &RuntimeServices) -> bool {
     }
 }
 
+/// Provides methods to read the next-stage bootloader's executable and
+/// signature.
+struct NextStageFileLoader<'a> {
+    // This field is used to keep the file system protocol open.
+    _file_system: ScopedProtocol<'a, SimpleFileSystem>,
+    boot_dir: Directory,
+    executable_name: CString16,
+}
+
+impl<'a> NextStageFileLoader<'a> {
+    /// Create a new `NextStageFileLoader` for the given name and arch.
+    fn new(
+        boot_services: &'a BootServices,
+        name: &CStr16,
+        arch: Arch,
+    ) -> Result<Self, CrdyshimError> {
+        let mut executable_name = CString16::from(name);
+        executable_name.push_str(match arch {
+            Arch::Ia32 => cstr16!("ia32.efi"),
+            Arch::X86_64 => cstr16!("x64.efi"),
+        });
+
+        let mut file_system =
+            fs::open_boot_file_system(boot_services).map_err(CrdyshimError::BootFileSystemError)?;
+        let boot_dir = fs::open_efi_boot_directory(&mut file_system)
+            .map_err(CrdyshimError::BootFileSystemError)?;
+        Ok(Self {
+            _file_system: file_system,
+            boot_dir,
+            executable_name,
+        })
+    }
+
+    /// Read the raw executable data into `buffer`.
+    fn read_executable<'buf>(
+        &mut self,
+        buffer: &'buf mut [u8],
+    ) -> Result<&'buf mut [u8], CrdyshimError> {
+        fs::read_file(&mut self.boot_dir, &self.executable_name, buffer)
+            .map_err(CrdyshimError::ExecutableReadFailed)
+    }
+
+    /// Read and return the raw signature data. Valid signature data has
+    /// a fixed size of 64 bytes; an error will be returned if the file
+    /// has the wrong length.
+    fn read_signature(&mut self) -> Result<[u8; ed25519_compact::Signature::BYTES], CrdyshimError> {
+        let mut signature_name = self.executable_name.clone();
+        signature_name.push_str(cstr16!(".sig"));
+
+        let mut signature = [0; ed25519_compact::Signature::BYTES];
+        let read_size = fs::read_file(&mut self.boot_dir, &signature_name, &mut signature)
+            .map_err(CrdyshimError::SignatureReadFailed)?
+            .len();
+        if read_size == signature.len() {
+            Ok(signature)
+        } else {
+            error!("invalid signature file size: {}", read_size);
+            Err(CrdyshimError::InvalidSignature)
+        }
+    }
+}
 /// The main application.
 ///
 /// The following operations are performed:

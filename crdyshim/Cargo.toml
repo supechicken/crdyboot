@@ -11,6 +11,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# TODO(nicholasbishop): add this to deps in rust_crates
+ed25519-compact.workspace = true
 libcrdy = { path = "../libcrdy" }
 log.workspace = true
 object.workspace = true
