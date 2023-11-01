@@ -18,13 +18,102 @@ mod fs;
 mod relocation;
 mod sbat_revocation;
 
+use core::fmt::{self, Display, Formatter};
+use fs::FsError;
 use libcrdy::embed_section;
+use libcrdy::launch::LaunchError;
+use libcrdy::nx::NxError;
+use libcrdy::page_alloc::PageAllocationError;
+use libcrdy::tpm::TpmError;
 use log::info;
+use relocation::RelocationError;
+use sbat_revocation::RevocationError;
+use uefi::cstr16;
 use uefi::prelude::*;
 use uefi::table::runtime::VariableVendor;
+use uefi::table::{Boot, SystemTable};
 
 #[cfg(not(target_os = "uefi"))]
 use libcrdy::uefi_services;
+
+pub enum CrdyshimError {
+    /// Failed to get the revocation data.
+    RevocationDataError(RevocationError),
+
+    /// The current executable is revoked.
+    SelfRevoked(RevocationError),
+
+    /// The next stage is revoked.
+    NextStageRevoked(RevocationError),
+
+    /// Failed to allocate memory.
+    Allocation(PageAllocationError),
+
+    /// Failed to open the boot file system.
+    BootFileSystemError(FsError),
+
+    /// Failed to read the next stage executable file.
+    ExecutableReadFailed(FsError),
+
+    /// Failed to read the signature file.
+    SignatureReadFailed(FsError),
+
+    /// The embedded public key is not valid.
+    InvalidPublicKey,
+
+    /// The contents of the next stage signature file are not valid.
+    InvalidSignature,
+
+    /// The next stage did not pass signature validation.
+    SignatureVerificationFailed,
+
+    /// Failed to relocate a PE executable.
+    Relocation(RelocationError),
+
+    /// Failed to parse a PE executable.
+    InvalidPe(object::Error),
+
+    /// Failed to measure the next stage into the TPM.
+    Tpm(TpmError),
+
+    /// Failed to update memory attributes.
+    MemoryProtection(NxError),
+
+    /// Failed to launch the next stage.
+    Launch(LaunchError),
+}
+
+impl Display for CrdyshimError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RevocationDataError(err) => write!(f, "revocation data error: {err}"),
+            Self::SelfRevoked(err) => write!(f, "current image is revoked: {err}"),
+            Self::NextStageRevoked(err) => write!(f, "next stage is revoked: {err}"),
+            Self::Allocation(err) => write!(f, "failed to allocate memory: {err}"),
+            Self::BootFileSystemError(err) => {
+                write!(f, "failed to open the boot file system: {err}")
+            }
+            Self::ExecutableReadFailed(err) => {
+                write!(f, "failed to read the next stage executable: {err}")
+            }
+            Self::SignatureReadFailed(err) => {
+                write!(f, "failed to read the next stage signature: {err}")
+            }
+            Self::InvalidPublicKey => write!(f, "invalid public key"),
+            Self::InvalidSignature => write!(f, "invalid signature file"),
+            Self::SignatureVerificationFailed => write!(f, "signature verification failed"),
+            Self::Relocation(err) => {
+                write!(f, "failed to relocate the next stage executable: {err}")
+            }
+            Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
+            Self::Tpm(error) => write!(f, "TPM error: {error}"),
+            Self::MemoryProtection(error) => {
+                write!(f, "failed to set up memory protection: {error}")
+            }
+            Self::Launch(error) => write!(f, "failed to launch next stage: {error}"),
+        }
+    }
+}
 
 #[allow(clippy::doc_markdown)]
 /// Check whether secure boot is enabled or not.
