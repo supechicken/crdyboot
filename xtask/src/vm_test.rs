@@ -9,7 +9,7 @@ use crate::gen_disk::{
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
-use crate::{copy_file, run_crdyboot_build};
+use crate::{copy_file, run_bootloader_build};
 use anyhow::{bail, Result};
 use command_run::Command;
 use fs_err as fs;
@@ -280,7 +280,7 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
-    run_crdyboot_build(conf, VerboseRuntimeLogs(true))?;
+    run_bootloader_build(conf, VerboseRuntimeLogs(true))?;
     download_test_key(conf)?;
 
     test_signed_vbpubk_mod_breaks_vboot(conf)?;

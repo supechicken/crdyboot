@@ -7,6 +7,7 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Package {
     Crdyboot,
+    Crdyshim,
     Enroller,
     Libcrdy,
     Vboot,
@@ -18,6 +19,7 @@ impl Package {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Crdyboot => "crdyboot",
+            Self::Crdyshim => "crdyshim",
             Self::Enroller => "enroller",
             Self::Libcrdy => "libcrdy",
             Self::Vboot => "vboot",

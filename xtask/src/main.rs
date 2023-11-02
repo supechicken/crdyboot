@@ -226,7 +226,7 @@ fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
             vm_tests: action.vm_tests,
         },
     )?;
-    run_crdyboot_build(conf, action.verbose())?;
+    run_bootloader_build(conf, action.verbose())?;
 
     Ok(())
 }
@@ -254,7 +254,8 @@ fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn run_crdyboot_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
+fn run_bootloader_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
+    run_uefi_build(Package::Crdyshim, vec![])?;
     run_uefi_build(Package::Crdyboot, vec![])?;
 
     // Check various properties of the bootloader binaries.
@@ -449,7 +450,7 @@ fn main() -> Result<()> {
     setup::rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
-        Action::Build(action) => run_crdyboot_build(&conf, action.verbose()),
+        Action::Build(action) => run_bootloader_build(&conf, action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(action) => run_check(&conf, action),
         Action::Format(action) => run_rustfmt(action),

@@ -172,17 +172,19 @@ impl Config {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum EfiExe {
     Crdyboot,
+    Crdyshim,
     Enroller,
 }
 
 impl EfiExe {
     pub fn all() -> &'static [EfiExe] {
-        &[Self::Crdyboot, Self::Enroller]
+        &[EfiExe::Crdyboot, EfiExe::Crdyshim, EfiExe::Enroller]
     }
 
     fn as_str(self) -> &'static str {
         match self {
             EfiExe::Crdyboot => "crdyboot.efi",
+            EfiExe::Crdyshim => "crdyshim.efi",
             EfiExe::Enroller => "enroller.efi",
         }
     }
@@ -190,6 +192,7 @@ impl EfiExe {
     pub fn package(self) -> Package {
         match self {
             EfiExe::Crdyboot => Package::Crdyboot,
+            EfiExe::Crdyshim => Package::Crdyshim,
             EfiExe::Enroller => Package::Enroller,
         }
     }
