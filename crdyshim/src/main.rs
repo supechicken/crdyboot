@@ -33,6 +33,7 @@ use sbat_revocation::RevocationError;
 use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
+use uefi::proto::tcg::PcrIndex;
 use uefi::table::boot::ScopedProtocol;
 use uefi::table::runtime::VariableVendor;
 use uefi::table::{Boot, SystemTable};
@@ -40,6 +41,14 @@ use uefi::{cstr16, CStr16, CString16};
 
 #[cfg(not(target_os = "uefi"))]
 use libcrdy::uefi_services;
+
+/// TPM PCR to measure into.
+///
+/// This is the same PCR shim uses.
+///
+/// See also the Linux TPM PCR Registry:
+/// <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
+const PCR_INDEX: PcrIndex = PcrIndex(4);
 
 pub enum CrdyshimError {
     /// Failed to get the revocation data.
