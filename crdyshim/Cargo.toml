@@ -11,7 +11,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# TODO(nicholasbishop): add this to deps in rust_crates
 ed25519-compact.workspace = true
 libcrdy = { path = "../libcrdy" }
 log.workspace = true
@@ -24,3 +23,9 @@ uefi-services.workspace = true
 
 [dev-dependencies]
 mockall = "0.11.4"
+
+[features]
+# If enabled, embed a locally-created test public key (produced by xtask)
+# as the embedded public key. If disabled (the default), use the
+# official reven public key.
+use_dev_pubkey = []
