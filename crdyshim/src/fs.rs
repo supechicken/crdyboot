@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use core::fmt::{self, Display, Formatter};
+use log::info;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::boot::{BootServices, ScopedProtocol};
@@ -99,6 +100,7 @@ pub fn read_file<'buf>(
     file_name: &CStr16,
     buffer: &'buf mut [u8],
 ) -> Result<&'buf mut [u8], FsError> {
+    info!("reading file {file_name}");
     let mut file = dir
         .open(file_name, FileMode::Read, FileAttribute::empty())
         .map_err(|err| FsError::OpenFailed(err.status()))?

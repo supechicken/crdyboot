@@ -293,10 +293,12 @@ fn load_and_validate_next_stage<'a>(
     let raw_signature = loader.read_signature()?;
 
     let public_key = get_public_key()?;
+    info!("embedded public key: {:02x?}", public_key.as_slice());
 
     // Verify the executable's signature.
     let signature = ed25519_compact::Signature::from_slice(raw_signature.as_slice())
         .map_err(|_| CrdyshimError::InvalidSignature)?;
+    info!("next-stage signature: {:02x?}", signature.as_slice());
     let verified = public_key.verify(&raw_exe, &signature).is_ok();
 
     info!("signature verified? {}", verified);
