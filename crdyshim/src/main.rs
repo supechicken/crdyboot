@@ -79,6 +79,9 @@ pub enum CrdyshimError {
     /// Failed to read the next stage executable file.
     ExecutableReadFailed(FsError),
 
+    /// The signature file name was not successfully created.
+    InvalidSignatureName,
+
     /// Failed to read the signature file.
     SignatureReadFailed(FsError),
 
@@ -119,6 +122,9 @@ impl Display for CrdyshimError {
             }
             Self::ExecutableReadFailed(err) => {
                 write!(f, "failed to read the next stage executable: {err}")
+            }
+            Self::InvalidSignatureName => {
+                write!(f, "failed to create the signature file name")
             }
             Self::SignatureReadFailed(err) => {
                 write!(f, "failed to read the next stage signature: {err}")
@@ -221,8 +227,8 @@ impl<'a> NextStageFileLoader<'a> {
     /// a fixed size of 64 bytes; an error will be returned if the file
     /// has the wrong length.
     fn read_signature(&mut self) -> Result<[u8; ed25519_compact::Signature::BYTES], CrdyshimError> {
-        let mut signature_name = self.executable_name.clone();
-        signature_name.push_str(cstr16!(".sig"));
+        let signature_name = fs::replace_final_extension(&self.executable_name, cstr16!("sig"))
+            .ok_or(CrdyshimError::InvalidSignatureName)?;
 
         let mut signature = [0; ed25519_compact::Signature::BYTES];
         let read_size = fs::read_file(&mut self.boot_dir, &signature_name, &mut signature)

@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use log::info;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::boot::{BootServices, ScopedProtocol};
-use uefi::{cstr16, CStr16, Status};
+use uefi::{cstr16, CStr16, CString16, Status};
 
 pub enum FsError {
     /// The buffer is too small to hold the file data. The `u64` value
@@ -134,5 +135,63 @@ pub fn read_file<'buf>(
             }
         }
         Err(err) => Err(FsError::ReadFailed(err.status())),
+    }
+}
+
+/// Create a copy of `file_name` with the final extension (i.e. the
+/// string after the final period character) replaced with
+/// `new_extension`.
+///
+/// The string in `new_extension` should not start with a period
+/// character.
+///
+/// Returns `None` if `file_name` does not contain period character.
+#[must_use]
+pub fn replace_final_extension(file_name: &CStr16, new_extension: &CStr16) -> Option<CString16> {
+    // TODO(nicholasbishop): simplify this implementation after
+    // upgrading to a version of uefi-rs that includes
+    // https://github.com/rust-osdev/uefi-rs/pull/1013.
+
+    // Convert the file name to vec. Note that this does not include the
+    // trailing null char.
+    let mut chars: Vec<u16> = file_name.as_slice().iter().map(|c| u16::from(*c)).collect();
+
+    // Find the last '.' and remove everything after it.
+    if let Some(rev_dot_index) = chars.iter().rev().position(|c| *c == u16::from(b'.')) {
+        let dot_index = chars.len().checked_sub(rev_dot_index)?;
+        chars.truncate(dot_index);
+    } else {
+        return None;
+    }
+
+    // Add the new extension.
+    chars.extend(new_extension.to_u16_slice());
+
+    // Append trailing null.
+    chars.push(0);
+
+    CString16::try_from(chars).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_replace_final_extension() {
+        assert_eq!(
+            replace_final_extension(cstr16!("crdybootx64.efi"), cstr16!("sig")),
+            Some(cstr16!("crdybootx64.sig").into())
+        );
+
+        assert_eq!(
+            replace_final_extension(cstr16!("crdybootx64.longextension"), cstr16!("sig")),
+            Some(cstr16!("crdybootx64.sig").into())
+        );
+
+        assert_eq!(
+            replace_final_extension(cstr16!("crdybootx64"), cstr16!("sig")),
+            None
+        );
     }
 }

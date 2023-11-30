@@ -189,7 +189,7 @@ pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) -> R
     // Args based on https://cendyne.dev/posts/2022-03-06-ed25519-signatures.html
     let priv_ed25519_pem = key_paths.priv_ed25519_pem();
     if priv_ed25519_pem.exists() {
-        let sig_dst = format!("{dst}.sig");
+        let sig_dst = dst.with_extension("sig");
         #[rustfmt::skip]
         Command::with_args("openssl", [
             "pkeyutl", "-sign",

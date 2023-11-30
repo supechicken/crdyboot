@@ -608,7 +608,7 @@ pub fn corrupt_pubkey_section(
 
             // Write the modified signature out.
             let sig_data = fs::read(tmp_path.join("signed.sig"))?;
-            fat_write_file(&boot_dir, &format!("{file_name}.sig"), &sig_data)?;
+            fat_write_file(&boot_dir, &file_name.replace(".efi", ".sig"), &sig_data)?;
         }
 
         // Write the modified file out.
