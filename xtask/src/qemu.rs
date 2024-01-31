@@ -210,7 +210,14 @@ impl QemuOpts {
 
         let mut cmd = self.create_command();
 
-        cmd.args(["-drive", &format!("format=raw,file={}", self.image_path)]);
+        // Attach disk image via virtio-scsi.
+        cmd.args(["-device", "virtio-scsi-pci,id=scsi"]);
+        cmd.args(["-device", "scsi-hd,drive=hd"]);
+        cmd.args([
+            "-drive",
+            &format!("if=none,id=hd,format=raw,file={}", self.image_path),
+        ]);
+
         if let Some(swtpm) = &swtpm {
             cmd.args(swtpm.qemu_args());
         }

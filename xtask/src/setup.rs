@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 8;
+const SETUP_VERSION: u32 = 9;
 
 const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
