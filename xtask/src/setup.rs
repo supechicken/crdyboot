@@ -165,6 +165,8 @@ fn build_futility(conf: &Config) -> Result<()> {
         [
             "-C",
             conf.vboot_reference_path().as_str(),
+            // Use clang since vboot sets args that gcc doesn't support.
+            "CC=clang",
             "USE_FLASHROM=0",
             conf.futility_executable_path().as_str(),
         ],
