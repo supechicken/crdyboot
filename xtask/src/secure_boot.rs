@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::Config;
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -47,14 +48,6 @@ impl SecureBootKeyPaths {
     pub fn priv_ed25519_pem(&self) -> Utf8PathBuf {
         self.dir.join("key_ed25519.priv.pem")
     }
-
-    pub fn pub_ed25519_pem(&self) -> Utf8PathBuf {
-        self.dir.join("key_ed25519.pub.pem")
-    }
-
-    pub fn pub_ed25519_raw(&self) -> Utf8PathBuf {
-        self.dir.join("key_ed25519.pub.raw")
-    }
 }
 
 pub fn generate_rsa_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
@@ -79,41 +72,22 @@ pub fn generate_rsa_key(paths: &SecureBootKeyPaths, name: &str) -> Result<()> {
     convert_pem_to_der(&paths.pub_pem(), &paths.pub_der())
 }
 
-pub fn generate_ed25519_key(paths: &SecureBootKeyPaths) -> Result<()> {
+/// Set up the Ed25519 key used for signing the second-stage bootloader
+/// so that crdyshim can verify it.
+///
+/// This uses the test key from the vboot repo rather than generating a
+/// new one.
+pub fn prepare_ed25519_key(conf: &Config) -> Result<()> {
+    let paths = conf.secure_boot_shim_key_paths();
+
     paths.create_dir()?;
+    let devkeys_dir = conf.vboot_devkeys_path();
 
-    if paths.priv_ed25519_pem().exists()
-        && paths.pub_ed25519_pem().exists()
-        && paths.pub_ed25519_raw().exists()
-    {
-        println!("using existing ed25519 {} key", paths.dir);
-        return Ok(());
-    }
-
-    // Generate private key.
-    #[rustfmt::skip]
-    Command::with_args("openssl", [
-        "genpkey",
-        "-algorithm", "ed25519",
-        "-out", paths.priv_ed25519_pem().as_str(),
-    ]).run()?;
-
-    // Extract the public key.
-    #[rustfmt::skip]
-    Command::with_args("openssl", [
-        "pkey",
-        "-in", paths.priv_ed25519_pem().as_str(),
-        "-outform", "PEM",
-        "-pubout",
-        "-out", paths.pub_ed25519_pem().as_str(),
-    ]).run()?;
-
-    // Create a raw version of the pubkey that can be loaded with
-    // `ed25519_compact::PublicKey::from_slice`.
-    let pub_pem = fs::read_to_string(paths.pub_ed25519_pem())?;
-    let pub_key = ed25519_compact::PublicKey::from_pem(&pub_pem)?;
-    let pub_raw: &[u8] = &*pub_key;
-    fs::write(paths.pub_ed25519_raw(), pub_raw)?;
+    // Copy the private key.
+    fs::copy(
+        devkeys_dir.join("uefi/crdyshim.priv.pem"),
+        paths.priv_ed25519_pem(),
+    )?;
 
     Ok(())
 }

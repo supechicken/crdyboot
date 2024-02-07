@@ -89,7 +89,7 @@ impl Config {
         self.vboot_reference_path().join("build/futility/futility")
     }
 
-    fn vboot_devkeys_path(&self) -> Utf8PathBuf {
+    pub fn vboot_devkeys_path(&self) -> Utf8PathBuf {
         self.vboot_reference_path().join("tests/devkeys")
     }
 

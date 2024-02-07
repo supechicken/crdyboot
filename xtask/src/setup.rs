@@ -191,11 +191,11 @@ fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
     // public half will be enrolled in the firmware.
     secure_boot::generate_rsa_key(&conf.secure_boot_root_key_paths(), "SecureBootRootTestKey")?;
 
-    // Generate both RSA and Ed25519 keys for signing the second-stage
+    // Prepare both RSA and Ed25519 keys for signing the second-stage
     // bootloader. The RSA key is used when booting from shim, and the
     // Ed25519 is used when booting from crdyshim.
     secure_boot::generate_rsa_key(&conf.secure_boot_shim_key_paths(), "SecureBootShimTestKey")?;
-    secure_boot::generate_ed25519_key(&conf.secure_boot_shim_key_paths())?;
+    secure_boot::prepare_ed25519_key(conf)?;
 
     let root_key_paths = conf.secure_boot_root_key_paths();
     // Generate the PK/KEK and db vars for use with the enroller.
