@@ -261,9 +261,12 @@ fn get_public_key() -> Result<ed25519_compact::PublicKey, CrdyshimError> {
 
     // If the `use_dev_pubkey` feature is disabled (the default), use
     // the official reven public key.
-    // TODO(nicholasbishop): embed the reven pub key here once it exists.
     #[cfg(not(feature = "use_dev_pubkey"))]
-    let public_key_raw = &[0; 32];
+    let public_key_raw = &[
+        0x21, 0x9e, 0x48, 0x62, 0xcb, 0xd, 0x1a, 0x49, 0x2f, 0x3c, 0x14, 0x7f, 0xd1, 0x86, 0xf8,
+        0x2a, 0xec, 0x63, 0x7b, 0xab, 0xd4, 0xa3, 0x54, 0xb4, 0xa9, 0xb9, 0x25, 0xfa, 0xac, 0x90,
+        0x43, 0x9b,
+    ];
 
     // Parse the raw key data as an Ed25519 public key.
     ed25519_compact::PublicKey::from_slice(public_key_raw)
