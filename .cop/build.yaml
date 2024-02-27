@@ -1,0 +1,9 @@
+steps:
+- name: 'gcr.io/${PROJECT_ID}/crdyboot'
+  entrypoint: 'bash'
+  id: 'run-crdyboot-tests'
+  args:
+  - '-c'
+  - |
+     cargo xtask setup
+     cargo xtask test
