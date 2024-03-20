@@ -206,7 +206,19 @@ fn run_cargo_deny() -> Result<()> {
         .run()
         .is_err()
     {
-        Command::with_args("cargo", ["install", "--locked", "cargo-deny"]).run()?;
+        Command::with_args(
+            "cargo",
+            [
+                // Force the stable toolchain so that it doesn't use the
+                // (potentially older) nightly version pinned in
+                // rust-toolchain.toml.
+                "+stable",
+                "install",
+                "--locked",
+                "cargo-deny",
+            ],
+        )
+        .run()?;
     }
 
     // Run cargo-deny. This uses the config in `.deny.toml`.
