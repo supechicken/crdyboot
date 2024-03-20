@@ -206,6 +206,12 @@ fn generate_secure_boot_keys(conf: &Config) -> Result<()> {
 /// Run the enroller in a VM to set up UEFI variables for secure boot.
 fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
     for arch in Arch::all() {
+        // TODO(b/330536482): Skip 32-bit for now; the ia32 OVMF
+        // firmware is broken.
+        if arch == Arch::Ia32 {
+            continue;
+        }
+
         let ovmf = conf.ovmf_paths(arch);
 
         // Get the system path of the OVMF files installed via apt.

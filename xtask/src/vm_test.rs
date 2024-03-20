@@ -82,6 +82,12 @@ fn wait_for_ssh(conf: &Config) -> Result<()> {
 /// Test successful boots on both ia32 and x64.
 fn test_successful_boot(conf: &Config) -> Result<()> {
     for arch in Arch::all() {
+        // TODO(b/330536482): Skip 32-bit for now; the ia32 OVMF
+        // firmware is broken.
+        if arch == Arch::Ia32 {
+            continue;
+        }
+
         println!("test successful boot with arch={arch:?}");
         let opts = QemuOpts {
             capture_output: true,
