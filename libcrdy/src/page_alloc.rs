@@ -105,11 +105,17 @@ impl<'a> Drop for ScopedPageAllocation<'a> {
         info!("freeing {} pages at {addr:#x}", self.num_pages);
 
         // Can't propagate an error from here, so just log it.
-        if let Err(err) = self
-            .system_table
-            .boot_services()
-            .free_pages(addr, self.num_pages)
-        {
+        //
+        // Safety:
+        //
+        // By the time we call `drop` no other references to the
+        // allocation can exist, so it is safe to de-allocate the
+        // pages.
+        if let Err(err) = unsafe {
+            self.system_table
+                .boot_services()
+                .free_pages(addr, self.num_pages)
+        } {
             error!("free_pages failed: {:?}", err.status());
         }
     }
