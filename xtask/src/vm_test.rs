@@ -16,7 +16,8 @@ use fs_err as fs;
 use std::fs::Permissions;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
-use std::thread;
+use std::process::ChildStdout;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 /// Timeout used for error tests.
@@ -79,6 +80,38 @@ fn wait_for_ssh(conf: &Config) -> Result<()> {
     bail!("SSH didn't come up");
 }
 
+/// Create a thread that captures stdout from a child process. The
+/// thread will end when EOF is reached (i.e. when the child process has
+/// terminated).
+///
+/// The output is returned a `Vec` of lines when the thread is joined.
+fn create_output_capture_thread(stdout: ChildStdout) -> JoinHandle<Vec<String>> {
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut output = Vec::new();
+
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(len) => {
+                    // EOF reached, which mean the VM has stopped. Exit
+                    // the thread.
+                    if len == 0 {
+                        break;
+                    }
+
+                    output.push(line.clone());
+                }
+                // Unexpected error. Exit the thread.
+                Err(_) => {
+                    break;
+                }
+            }
+        }
+        output
+    })
+}
+
 /// Test successful boots on both ia32 and x64.
 fn test_successful_boot(conf: &Config) -> Result<()> {
     for arch in Arch::all() {
@@ -101,10 +134,28 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
             timeout: None,
             tpm_version: None,
         };
-        let _vm = opts.spawn_disk_image(conf)?;
+        let vm = opts.spawn_disk_image(conf)?;
 
-        // Check that SSH comes up, indicating a successful boot.
-        wait_for_ssh(conf)?;
+        // Launch a background thread to read stdout.
+        let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
+        let output_thread = create_output_capture_thread(stdout);
+
+        // Check that SSH comes up, indicating a successful boot. If
+        // not, print the VM log.
+        if let Err(err) = wait_for_ssh(conf) {
+            println!("error: SSH didn't come up");
+
+            // Kill QEMU, which will also cause the output thread to end.
+            vm.qemu.lock().unwrap().kill().unwrap();
+
+            // Print the VM output.
+            let vm_output = output_thread.join().unwrap();
+            for line in vm_output {
+                print!(">>> {line}");
+            }
+
+            return Err(err);
+        }
     }
 
     Ok(())
