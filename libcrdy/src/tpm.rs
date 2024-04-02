@@ -38,8 +38,8 @@ use core::fmt::{self, Display, Formatter};
 use core::mem::MaybeUninit;
 use log::info;
 use uefi::proto::tcg::{v1, v2, EventType, PcrIndex};
-use uefi::table::boot::BootServices;
-use uefi::{Handle, Status};
+use uefi::table::boot::{BootServices, ScopedProtocol};
+use uefi::Status;
 
 const EVENT_TYPE: EventType = EventType::IPL;
 const EVENT_DATA: &[u8] = b"ChromeOS kernel partition data";
@@ -116,52 +116,93 @@ impl Display for TpmError {
     }
 }
 
-enum TpmHandle {
-    V1(Handle),
-    V2(Handle),
-    None,
+/// Storage for an open TPM protocol, either v1 or v2.
+enum TpmProtocol<'a> {
+    V1(ScopedProtocol<'a, v1::Tcg>),
+    V2(ScopedProtocol<'a, v2::Tcg>),
 }
 
-impl TpmHandle {
-    /// Search for a TPM handle. First look for a V2 TPM, then for a V1
-    /// TPM.
+impl<'a> TpmProtocol<'a> {
+    /// Open a TPM protocol, trying v2 first, then falling back to v1.
     ///
-    /// Any errors other than `NOT_FOUND` are propagated to the caller.
-    fn find(boot_services: &BootServices) -> Result<Self, TpmError> {
-        // Try to get a V2 handle first.
-        match boot_services.get_handle_for_protocol::<v2::Tcg>() {
-            Ok(handle) => Ok(Self::V2(handle)),
+    /// If no handle exists for either protocol, returns `Ok(None)`.
+    fn open(boot_services: &'a BootServices) -> Result<Option<Self>, TpmError> {
+        // Try v2 first.
+        match open_protocol_v2(boot_services) {
+            Ok(Some(v2)) => {
+                // Successfully opened v2 protocol.
+                return Ok(Some(Self::V2(v2)));
+            }
+            Ok(None) => {
+                // No v2 handle exists.
+            }
             Err(err) => {
-                if err.status() == Status::NOT_FOUND {
-                    // There's no V2 handle; try to get a V1 handle.
-                    match boot_services.get_handle_for_protocol::<v1::Tcg>() {
-                        Ok(handle) => Ok(Self::V1(handle)),
-                        Err(err) => {
-                            if err.status() == Status::NOT_FOUND {
-                                Ok(Self::None)
-                            } else {
-                                Err(TpmError::v1(TpmErrorKind::InvalidHandle, err))
-                            }
-                        }
-                    }
-                } else {
-                    Err(TpmError::v2(TpmErrorKind::InvalidHandle, err))
-                }
+                // Log at info level since it's not critical.
+                info!("failed to open TPM v2 protocol: {err}");
             }
         }
+
+        // Fall back to v1.
+        let v1 = open_protocol_v1(boot_services)?;
+        Ok(v1.map(Self::V1))
     }
 }
 
-fn extend_pcr_and_log_v1(
+/// Open the TPM v1 protocol if possible.
+///
+/// If no handle exists, returns `Ok(None)`.
+fn open_protocol_v1(
     boot_services: &BootServices,
-    pcr_index: PcrIndex,
-    data_to_hash: &[u8],
-    handle: Handle,
-) -> Result<(), TpmError> {
-    let mut tcg = boot_services
+) -> Result<Option<ScopedProtocol<v1::Tcg>>, TpmError> {
+    let handle = match boot_services.get_handle_for_protocol::<v1::Tcg>() {
+        Ok(handle) => handle,
+        Err(err) => {
+            if err.status() == Status::NOT_FOUND {
+                return Ok(None);
+            }
+            return Err(TpmError::v1(TpmErrorKind::InvalidHandle, err));
+        }
+    };
+
+    let proto = boot_services
         .open_protocol_exclusive::<v1::Tcg>(handle)
         .map_err(|err| TpmError::v1(TpmErrorKind::OpenProtocolFailed, err))?;
 
+    // TODO(nicholasbishop): check validity.
+
+    Ok(Some(proto))
+}
+
+/// Open the TPM v2 protocol if possible.
+///
+/// If no handle exists, returns `Ok(None)`.
+fn open_protocol_v2(
+    boot_services: &BootServices,
+) -> Result<Option<ScopedProtocol<v2::Tcg>>, TpmError> {
+    let handle = match boot_services.get_handle_for_protocol::<v2::Tcg>() {
+        Ok(handle) => handle,
+        Err(err) => {
+            if err.status() == Status::NOT_FOUND {
+                return Ok(None);
+            }
+            return Err(TpmError::v2(TpmErrorKind::InvalidHandle, err));
+        }
+    };
+
+    let proto = boot_services
+        .open_protocol_exclusive::<v2::Tcg>(handle)
+        .map_err(|err| TpmError::v2(TpmErrorKind::OpenProtocolFailed, err))?;
+
+    // TODO(nicholasbishop): check validity.
+
+    Ok(Some(proto))
+}
+
+fn extend_pcr_and_log_v1(
+    mut tcg: ScopedProtocol<v1::Tcg>,
+    pcr_index: PcrIndex,
+    data_to_hash: &[u8],
+) -> Result<(), TpmError> {
     // Make a buffer big enough to hold the event.
     let mut event_buf = [MaybeUninit::uninit(); 64];
 
@@ -183,15 +224,10 @@ fn extend_pcr_and_log_v1(
 }
 
 fn extend_pcr_and_log_v2(
-    boot_services: &BootServices,
+    mut tcg: ScopedProtocol<v2::Tcg>,
     pcr_index: PcrIndex,
     data_to_hash: &[u8],
-    handle: Handle,
 ) -> Result<(), TpmError> {
-    let mut tcg = boot_services
-        .open_protocol_exclusive::<v2::Tcg>(handle)
-        .map_err(|err| TpmError::v2(TpmErrorKind::OpenProtocolFailed, err))?;
-
     // Make a buffer big enough to hold the event.
     let mut event_buf = [MaybeUninit::uninit(); 64];
 
@@ -211,17 +247,20 @@ pub fn extend_pcr_and_log(
     pcr_index: PcrIndex,
     data_to_hash: &[u8],
 ) -> Result<(), TpmError> {
-    match TpmHandle::find(boot_services)? {
-        TpmHandle::V1(handle) => {
+    match TpmProtocol::open(boot_services) {
+        Ok(Some(TpmProtocol::V1(protocol))) => {
             info!("measuring to v1 TPM");
-            extend_pcr_and_log_v1(boot_services, pcr_index, data_to_hash, handle)?;
+            extend_pcr_and_log_v1(protocol, pcr_index, data_to_hash)?;
         }
-        TpmHandle::V2(handle) => {
+        Ok(Some(TpmProtocol::V2(protocol))) => {
             info!("measuring to v2 TPM");
-            extend_pcr_and_log_v2(boot_services, pcr_index, data_to_hash, handle)?;
+            extend_pcr_and_log_v2(protocol, pcr_index, data_to_hash)?;
         }
-        TpmHandle::None => {
+        Ok(None) => {
             info!("no TPM device found");
+        }
+        Err(err) => {
+            info!("a TPM handle exists but is not valid: {}", err);
         }
     }
 
