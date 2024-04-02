@@ -84,6 +84,15 @@ enum TpmErrorKind {
     /// Failed to open the `Tcg` protocol.
     OpenProtocolFailed,
 
+    /// Failed to get the TPM capabilities.
+    InvalidCapabilities,
+
+    /// TPM protocol exists, but TPM is not present.
+    NotPresent,
+
+    /// TPM protocol exists, but TPM is deactivated.
+    Deactivated,
+
     // Failed to create a `PcrEvent`.
     InvalidPcrEvent,
 
@@ -105,6 +114,15 @@ impl Display for TpmError {
             }
             TpmErrorKind::OpenProtocolFailed => {
                 write!(f, "failed to open the TPMv{version} protocol: {status}")
+            }
+            TpmErrorKind::InvalidCapabilities => {
+                write!(f, "failed to get the TPMv{version} capabilities: {status}")
+            }
+            TpmErrorKind::NotPresent => {
+                write!(f, "TPMv{version} protocol exists, but TPM is not present")
+            }
+            TpmErrorKind::Deactivated => {
+                write!(f, "TPMv{version} protocol exists, but TPM is deactivated")
             }
             TpmErrorKind::InvalidPcrEvent => {
                 write!(f, "failed to create TPMv{version} PcrEvent: {status}")
@@ -164,11 +182,27 @@ fn open_protocol_v1(
         }
     };
 
-    let proto = boot_services
+    let mut proto = boot_services
         .open_protocol_exclusive::<v1::Tcg>(handle)
         .map_err(|err| TpmError::v1(TpmErrorKind::OpenProtocolFailed, err))?;
 
-    // TODO(nicholasbishop): check validity.
+    let status_check = proto
+        .status_check()
+        .map_err(|err| TpmError::v1(TpmErrorKind::InvalidCapabilities, err))?;
+
+    let caps = &status_check.protocol_capability;
+    if !caps.tpm_present() {
+        return Err(TpmError::v1(
+            TpmErrorKind::NotPresent,
+            Status::UNSUPPORTED.into(),
+        ));
+    }
+    if caps.tpm_deactivated() {
+        return Err(TpmError::v1(
+            TpmErrorKind::Deactivated,
+            Status::UNSUPPORTED.into(),
+        ));
+    }
 
     Ok(Some(proto))
 }
@@ -189,11 +223,20 @@ fn open_protocol_v2(
         }
     };
 
-    let proto = boot_services
+    let mut proto = boot_services
         .open_protocol_exclusive::<v2::Tcg>(handle)
         .map_err(|err| TpmError::v2(TpmErrorKind::OpenProtocolFailed, err))?;
 
-    // TODO(nicholasbishop): check validity.
+    let caps = proto
+        .get_capability()
+        .map_err(|err| TpmError::v2(TpmErrorKind::InvalidCapabilities, err))?;
+
+    if !caps.tpm_present() {
+        return Err(TpmError::v2(
+            TpmErrorKind::NotPresent,
+            Status::UNSUPPORTED.into(),
+        ));
+    }
 
     Ok(Some(proto))
 }
