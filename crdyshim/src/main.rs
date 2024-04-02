@@ -299,7 +299,23 @@ fn load_and_validate_next_stage<'a>(
         Arch::get_current_exe_arch(),
     )?;
     let raw_exe = loader.read_executable(&mut raw_exe_alloc)?;
-    let raw_signature = loader.read_signature()?;
+    let raw_signature = match loader.read_signature() {
+        Ok(raw_signature) => raw_signature,
+        Err(err) => {
+            if is_secure_boot_enabled {
+                // If secure boot is enabled, a missing signature file is a
+                // fatal error.
+                return Err(err);
+            }
+
+            // If secure boot is not enabled, signature verification is
+            // allowed to fail, so allow the signature file to be
+            // missing entirely. Initialize an arbitrary signature value
+            // here.
+            info!("secure boot is not enabled, allow missing signature file");
+            [0xff; ed25519_compact::Signature::BYTES]
+        }
+    };
 
     let public_key = get_public_key()?;
     info!("embedded public key: {:02x?}", public_key.as_slice());
