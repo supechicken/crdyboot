@@ -618,6 +618,34 @@ pub fn corrupt_pubkey_section(
     })
 }
 
+/// Delete the crdyboot signatures from the disk (for testing).
+pub fn delete_crdyboot_signatures(disk_path: &Utf8Path) -> Result<()> {
+    modify_system_partition(disk_path, |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+
+        boot_dir.remove("crdybootx64.sig")?;
+        boot_dir.remove("crdybootia32.sig")?;
+
+        Ok(())
+    })
+}
+
+/// Corrupt the crdyboot signatures on the disk (for testing).
+pub fn corrupt_crdyboot_signatures(disk_path: &Utf8Path) -> Result<()> {
+    modify_system_partition(disk_path, |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+
+        let sig_data = [0xff; 64];
+
+        fat_write_file(&boot_dir, "crdybootx64.sig", &sig_data)?;
+        fat_write_file(&boot_dir, "crdybootia32.sig", &sig_data)?;
+
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

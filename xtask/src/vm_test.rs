@@ -5,7 +5,8 @@
 use crate::arch::Arch;
 use crate::config::Config;
 use crate::gen_disk::{
-    corrupt_kern_a, corrupt_pubkey_section, SignAfterCorrupt, VerboseRuntimeLogs,
+    corrupt_crdyboot_signatures, corrupt_kern_a, corrupt_pubkey_section,
+    delete_crdyboot_signatures, SignAfterCorrupt, VerboseRuntimeLogs,
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
@@ -278,10 +279,39 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
     launch_test_disk_and_expect_errors(conf, expected_errors)
 }
 
+/// Test that crdyshim refuses to launch crdyboot if the signature file
+/// is missing.
+fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> {
+    println!("test that if the crdyboot signature is missing, crdyshim refuses to launch it");
+
+    create_test_disk(conf)?;
+
+    delete_crdyboot_signatures(&conf.test_disk_path())?;
+
+    let expected_errors =
+        &["boot failed: failed to read the next stage signature: file open failed: NOT_FOUND"];
+    launch_test_disk_and_expect_errors(conf, expected_errors)
+}
+
+/// Test that crdyshim refuses to launch crdyboot if the signature file
+/// is invalid.
+fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> {
+    println!("test that if the crdyboot signature is invalid, crdyshim refuses to launch it");
+
+    create_test_disk(conf)?;
+
+    corrupt_crdyboot_signatures(&conf.test_disk_path())?;
+
+    let expected_errors = &["boot failed: signature verification failed"];
+    launch_test_disk_and_expect_errors(conf, expected_errors)
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(conf, VerboseRuntimeLogs(true))?;
     download_test_key(conf)?;
 
+    test_missing_signature_prevents_crdyboot_launch(conf)?;
+    test_invalid_signature_prevents_crdyboot_launch(conf)?;
     test_signed_vbpubk_mod_breaks_vboot(conf)?;
     test_vbpubk_mod_breaks_signature(conf)?;
     test_corrupt_kern_a(conf)?;
