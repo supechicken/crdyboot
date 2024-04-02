@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use log::{error, LevelFilter};
+use log::{info, LevelFilter};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
 use uefi::table::boot::BootServices;
@@ -15,7 +15,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
     let mut sfs = match boot_services.get_image_file_system(boot_services.image_handle()) {
         Ok(sfs) => sfs,
         Err(err) => {
-            error!("failed to open SimpleFileSystem: {err:?}");
+            info!("failed to open SimpleFileSystem: {err:?}");
             return false;
         }
     };
@@ -23,7 +23,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
     let mut root = match sfs.open_volume() {
         Ok(root) => root,
         Err(err) => {
-            error!("failed to open volume: {err:?}");
+            info!("failed to open volume: {err:?}");
             return false;
         }
     };
@@ -33,7 +33,7 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
         Ok(_) => true,
         Err(err) => {
             if err.status() != Status::NOT_FOUND {
-                error!("unexpected error when opening {path}: {err:?}");
+                info!("unexpected error when opening {path}: {err:?}");
             }
             false
         }

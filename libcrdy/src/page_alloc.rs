@@ -16,7 +16,7 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 use core::slice;
-use log::{error, info};
+use log::info;
 use uefi::table::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::table::{Boot, SystemTable};
 use uefi::Status;
@@ -116,7 +116,7 @@ impl<'a> Drop for ScopedPageAllocation<'a> {
                 .boot_services()
                 .free_pages(addr, self.num_pages)
         } {
-            error!("free_pages failed: {:?}", err.status());
+            info!("free_pages failed: {:?}", err.status());
         }
     }
 }
