@@ -49,7 +49,7 @@ enum TpmVersion {
     V2,
 }
 
-pub struct TpmError {
+struct TpmError {
     version: TpmVersion,
     kind: TpmErrorKind,
     status: Status,
@@ -284,8 +284,8 @@ fn extend_pcr_and_log_v2(
     Ok(())
 }
 
-/// Extend PCR 8 with a measurement of `data_to_hash` and add to the event log.
-pub fn extend_pcr_and_log(
+/// Extend a PCR with a measurement of `data_to_hash` and add to the event log.
+fn extend_pcr_and_log_impl(
     boot_services: &BootServices,
     pcr_index: PcrIndex,
     data_to_hash: &[u8],
@@ -308,4 +308,15 @@ pub fn extend_pcr_and_log(
     }
 
     Ok(())
+}
+
+/// Extend a PCR with a measurement of `data_to_hash` and add to the event log.
+///
+/// Errors are logged but otherwise ignored.
+pub fn extend_pcr_and_log(boot_services: &BootServices, pcr_index: PcrIndex, data_to_hash: &[u8]) {
+    // Log error, but otherwise ignore it.
+    if let Err(err) = extend_pcr_and_log_impl(boot_services, pcr_index, data_to_hash) {
+        // Log at info level since this is a non-fatal error.
+        info!("failed to extend PCR: {err}");
+    }
 }

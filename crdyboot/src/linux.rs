@@ -11,7 +11,7 @@ use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point}
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
-use libcrdy::tpm::{extend_pcr_and_log, TpmError};
+use libcrdy::tpm::extend_pcr_and_log;
 use log::info;
 use object::read::pe::PeFile64;
 use uefi::proto::tcg::PcrIndex;
@@ -66,9 +66,6 @@ pub enum CrdybootError {
 
     /// Failed to launch the kernel.
     Launch(LaunchError),
-
-    /// Failed to measure the kernel into the TPM.
-    Tpm(TpmError),
 }
 
 impl Display for CrdybootError {
@@ -89,7 +86,6 @@ impl Display for CrdybootError {
             }
             Self::MemoryProtection(err) => write!(f, "failed to set up memory protection: {err}"),
             Self::Launch(err) => write!(f, "failed to launch next stage: {err}"),
-            Self::Tpm(err) => write!(f, "TPM error: {err}"),
         }
     }
 }
@@ -201,8 +197,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, kernel.data())
-        .map_err(CrdybootError::Tpm)?;
+    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, kernel.data());
 
     execute_linux_kernel(&kernel, system_table)
 }

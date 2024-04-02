@@ -24,7 +24,7 @@ use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::set_log_level;
-use libcrdy::tpm::{extend_pcr_and_log, TpmError};
+use libcrdy::tpm::extend_pcr_and_log;
 use log::{error, info};
 use relocation::{relocate_pe_into, RelocationError};
 use sbat::RevocationSbat;
@@ -100,9 +100,6 @@ pub enum CrdyshimError {
     /// Failed to parse a PE executable.
     InvalidPe(object::Error),
 
-    /// Failed to measure the next stage into the TPM.
-    Tpm(TpmError),
-
     /// Failed to update memory attributes.
     MemoryProtection(NxError),
 
@@ -136,7 +133,6 @@ impl Display for CrdyshimError {
                 write!(f, "failed to relocate the next stage executable: {err}")
             }
             Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
-            Self::Tpm(error) => write!(f, "TPM error: {error}"),
             Self::MemoryProtection(error) => {
                 write!(f, "failed to set up memory protection: {error}")
             }
@@ -333,8 +329,7 @@ fn load_and_validate_next_stage<'a>(
     // We measure at this point because we still have access to
     // `raw_exe`. The full `raw_exe_alloc` has extra padding at the end
     // filled with zeroes, which would make the measurement less useful.
-    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, raw_exe)
-        .map_err(CrdyshimError::Tpm)?;
+    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, raw_exe);
 
     Ok(raw_exe_alloc)
 }
