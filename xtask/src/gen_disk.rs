@@ -5,7 +5,7 @@
 use crate::arch::Arch;
 use crate::config::{Config, EfiExe};
 use crate::secure_boot::{self, SecureBootKeyPaths};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use fatfs::{FileSystem, FormatVolumeOptions, FsOptions, ReadWriteSeek};
@@ -176,6 +176,40 @@ fn read_real_kernel_partition(conf: &Config) -> Result<Vec<u8>> {
 
     let kern_a_data_range = PartitionDataRange::new(kern_a);
     kern_a_data_range.read_bytes_from_file(&mut f)
+}
+
+pub fn copy_partition_from_disk_to_disk(
+    dst_disk: &Utf8Path,
+    src_disk: &Utf8Path,
+    partition_name: &str,
+) -> Result<()> {
+    let mut dst_disk = open_rw(dst_disk)?;
+    let mut src_disk = File::open(src_disk)?;
+    let dst_gpt = gptman::GPT::find_from(&mut dst_disk)?;
+    let src_gpt = gptman::GPT::find_from(&mut src_disk)?;
+
+    let src_part = src_gpt
+        .iter()
+        .map(|(_, entry)| entry)
+        .find(|entry| entry.partition_name.as_str() == partition_name)
+        .context(format!("failed to find partition {partition_name} in src"))?;
+    let dst_part = dst_gpt
+        .iter()
+        .map(|(_, entry)| entry)
+        .find(|entry| entry.partition_name.as_str() == partition_name)
+        .context(format!("failed to find partition {partition_name} in dst"))?;
+
+    let src_range = PartitionDataRange::new(src_part);
+    let dst_range = PartitionDataRange::new(dst_part);
+
+    if src_range != dst_range {
+        bail!("src and dst partitions have different ranges");
+    }
+
+    let data = src_range.read_bytes_from_file(&mut src_disk)?;
+    dst_range.write_bytes_to_file(&mut dst_disk, &data)?;
+
+    Ok(())
 }
 
 pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {

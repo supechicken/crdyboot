@@ -5,8 +5,8 @@
 use crate::arch::Arch;
 use crate::config::Config;
 use crate::gen_disk::{
-    corrupt_crdyboot_signatures, corrupt_kern_a, corrupt_pubkey_section,
-    delete_crdyboot_signatures, SignAfterCorrupt, VerboseRuntimeLogs,
+    copy_partition_from_disk_to_disk, corrupt_crdyboot_signatures, corrupt_kern_a,
+    corrupt_pubkey_section, delete_crdyboot_signatures, SignAfterCorrupt, VerboseRuntimeLogs,
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
@@ -168,6 +168,25 @@ fn create_test_disk(conf: &Config) -> Result<()> {
     copy_file(conf.disk_path(), conf.test_disk_path())
 }
 
+/// Reset test disk partitions that may have been modified by a test.
+///
+/// This copies the KERN-A and EFI-SYSTEM partitions from the original
+/// disk to the test disk. If any tests are added in the future that
+/// alter other parts of the disk, they must be added here.
+///
+/// Note that during the QEMU portion of a test, the disk is never
+/// modified due to the `-snapshot` arg.
+fn reset_test_disk(conf: &Config) -> Result<()> {
+    let test_disk = conf.test_disk_path();
+    let orig_disk = conf.disk_path();
+
+    for part in ["KERN-A", "EFI-SYSTEM"] {
+        copy_partition_from_disk_to_disk(&test_disk, orig_disk, part)?;
+    }
+
+    Ok(())
+}
+
 /// Helper for testing vboot errors.
 ///
 /// This launches the test disk in a VM and monitors the output, looking
@@ -227,8 +246,6 @@ fn launch_test_disk_and_expect_errors(conf: &Config, expected_errors: &[&str]) -
 fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
     println!("test if boot correctly fails when KERN-A is corrupt");
 
-    create_test_disk(conf)?;
-
     corrupt_kern_a(&conf.test_disk_path())?;
 
     let expected_errors = &[
@@ -248,8 +265,6 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
     println!("test that modifying the vbpubk section prevents crdyboot from launching");
 
-    create_test_disk(conf)?;
-
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
     let expected_errors = &["boot failed: signature verification failed"];
@@ -268,8 +283,6 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
         "test that modifying the vbpubk section and re-signing prevents the kernel from launching"
     );
 
-    create_test_disk(conf)?;
-
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
 
     let expected_errors = &[
@@ -284,8 +297,6 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> {
     println!("test that if the crdyboot signature is missing, crdyshim refuses to launch it");
 
-    create_test_disk(conf)?;
-
     delete_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_errors =
@@ -298,8 +309,6 @@ fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
 fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> {
     println!("test that if the crdyboot signature is invalid, crdyshim refuses to launch it");
 
-    create_test_disk(conf)?;
-
     corrupt_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_errors = &["boot failed: signature verification failed"];
@@ -310,12 +319,22 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(conf, VerboseRuntimeLogs(true))?;
     download_test_key(conf)?;
 
-    test_missing_signature_prevents_crdyboot_launch(conf)?;
-    test_invalid_signature_prevents_crdyboot_launch(conf)?;
-    test_signed_vbpubk_mod_breaks_vboot(conf)?;
-    test_vbpubk_mod_breaks_signature(conf)?;
-    test_corrupt_kern_a(conf)?;
-    test_successful_boot(conf)?;
+    create_test_disk(conf)?;
+
+    let tests = [
+        test_missing_signature_prevents_crdyboot_launch,
+        test_invalid_signature_prevents_crdyboot_launch,
+        test_signed_vbpubk_mod_breaks_vboot,
+        test_vbpubk_mod_breaks_signature,
+        test_corrupt_kern_a,
+        test_successful_boot,
+    ];
+
+    for test in tests {
+        test(conf)?;
+
+        reset_test_disk(conf)?;
+    }
 
     Ok(())
 }
