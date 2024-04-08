@@ -40,6 +40,20 @@ fn download_test_key(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Default QEMU options.
+fn default_qemu_opts(conf: &Config) -> QemuOpts {
+    QemuOpts {
+        capture_output: true,
+        display: Display::None,
+        image_path: conf.test_disk_path(),
+        ovmf: conf.ovmf_paths(Arch::X64),
+        secure_boot: true,
+        snapshot: true,
+        timeout: Some(VM_TIMEOUT_SHORT),
+        tpm_version: None,
+    }
+}
+
 /// Wait for SSH to come up on the VM (indicating a successful
 /// boot). Times out after one minute.
 fn wait_for_ssh(conf: &Config) -> Result<()> {
@@ -121,16 +135,12 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
 
         println!("test successful boot with arch={arch:?}");
         let opts = QemuOpts {
-            capture_output: true,
-            display: Display::None,
             // No need to copy the disk for this test since we aren't
             // modifying it.
             image_path: conf.disk_path().to_path_buf(),
             ovmf: conf.ovmf_paths(arch),
-            secure_boot: true,
-            snapshot: true,
             timeout: None,
-            tpm_version: None,
+            ..default_qemu_opts(conf)
         };
         let vm = opts.spawn_disk_image(conf)?;
 
@@ -195,16 +205,8 @@ fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -
     // At least one expected error is required.
     assert!(!expected_output.is_empty());
 
-    let opts = QemuOpts {
-        capture_output: true,
-        display: Display::None,
-        image_path: conf.test_disk_path(),
-        ovmf: conf.ovmf_paths(Arch::X64),
-        secure_boot: true,
-        snapshot: true,
-        timeout: Some(VM_TIMEOUT_SHORT),
-        tpm_version: None,
-    };
+    let opts = default_qemu_opts(conf);
+
     let vm = opts.spawn_disk_image(conf)?;
 
     let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
