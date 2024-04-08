@@ -21,12 +21,9 @@ use std::process::ChildStdout;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-/// Timeout used for error tests.
-///
-/// This can be relatively short since error tests fail early in boot
-/// (we don't have to wait for SSH to come up like in the success
-/// tests).
-const VM_ERROR_TIMEOUT: Duration = Duration::from_secs(30);
+/// Timeout used for short VM tests. The short tests are all the tests
+/// that don't need to wait for SSH.
+const VM_TIMEOUT_SHORT: Duration = Duration::from_secs(30);
 
 /// Download the well-known testing_rsa key for ChromeOS test images.
 fn download_test_key(conf: &Config) -> Result<()> {
@@ -194,7 +191,7 @@ fn reset_test_disk(conf: &Config) -> Result<()> {
 /// expected errors have been output by the VM, the VM is killed and
 /// `Ok` is returned.
 ///
-/// If the expected errors do not occur within `VM_ERROR_TIMEOUT`, the
+/// If the expected errors do not occur within `VM_TIMEOUT_SHORT`, the
 /// VM is killed and an error is returned.
 fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -> Result<()> {
     // At least one expected error is required.
@@ -207,7 +204,7 @@ fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -
         ovmf: conf.ovmf_paths(Arch::X64),
         secure_boot: true,
         snapshot: true,
-        timeout: Some(VM_ERROR_TIMEOUT),
+        timeout: Some(VM_TIMEOUT_SHORT),
         tpm_version: None,
     };
     let vm = opts.spawn_disk_image(conf)?;
