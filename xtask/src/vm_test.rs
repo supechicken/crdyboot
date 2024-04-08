@@ -190,15 +190,15 @@ fn reset_test_disk(conf: &Config) -> Result<()> {
 /// Helper for testing vboot errors.
 ///
 /// This launches the test disk in a VM and monitors the output, looking
-/// for each error string in `expected_errors` (in order). Once all
+/// for each error string in `expected_output` (in order). Once all
 /// expected errors have been output by the VM, the VM is killed and
 /// `Ok` is returned.
 ///
 /// If the expected errors do not occur within `VM_ERROR_TIMEOUT`, the
 /// VM is killed and an error is returned.
-fn launch_test_disk_and_expect_output(conf: &Config, expected_errors: &[&str]) -> Result<()> {
+fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -> Result<()> {
     // At least one expected error is required.
-    assert!(!expected_errors.is_empty());
+    assert!(!expected_output.is_empty());
 
     let opts = QemuOpts {
         capture_output: true,
@@ -214,9 +214,9 @@ fn launch_test_disk_and_expect_output(conf: &Config, expected_errors: &[&str]) -
 
     let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
     let mut reader = BufReader::new(stdout);
-    let mut expected_errors = expected_errors.to_vec();
+    let mut expected_output = expected_output.to_vec();
 
-    while let Some(next_expected_error) = expected_errors.first() {
+    while let Some(next_expected_error) = expected_output.first() {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 {
             // EOF reached, which means the VM has stopped.
@@ -225,7 +225,7 @@ fn launch_test_disk_and_expect_output(conf: &Config, expected_errors: &[&str]) -
         print!(">>> {line}");
 
         if line.contains(next_expected_error) {
-            expected_errors.remove(0);
+            expected_output.remove(0);
         }
     }
 
@@ -248,11 +248,11 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 
     corrupt_kern_a(&conf.test_disk_path())?;
 
-    let expected_errors = &[
+    let expected_output = &[
         "Kernel data verification failed",
         "boot failed: failed to load kernel",
     ];
-    launch_test_disk_and_expect_output(conf, expected_errors)
+    launch_test_disk_and_expect_output(conf, expected_output)
 }
 
 /// This test modifies a byte in the `.vbpubk` section of the
@@ -267,8 +267,8 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
 
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
-    let expected_errors = &["boot failed: signature verification failed"];
-    launch_test_disk_and_expect_output(conf, expected_errors)
+    let expected_output = &["boot failed: signature verification failed"];
+    launch_test_disk_and_expect_output(conf, expected_output)
 }
 
 /// This test modifies a byte in the `.vbpubk` section of crdyboot and
@@ -285,11 +285,11 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
 
-    let expected_errors = &[
+    let expected_output = &[
         "vb2api_inject_kernel_subkey failed",
         "boot failed: failed to load kernel",
     ];
-    launch_test_disk_and_expect_output(conf, expected_errors)
+    launch_test_disk_and_expect_output(conf, expected_output)
 }
 
 /// Test that crdyshim refuses to launch crdyboot if the signature file
@@ -299,9 +299,9 @@ fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
 
     delete_crdyboot_signatures(&conf.test_disk_path())?;
 
-    let expected_errors =
+    let expected_output =
         &["boot failed: failed to read the next stage signature: file open failed: NOT_FOUND"];
-    launch_test_disk_and_expect_output(conf, expected_errors)
+    launch_test_disk_and_expect_output(conf, expected_output)
 }
 
 /// Test that crdyshim refuses to launch crdyboot if the signature file
@@ -311,8 +311,8 @@ fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
 
     corrupt_crdyboot_signatures(&conf.test_disk_path())?;
 
-    let expected_errors = &["boot failed: signature verification failed"];
-    launch_test_disk_and_expect_output(conf, expected_errors)
+    let expected_output = &["boot failed: signature verification failed"];
+    launch_test_disk_and_expect_output(conf, expected_output)
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
