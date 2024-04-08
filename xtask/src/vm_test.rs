@@ -201,11 +201,13 @@ fn reset_test_disk(conf: &Config) -> Result<()> {
 ///
 /// If the expected output does not occur within `VM_TIMEOUT_SHORT`, the
 /// VM is killed and an error is returned.
-fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -> Result<()> {
+fn launch_test_disk_and_expect_output(
+    conf: &Config,
+    opts: QemuOpts,
+    expected_output: &[&str],
+) -> Result<()> {
     // At least one expected error is required.
     assert!(!expected_output.is_empty());
-
-    let opts = default_qemu_opts(conf);
 
     let vm = opts.spawn_disk_image(conf)?;
 
@@ -249,7 +251,7 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
         "Kernel data verification failed",
         "boot failed: failed to load kernel",
     ];
-    launch_test_disk_and_expect_output(conf, expected_output)
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
 /// This test modifies a byte in the `.vbpubk` section of the
@@ -265,7 +267,7 @@ fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
     let expected_output = &["boot failed: signature verification failed"];
-    launch_test_disk_and_expect_output(conf, expected_output)
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
 /// This test modifies a byte in the `.vbpubk` section of crdyboot and
@@ -286,7 +288,7 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
         "vb2api_inject_kernel_subkey failed",
         "boot failed: failed to load kernel",
     ];
-    launch_test_disk_and_expect_output(conf, expected_output)
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
 /// Test that crdyshim refuses to launch crdyboot if the signature file
@@ -298,7 +300,7 @@ fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
 
     let expected_output =
         &["boot failed: failed to read the next stage signature: file open failed: NOT_FOUND"];
-    launch_test_disk_and_expect_output(conf, expected_output)
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
 /// Test that crdyshim refuses to launch crdyboot if the signature file
@@ -309,7 +311,7 @@ fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
     corrupt_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_output = &["boot failed: signature verification failed"];
-    launch_test_disk_and_expect_output(conf, expected_output)
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
