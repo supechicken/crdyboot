@@ -184,14 +184,12 @@ fn reset_test_disk(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Helper for testing vboot errors.
+/// Launch the test disk in a VM and monitor the output, looking for
+/// each string in `expected_output` (in order). Once all expected
+/// strings have been output by the VM, the VM is killed and `Ok` is
+/// returned.
 ///
-/// This launches the test disk in a VM and monitors the output, looking
-/// for each error string in `expected_output` (in order). Once all
-/// expected errors have been output by the VM, the VM is killed and
-/// `Ok` is returned.
-///
-/// If the expected errors do not occur within `VM_TIMEOUT_SHORT`, the
+/// If the expected output does not occur within `VM_TIMEOUT_SHORT`, the
 /// VM is killed and an error is returned.
 fn launch_test_disk_and_expect_output(conf: &Config, expected_output: &[&str]) -> Result<()> {
     // At least one expected error is required.
