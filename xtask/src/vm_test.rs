@@ -10,6 +10,7 @@ use crate::gen_disk::{
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
+use crate::swtpm::TpmVersion;
 use crate::{copy_file, run_bootloader_build};
 use anyhow::{bail, Result};
 use command_run::Command;
@@ -234,6 +235,40 @@ fn launch_test_disk_and_expect_output(
     Ok(())
 }
 
+/// Test successful boot with an active V1 TPM.
+fn test_tpm1_success(conf: &Config) -> Result<()> {
+    println!("test successful boot with an active v1 tpm");
+    let expected_output = &[
+        "measuring to v1 TPM",
+        "EFI stub: UEFI Secure Boot is enabled.",
+    ];
+    launch_test_disk_and_expect_output(
+        conf,
+        QemuOpts {
+            tpm_version: Some(TpmVersion::V1),
+            ..default_qemu_opts(conf)
+        },
+        expected_output,
+    )
+}
+
+/// Test successful boot with an active V2 TPM.
+fn test_tpm2_success(conf: &Config) -> Result<()> {
+    println!("test successful boot with an active v2 tpm");
+    let expected_output = &[
+        "measuring to v2 TPM",
+        "EFI stub: UEFI Secure Boot is enabled.",
+    ];
+    launch_test_disk_and_expect_output(
+        conf,
+        QemuOpts {
+            tpm_version: Some(TpmVersion::V2),
+            ..default_qemu_opts(conf)
+        },
+        expected_output,
+    )
+}
+
 /// Test failed boot due to corrupt KERN-A.
 ///
 /// This test generates an intentionally corrupt disk, where a single
@@ -326,6 +361,8 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
         test_signed_vbpubk_mod_breaks_vboot,
         test_vbpubk_mod_breaks_signature,
         test_corrupt_kern_a,
+        test_tpm1_success,
+        test_tpm2_success,
         test_successful_boot,
     ];
 
