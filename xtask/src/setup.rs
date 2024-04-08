@@ -14,28 +14,38 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 9;
+const SETUP_VERSION: u32 = 10;
+
+const VBOOT_REFERENCE_REPO: &str =
+    "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";
+const VBOOT_REFERENCE_REV: &str = "4cc5d090364d87a7db5b9ad20b08d6938e8c558c";
 
 const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
 
-fn init_submodules(conf: &Config) -> Result<()> {
-    if !conf.repo_path().join(".git").exists() {
-        println!("not a git repo; skipping submodule init");
-        return Ok(());
+fn init_vboot_reference(conf: &Config) -> Result<()> {
+    let vboot_dir = conf.vboot_reference_path();
+
+    // Clone the repo if it doesn't exist.
+    if !vboot_dir.exists() {
+        Command::with_args("git", ["clone", VBOOT_REFERENCE_REPO, vboot_dir.as_str()]).run()?;
     }
 
-    Command::with_args(
-        "git",
-        [
-            "-C",
-            conf.repo_path().as_str(),
-            "submodule",
-            "update",
-            "--init",
-        ],
-    )
-    .run()?;
+    // Get the commit that is currently checked out.
+    let output = Command::with_args("git", ["-C", vboot_dir.as_str(), "rev-parse", "HEAD"])
+        .enable_capture()
+        .run()?;
+    let stdout = String::from_utf8(output.stdout)?;
+    let current_commit = stdout.trim();
+
+    // Update the checkout if necessary.
+    if current_commit != VBOOT_REFERENCE_REV {
+        Command::with_args(
+            "git",
+            ["-C", vboot_dir.as_str(), "checkout", VBOOT_REFERENCE_REV],
+        )
+        .run()?;
+    }
 
     Ok(())
 }
@@ -266,7 +276,7 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
 /// Run various setup operations. This must be run once before running
 /// any other xtask commands.
 pub(super) fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
-    init_submodules(conf)?;
+    init_vboot_reference(conf)?;
 
     download_and_unpack_test_data(conf)?;
 
