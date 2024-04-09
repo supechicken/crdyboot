@@ -79,6 +79,18 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
         .join("vboot_fw_build")
         .join(target.vboot_build_subdir());
 
+    // Delete the output directory if it already exists, to ensure a
+    // clean build. This is useful because makefiles are never 100%
+    // perfect at incremental rebuilds due to missing dependencies and
+    // the like.
+    //
+    // Note that this doesn't mean vboot will be built from scratch on
+    // every build of this package; the build script will not be rerun
+    // if no changes are detected.
+    if vboot_build_dir.exists() {
+        fs::remove_dir_all(&vboot_build_dir).unwrap();
+    }
+
     let mut cflags = "-I../../vboot/src/libc".to_string();
     if let Some(target) = target.c_target_override() {
         cflags = format!("{cflags} --target={target}");
