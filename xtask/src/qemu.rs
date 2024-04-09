@@ -116,6 +116,7 @@ pub struct QemuOpts {
     pub snapshot: bool,
     pub timeout: Option<Duration>,
     pub tpm_version: Option<TpmVersion>,
+    pub network: bool,
 }
 
 impl QemuOpts {
@@ -180,12 +181,14 @@ impl QemuOpts {
             ),
         ]);
 
-        cmd.args([
-            "-net",
-            "nic,model=virtio",
-            "-net",
-            &format!("user,hostfwd=tcp::{}-:22", Config::ssh_port()),
-        ]);
+        if self.network {
+            cmd.args([
+                "-net",
+                "nic,model=virtio",
+                "-net",
+                &format!("user,hostfwd=tcp::{}-:22", Config::ssh_port()),
+            ]);
+        }
 
         if self.capture_output {
             cmd.stdout(Stdio::piped());

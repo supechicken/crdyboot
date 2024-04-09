@@ -55,6 +55,7 @@ fn default_qemu_opts(conf: &Config) -> QemuOpts {
         snapshot: true,
         timeout: Some(VM_TIMEOUT_SHORT),
         tpm_version: None,
+        network: false,
     }
 }
 
@@ -144,6 +145,7 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
             image_path: conf.disk_path().to_path_buf(),
             ovmf: conf.ovmf_paths(arch),
             timeout: None,
+            network: true,
             ..default_qemu_opts(conf)
         };
         let vm = opts.spawn_disk_image(conf)?;

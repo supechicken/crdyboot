@@ -258,6 +258,7 @@ fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
             snapshot: false,
             timeout: None,
             tpm_version: None,
+            network: false,
         };
         qemu.run_disk_image(conf)?;
     }

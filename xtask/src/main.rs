@@ -429,6 +429,7 @@ fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
         snapshot: true,
         timeout: None,
         tpm_version: action.tpm_version(),
+        network: true,
     };
     qemu.run_disk_image(conf)
 }
