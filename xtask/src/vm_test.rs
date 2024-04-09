@@ -26,6 +26,9 @@ use std::time::{Duration, Instant};
 /// that don't need to wait for SSH.
 const VM_TIMEOUT_SHORT: Duration = Duration::from_secs(30);
 
+/// Timeout used for tests that need to wait for SSH.
+const VM_TIMEOUT_LONG: Duration = Duration::from_secs(180);
+
 /// Download the well-known testing_rsa key for ChromeOS test images.
 fn download_test_key(conf: &Config) -> Result<()> {
     let mut resource = HttpsResource::new("https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/ssh_keys/testing_rsa?format=TEXT");
@@ -56,7 +59,7 @@ fn default_qemu_opts(conf: &Config) -> QemuOpts {
 }
 
 /// Wait for SSH to come up on the VM (indicating a successful
-/// boot). Times out after one minute.
+/// boot). Times out after `VM_TIMEOUT_LONG`.
 fn wait_for_ssh(conf: &Config) -> Result<()> {
     println!("waiting for SSH");
     let mut cmd = Command::with_args(
@@ -81,7 +84,7 @@ fn wait_for_ssh(conf: &Config) -> Result<()> {
 
     // Wait for SSH to come up.
     let start_time = Instant::now();
-    while start_time.elapsed() < Duration::from_secs(180) {
+    while start_time.elapsed() < VM_TIMEOUT_LONG {
         let output = cmd.run()?;
         if output.status.success() {
             return Ok(());
