@@ -244,7 +244,10 @@ fn launch_test_disk_and_expect_output(
 fn test_tpm1_success(conf: &Config) -> Result<()> {
     println!("test successful boot with an active v1 tpm");
     let expected_output = &[
-        "measuring to v1 TPM",
+        // Crdyshim measures crdyboot.
+        "bytes to PCR 4 of a v1 TPM",
+        // Crdyboot measures the kernel.
+        "bytes to PCR 8 of a v1 TPM",
         "EFI stub: UEFI Secure Boot is enabled.",
     ];
     launch_test_disk_and_expect_output(
@@ -261,7 +264,10 @@ fn test_tpm1_success(conf: &Config) -> Result<()> {
 fn test_tpm2_success(conf: &Config) -> Result<()> {
     println!("test successful boot with an active v2 tpm");
     let expected_output = &[
-        "measuring to v2 TPM",
+        // Crdyshim measures crdyboot.
+        "bytes to PCR 4 of a v2 TPM",
+        // Crdyboot measures the kernel.
+        "bytes to PCR 8 of a v2 TPM",
         "EFI stub: UEFI Secure Boot is enabled.",
     ];
     launch_test_disk_and_expect_output(

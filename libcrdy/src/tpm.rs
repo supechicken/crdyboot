@@ -292,11 +292,19 @@ fn extend_pcr_and_log_impl(
 ) -> Result<(), TpmError> {
     match TpmProtocol::open(boot_services) {
         Ok(Some(TpmProtocol::V1(protocol))) => {
-            info!("measuring to v1 TPM");
+            info!(
+                "measuring {} bytes to PCR {} of a v1 TPM",
+                data_to_hash.len(),
+                pcr_index.0,
+            );
             extend_pcr_and_log_v1(protocol, pcr_index, data_to_hash)?;
         }
         Ok(Some(TpmProtocol::V2(protocol))) => {
-            info!("measuring to v2 TPM");
+            info!(
+                "measuring {} bytes to PCR {} of a v2 TPM",
+                data_to_hash.len(),
+                pcr_index.0,
+            );
             extend_pcr_and_log_v2(protocol, pcr_index, data_to_hash)?;
         }
         Ok(None) => {
