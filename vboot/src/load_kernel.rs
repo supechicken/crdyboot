@@ -345,7 +345,7 @@ pub fn load_kernel<'kernel>(
     // Get the slice that will be returned at the end, dropping unused
     // space from the reserved space at the beginning of the full
     // buffer.
-    let kernel_buffer = &mut inputs.kernel_buffer[unused_space..];
+    let mut kernel_buffer = &mut inputs.kernel_buffer[unused_space..];
 
     // Get the bootloader offset within the new `kernel_buffer` size.
     let bootloader_offset = bootloader_size
@@ -374,6 +374,20 @@ pub fn load_kernel<'kernel>(
     let cros_config_end = cros_config_start
         .checked_add(cros_config_size)
         .ok_or(bootloader_err)?;
+
+    // Chop off the end of the kernel buffer so that it just contains
+    // the kernel bootloader, kernel data, config, and params. The reven
+    // kernel partitions are 64MiB, but only around a quarter of that is
+    // used, so this shrinks the buffer by a large amount. This is
+    // important because the buffer is later hashed when measuring to
+    // the TPM, which is a fairly slow operation that scales linearly
+    // with the size of the data.
+    info!(
+        "shrinking output kernel buffer from {} bytes to {} bytes",
+        kernel_buffer.len(),
+        bootloader_offset
+    );
+    kernel_buffer = &mut kernel_buffer[..bootloader_offset];
 
     Ok(LoadedKernel {
         data: kernel_buffer,
