@@ -106,6 +106,9 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
         .arg("-C")
         .arg(vboot_ref)
         .arg("V=1")
+        // Per the vboot_reference Makefile, this produces faster (but
+        // larger) code.
+        .arg("UNROLL_LOOPS=1")
         .arg(format!("CC={c_compiler}"))
         .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
         .arg(format!("BUILD={}", path_to_str(&vboot_build_dir)))
