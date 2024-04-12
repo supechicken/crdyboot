@@ -5,6 +5,7 @@
 use crate::arch::Arch;
 use crate::config::{Config, EfiExe};
 use crate::secure_boot::{self, SecureBootKeyPaths};
+use crate::vm_test::Operation;
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
@@ -678,6 +679,46 @@ pub fn corrupt_crdyboot_signatures(disk_path: &Utf8Path) -> Result<()> {
 
         Ok(())
     })
+}
+
+/// Install the signed `uefi_test_runner` executable as the first-stage
+/// bootloader (for VM testing).
+pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()> {
+    modify_system_partition(&conf.test_disk_path(), |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+
+        // Rename the boot executables to crdyshim.
+        boot_dir.rename("bootx64.efi", &boot_dir, "crdyshimx64.efi")?;
+        boot_dir.rename("bootia32.efi", &boot_dir, "crdyshimia32.efi")?;
+
+        // Create the test control file.
+        fat_write_file(
+            &boot_dir,
+            "crdy_test_control",
+            format!("{operation}\n").as_bytes(),
+        )?;
+
+        Ok(())
+    })?;
+
+    // Sign the test tool and copy it to the ESP.
+    SignAndUpdateBootloader {
+        disk_path: &conf.test_disk_path(),
+        key_paths: conf.secure_boot_root_key_paths(),
+        mapping: Arch::all()
+            .iter()
+            .map(|arch| {
+                (
+                    conf.target_exec_path(*arch, EfiExe::UefiTestTool),
+                    arch.efi_file_name("boot"),
+                )
+            })
+            .collect(),
+    }
+    .run()?;
+
+    Ok(())
 }
 
 #[cfg(test)]

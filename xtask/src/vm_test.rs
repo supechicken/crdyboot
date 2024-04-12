@@ -2,11 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Directly include the `Operation` enum from `uefi_test_tool`.
+mod operation {
+    include!("../../tools/uefi_test_tool/src/operation.rs");
+}
+pub use operation::Operation;
+
 use crate::arch::Arch;
 use crate::config::Config;
 use crate::gen_disk::{
     copy_partition_from_disk_to_disk, corrupt_crdyboot_signatures, corrupt_kern_a,
-    corrupt_pubkey_section, delete_crdyboot_signatures, SignAfterCorrupt, VerboseRuntimeLogs,
+    corrupt_pubkey_section, delete_crdyboot_signatures, install_uefi_test_tool, SignAfterCorrupt,
+    VerboseRuntimeLogs,
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
@@ -360,6 +367,38 @@ fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
+/// Test that a deactivated v1 TPM is correctly ignored.
+fn test_tpm1_deactivated_success(conf: &Config) -> Result<()> {
+    println!("test that a deactivated v1 TPM is correctly ignored");
+
+    install_uefi_test_tool(conf, Operation::Tpm1Deactivated)?;
+
+    let expected_output = &[
+        // Expect this message twice, first crdyshim then crdyboot:
+        "TPMv1 protocol exists, but TPM is deactivated",
+        "TPMv1 protocol exists, but TPM is deactivated",
+        // Indicates the kernel has launched:
+        "EFI stub: UEFI Secure Boot is enabled.",
+    ];
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
+}
+
+/// Test that an error from extending a v1 TPM PCR is correctly ignored.
+fn test_tpm1_extend_error_success(conf: &Config) -> Result<()> {
+    println!("test that an error from extending a v1 TPM PCR is correctly ignored");
+
+    install_uefi_test_tool(conf, Operation::Tpm1ExtendFail)?;
+
+    let expected_output = &[
+        // Expect this message twice, first crdyshim then crdyboot:
+        "failed to extend PCR: TPMv1 hash_log_extend_event failed: DEVICE_ERROR",
+        "failed to extend PCR: TPMv1 hash_log_extend_event failed: DEVICE_ERROR",
+        // Indicates the kernel has launched:
+        "EFI stub: UEFI Secure Boot is enabled.",
+    ];
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(conf, VerboseRuntimeLogs(true))?;
     download_test_key(conf)?;
@@ -367,6 +406,8 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     create_test_disk(conf)?;
 
     let tests = [
+        test_tpm1_deactivated_success,
+        test_tpm1_extend_error_success,
         test_missing_signature_prevents_crdyboot_launch,
         test_invalid_signature_prevents_crdyboot_launch,
         test_signed_vbpubk_mod_breaks_vboot,
