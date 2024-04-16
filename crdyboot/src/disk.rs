@@ -165,8 +165,24 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptD
     // Find the parent disk device of the logical partition device.
     let disk_handle = find_parent_disk(&block_io_handles, partition_handle, bt)?;
 
-    bt.open_protocol_exclusive::<BlockIO>(disk_handle)
+    // Open the protocol with `GetProtocol` instead of `Exclusive`. On
+    // the X1Cg9, opening the protocol in exclusive mode takes over
+    // 800ms for some unknown reason.
+    //
+    // Functionally there's not much difference in safety here, since
+    // crdyboot is the only code that should be running other than the
+    // firmware. Grub also opens the protocol in non-exclusive mode.
+    unsafe {
+        bt.open_protocol::<BlockIO>(
+            OpenProtocolParams {
+                handle: disk_handle,
+                agent: bt.image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
         .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
+    }
 }
 
 pub struct GptDisk<'a> {
