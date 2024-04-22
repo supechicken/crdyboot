@@ -5,6 +5,7 @@
 use crate::util::ScopedChild;
 use crate::Config;
 use anyhow::Result;
+use fs_err as fs;
 use std::process::Command;
 use tempfile::TempDir;
 
@@ -34,6 +35,12 @@ impl Swtpm {
         let tmp_dir = TempDir::new()?;
         let tmp_path = tmp_dir.path().to_str().unwrap();
 
+        let log_path = conf.workspace_path().join("tpm.log");
+
+        // Remove the log if it already exists. Otherwise, new logs will
+        // be appended to the existing log, making it harder to read.
+        let _ = fs::remove_file(&log_path);
+
         // Adapted from https://qemu.readthedocs.io/en/latest/specs/tpm.html
         let mut cmd = Command::new("swtpm");
         cmd.args([
@@ -47,7 +54,7 @@ impl Swtpm {
             "--terminate",
             // Send verbose logs to a file.
             "--log",
-            &format!("file={},level=10", conf.workspace_path().join("tpm.log")),
+            &format!("file={},level=10", log_path),
         ]);
 
         if version == TpmVersion::V2 {
