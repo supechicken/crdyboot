@@ -9,6 +9,7 @@ extern crate alloc;
 
 mod launch;
 mod operation;
+mod tpm_v1;
 
 use core::mem;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -70,7 +71,9 @@ fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
 
     match Operation::get() {
         Operation::Unset => unreachable!(),
-        Operation::Tpm1Deactivated | Operation::Tpm1ExtendFail => todo!(),
+        Operation::Tpm1Deactivated | Operation::Tpm1ExtendFail => {
+            tpm_v1::create_tpm1(st.boot_services())
+        }
     }
 
     launch::launch_crdyshim(st.boot_services());
