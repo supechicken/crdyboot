@@ -268,6 +268,7 @@ fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
 fn run_bootloader_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
     run_uefi_build(Package::Crdyshim, vec!["use_dev_pubkey"])?;
     run_uefi_build(Package::Crdyboot, vec![])?;
+    run_uefi_build(Package::UefiTestTool, vec![])?;
 
     // Check various properties of the bootloader binaries.
     bin_checks::run_bin_checks(conf)?;

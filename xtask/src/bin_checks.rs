@@ -28,8 +28,8 @@ fn ensure_nx_compat<N: ImageNtHeaders>(pe: &PeFile<N>) -> Result<()> {
 /// * The CSV data can be parsed as SBAT image data
 /// * The SBAT package entry version matches the version in Cargo.toml
 fn check_sbat<N: ImageNtHeaders>(conf: &Config, exe: EfiExe, pe: &PeFile<N>) -> Result<()> {
-    // The enroller does not have SBAT data.
-    if exe == EfiExe::Enroller {
+    // The tools do not have SBAT data.
+    if exe.is_tool() {
         return Ok(());
     }
 

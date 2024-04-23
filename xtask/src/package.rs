@@ -10,6 +10,7 @@ pub enum Package {
     Crdyshim,
     Enroller,
     Libcrdy,
+    UefiTestTool,
     Vboot,
     Xtask,
 }
@@ -22,6 +23,7 @@ impl Package {
             Self::Crdyshim => "crdyshim",
             Self::Enroller => "enroller",
             Self::Libcrdy => "libcrdy",
+            Self::UefiTestTool => "uefi_test_tool",
             Self::Vboot => "vboot",
             Self::Xtask => "xtask",
         }

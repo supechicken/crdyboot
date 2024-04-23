@@ -166,11 +166,17 @@ pub enum EfiExe {
     Crdyboot,
     Crdyshim,
     Enroller,
+    UefiTestTool,
 }
 
 impl EfiExe {
     pub fn all() -> &'static [EfiExe] {
-        &[EfiExe::Crdyboot, EfiExe::Crdyshim, EfiExe::Enroller]
+        &[
+            EfiExe::Crdyboot,
+            EfiExe::Crdyshim,
+            EfiExe::Enroller,
+            EfiExe::UefiTestTool,
+        ]
     }
 
     fn as_str(self) -> &'static str {
@@ -178,6 +184,7 @@ impl EfiExe {
             EfiExe::Crdyboot => "crdyboot.efi",
             EfiExe::Crdyshim => "crdyshim.efi",
             EfiExe::Enroller => "enroller.efi",
+            EfiExe::UefiTestTool => "uefi_test_tool.efi",
         }
     }
 
@@ -186,6 +193,14 @@ impl EfiExe {
             EfiExe::Crdyboot => Package::Crdyboot,
             EfiExe::Crdyshim => Package::Crdyshim,
             EfiExe::Enroller => Package::Enroller,
+            EfiExe::UefiTestTool => Package::UefiTestTool,
+        }
+    }
+
+    pub fn is_tool(self) -> bool {
+        match self {
+            Self::Crdyboot | Self::Crdyshim => false,
+            Self::Enroller | Self::UefiTestTool => true,
         }
     }
 }
