@@ -1,0 +1,20 @@
+# Copyright 2024 The ChromiumOS Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+[package]
+name = "uefi_test_tool"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+libcrdy = { path = "../../libcrdy" }
+log.workspace = true
+uefi.workspace = true
+
+[target.'cfg(target_os = "uefi")'.dependencies]
+uefi-services.workspace = true
