@@ -5,6 +5,10 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
+extern crate alloc;
+
+mod launch;
+
 use uefi::table::{Boot, SystemTable};
 use uefi::{entry, Handle, Status};
 
@@ -14,6 +18,8 @@ use libcrdy::uefi_services;
 #[entry]
 fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut st).expect("failed to initialize uefi_services");
+
+    launch::launch_crdyshim(st.boot_services());
 
     Status::SUCCESS
 }
