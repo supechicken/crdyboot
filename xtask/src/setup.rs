@@ -7,7 +7,7 @@ use crate::config::{self, Config};
 use crate::network::GsResource;
 use crate::qemu::{Display, QemuOpts};
 use crate::util::check_sha256_hash;
-use crate::{copy_file, gen_disk, run_build_enroller, secure_boot, shim, Action, SetupAction};
+use crate::{copy_file, gen_disk, run_build_enroller, secure_boot, Action, SetupAction};
 use anyhow::Result;
 use camino::Utf8Path;
 use command_run::Command;
@@ -267,8 +267,6 @@ fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
 }
 
 fn run_prep_disk(conf: &Config) -> Result<()> {
-    shim::update_shim(conf)?;
-
     // Sign both kernel partitions.
     gen_disk::sign_kernel_partition(conf, "KERN-A")?;
     gen_disk::sign_kernel_partition(conf, "KERN-B")

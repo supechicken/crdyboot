@@ -11,7 +11,6 @@ mod package;
 mod qemu;
 mod secure_boot;
 mod setup;
-mod shim;
 mod swtpm;
 mod util;
 mod vboot;
