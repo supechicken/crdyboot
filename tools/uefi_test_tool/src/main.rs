@@ -8,16 +8,70 @@
 extern crate alloc;
 
 mod launch;
+mod operation;
 
+use core::mem;
+use core::sync::atomic::{AtomicU32, Ordering};
+use log::info;
+use operation::Operation;
+use uefi::table::boot::BootServices;
 use uefi::table::{Boot, SystemTable};
-use uefi::{entry, Handle, Status};
+use uefi::{cstr16, entry, fs, Handle, Status};
 
 #[cfg(not(target_os = "uefi"))]
 use libcrdy::uefi_services;
 
+static OPERATION: AtomicU32 = AtomicU32::new(Operation::Unset as u32);
+
+impl Operation {
+    /// Read the operation from a file on the ESP.
+    ///
+    /// Panics if the file can't be read, or if the contents are
+    /// invalid.
+    ///
+    /// The operation is stored in the global `OPERATION`.
+    fn init(boot_services: &BootServices) {
+        let sfs = boot_services
+            .get_image_file_system(boot_services.image_handle())
+            .expect("failed to open SimpleFileSystem");
+        let mut fs = fs::FileSystem::new(sfs);
+
+        let content = fs
+            .read_to_string(cstr16!(r"\efi\boot\crdy_test_control"))
+            .expect("failed to read control file");
+        let content = content.trim();
+
+        let op: Operation = match content.parse() {
+            Ok(op) => op,
+            Err(_) => panic!("invalid control file: {content}"),
+        };
+
+        info!("operation: {op}");
+
+        OPERATION.store(op as u32, Ordering::Release);
+    }
+
+    /// Load the operation from the global `OPERATION`.
+    fn get() -> Self {
+        let op: u32 = OPERATION.load(Ordering::Acquire);
+        // SAFETY: `Operation` is a `u32`, so the underlying
+        // representation matches. The value of `OPERATION` is only
+        // written by `Operation::init`, which always writes a valid
+        // variant of `Operation`.
+        unsafe { mem::transmute(op) }
+    }
+}
+
 #[entry]
 fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut st).expect("failed to initialize uefi_services");
+
+    Operation::init(st.boot_services());
+
+    match Operation::get() {
+        Operation::Unset => unreachable!(),
+        Operation::Tpm1Deactivated | Operation::Tpm1ExtendFail => todo!(),
+    }
 
     launch::launch_crdyshim(st.boot_services());
 
