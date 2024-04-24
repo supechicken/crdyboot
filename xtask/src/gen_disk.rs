@@ -499,6 +499,12 @@ pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> 
     .run()?;
     let stdout = output.stdout_string_lossy();
     let command_line = stdout.lines().last().unwrap();
+    // Reven builds enable the `quiet` arg so that the EFI stub doesn't
+    // print messages. However, for VM tests in this repo it's useful to
+    // show those messages so we can assert the EFI stub has started
+    // (the alternative is to wait for SSH to fully come up, which would
+    // make tests take much longer).
+    let command_line = command_line.replace("quiet ", "");
     fs::write(&config, command_line)?;
 
     // Extract vmlinuz.
