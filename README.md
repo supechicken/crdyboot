@@ -49,10 +49,7 @@ packages:
 * The `xtask` package contains a host executable that provides the
   various `xtask` commands shown below. It's like a fancy Makefile for
   running various dev and test operations.
-* The `enroller` subdirectory contains a small UEFI application that
-  enrolls a test key in the `PK`, `KEK`, and `db` variables. This is
-  used to set up the test VM, and can also be used on real hardware (see
-  the "Testing on real hardware" section).
+* The `tools` subdirectory contains a couple packages used for testing.
 
 ## Dependencies
 

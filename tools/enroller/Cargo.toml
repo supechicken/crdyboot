@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-libcrdy = { path = "../libcrdy" }
+libcrdy = { path = "../../libcrdy" }
 log.workspace = true
 uefi.workspace = true
 

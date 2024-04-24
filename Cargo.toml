@@ -1,5 +1,15 @@
 [workspace]
-members = ["crdyboot", "crdyshim", "enroller", "libcrdy", "tools/uefi_test_tool", "vboot", "xtask"]
+# This list is altered via sed when building with the ebuild, keep in
+# sync with `src_prepare` in `crdyboot-9999.ebuild`.
+members = [
+    "crdyboot",
+    "crdyshim",
+    "libcrdy",
+    "tools/enroller",
+    "tools/uefi_test_tool",
+    "vboot",
+    "xtask",
+]
 resolver = "2"
 
 [workspace.package]
