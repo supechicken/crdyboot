@@ -332,12 +332,26 @@ fn run_clippy() -> Result<()> {
             // Arbitrarily choose the 64-bit UEFI target.
             "--target",
             Arch::X64.uefi_target(),
+            "--",
+            // Treat warnings as errors.
+            "-Dwarnings",
         ],
     )
     .run()?;
 
     // Use the default host target for xtask since it requires `std`.
-    Command::with_args("cargo", ["clippy", "--package", Package::Xtask.name()]).run()?;
+    Command::with_args(
+        "cargo",
+        [
+            "clippy",
+            "--package",
+            Package::Xtask.name(),
+            "--",
+            // Treat warnings as errors.
+            "-Dwarnings",
+        ],
+    )
+    .run()?;
 
     Ok(())
 }
