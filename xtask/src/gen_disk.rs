@@ -245,8 +245,8 @@ fn gen_enroller_fs(conf: &Config) -> Result<Vec<u8>> {
     let mut sys_part_data = vec![0; mib_to_byte(2).try_into().unwrap()];
 
     {
-        let mut sys_part_cursor = Cursor::new(&mut sys_part_data);
-        fatfs::format_volume(&mut sys_part_cursor, FormatVolumeOptions::new())?;
+        let sys_part_cursor = Cursor::new(&mut sys_part_data);
+        fatfs::format_volume(sys_part_cursor, FormatVolumeOptions::new())?;
     }
 
     {
