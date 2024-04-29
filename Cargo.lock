@@ -427,9 +427,9 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "gpt_disk_types"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c9cec52cc9bb7305e0178834c310519a4d602952fb65a31bdf60aed797fbf47"
+checksum = "9165f25c3cb4e30437743a410755999f5c753324dfd487d84a30a0858a149021"
 dependencies = [
  "crc",
  "ucs2",

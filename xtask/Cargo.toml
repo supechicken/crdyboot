@@ -16,7 +16,7 @@ command-run = "1.1.1"
 ed25519-compact = { workspace = true, features = ["pem", "std"] }
 fatfs = { version = "0.3.6", default-features = false, features = ["alloc", "std"] }
 fs-err = "2.7.0"
-gpt_disk_types = { version = "0.15.0", features = ["std"] }
+gpt_disk_types = { version = "0.16.0", features = ["std"] }
 gptman = { version = "1.0.0", default-features = false }
 object = { workspace = true, features = ["std"] }
 sbat = { workspace = true, features = ["std"] }
