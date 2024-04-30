@@ -1,5 +1,9 @@
 # Crdyshim Changelog
 
+## Unreleased
+
+* Make TPM logs more detailed. <http://crrev.com/c/5440295>
+
 ## 1.0.1
 
 * Update `uefi` and `uefi-services` deps. <http://crrev.com/c/5385531>
