@@ -19,9 +19,6 @@ use uefi::table::boot::BootServices;
 use uefi::table::{Boot, SystemTable};
 use uefi::{cstr16, entry, fs, Handle, Status};
 
-#[cfg(not(target_os = "uefi"))]
-use libcrdy::uefi_services;
-
 static OPERATION: AtomicU32 = AtomicU32::new(Operation::Unset as u32);
 
 impl Operation {
@@ -65,7 +62,7 @@ impl Operation {
 
 #[entry]
 fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut st).expect("failed to initialize uefi_services");
+    uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
 
     Operation::init(st.boot_services());
 

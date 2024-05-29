@@ -54,7 +54,7 @@ unsafe extern "C" fn vb2ex_printf(func: *const c_char, fmt: *const c_char, mut a
 
     // The log format we're using (from uefi-rs) prints the file, but
     // vboot just tells us the function name. The function name is more
-    // useful than outputing "printf.rs", so place the function name
+    // useful than outputting "printf.rs", so place the function name
     // into the file path here. Only send this log if the runtime log
     // level is high enough.
     let level = Level::Info;

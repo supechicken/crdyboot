@@ -10,3 +10,6 @@ repository.workspace = true
 log.workspace = true
 object.workspace = true
 uefi.workspace = true
+
+[target.'cfg(target_os = "uefi")'.dependencies]
+uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }

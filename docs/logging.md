@@ -1,7 +1,7 @@
 # Logging
 
 Log input is handled by the standard [`log`] crate. Log output is
-written by the [`uefi-services`] crate to UEFI's stdout handle. On most
+written by the [`uefi::helpers`] module to UEFI's stdout handle. On most
 machines this will appear on the screen, but there are exceptions (such
 as Macbooks) where the logs won't be printed anywhere.
 
@@ -14,4 +14,4 @@ To alter the log level at runtime, create an empty file called
 (`/efi/boot`).
 
 [`log`]: https://docs.rs/log
-[`uefi-services`]: https://docs.rs/uefi-services
+[`uefi::helpers`]: https://docs.rs/uefi/latest/uefi/helpers/index.html

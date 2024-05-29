@@ -13,7 +13,7 @@ log.workspace = true
 uefi.workspace = true
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi-services.workspace = true
+uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }
 
 [features]
 shim_verbose = []

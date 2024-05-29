@@ -1,5 +1,9 @@
 # Crdyboot Changelog
 
+## Unreleased
+
+* Update to uefi-0.28 and drop uefi-services. <https://crrev.com/c/5582506>
+
 ## 1.0.2
 
 * Make TPM logs more detailed. <http://crrev.com/c/5440295>

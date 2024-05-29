@@ -11,12 +11,9 @@ use uefi::guid;
 use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
 
-#[cfg(not(target_os = "uefi"))]
-use libcrdy::uefi_services;
-
 #[entry]
 fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut st).expect("failed to initialize utilities");
+    uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
 
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),

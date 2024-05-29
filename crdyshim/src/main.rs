@@ -38,9 +38,6 @@ use uefi::table::runtime::VariableVendor;
 use uefi::table::{Boot, SystemTable};
 use uefi::{cstr16, CStr16, CString16};
 
-#[cfg(not(target_os = "uefi"))]
-use libcrdy::uefi_services;
-
 /// TPM PCR to measure into.
 ///
 /// This is the same PCR shim uses.
@@ -444,7 +441,7 @@ fn run(system_table: SystemTable<Boot>) -> Result<(), CrdyshimError> {
 
 #[entry]
 fn efi_main(image: Handle, mut system_table: SystemTable<Boot>) -> Status {
-    uefi_services::init(&mut system_table).expect("failed to initialize uefi_services");
+    uefi::helpers::init(&mut system_table).expect("failed to initialize uefi::helpers");
     set_log_level(system_table.boot_services());
 
     match run(system_table) {
