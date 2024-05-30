@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use log::info;
+use uefi::data_types::chars::NUL_16;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::boot::{BootServices, ScopedProtocol};
@@ -148,16 +148,12 @@ pub fn read_file<'buf>(
 /// Returns `None` if `file_name` does not contain period character.
 #[must_use]
 pub fn replace_final_extension(file_name: &CStr16, new_extension: &CStr16) -> Option<CString16> {
-    // TODO(nicholasbishop): simplify this implementation after
-    // upgrading to a version of uefi-rs that includes
-    // https://github.com/rust-osdev/uefi-rs/pull/1013.
-
     // Convert the file name to vec. Note that this does not include the
     // trailing null char.
-    let mut chars: Vec<u16> = file_name.as_slice().iter().map(|c| u16::from(*c)).collect();
+    let mut chars = file_name.as_slice().to_vec();
 
     // Find the last '.' and remove everything after it.
-    if let Some(rev_dot_index) = chars.iter().rev().position(|c| *c == u16::from(b'.')) {
+    if let Some(rev_dot_index) = chars.iter().rev().position(|c| *c == '.') {
         let dot_index = chars.len().checked_sub(rev_dot_index)?;
         chars.truncate(dot_index);
     } else {
@@ -165,12 +161,13 @@ pub fn replace_final_extension(file_name: &CStr16, new_extension: &CStr16) -> Op
     }
 
     // Add the new extension.
-    chars.extend(new_extension.to_u16_slice());
+    chars.extend(new_extension.as_slice());
 
     // Append trailing null.
-    chars.push(0);
+    chars.push(NUL_16);
 
-    CString16::try_from(chars).ok()
+    let output = CStr16::from_char16_with_nul(&chars).ok()?;
+    Some(CString16::from(output))
 }
 
 #[cfg(test)]
