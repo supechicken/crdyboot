@@ -2,7 +2,7 @@
 
 Pronounced CUR-dee-boot.
 
-Crdyboot is a UEFI bootloader for ChromeOS Flex. It is not yet in use.
+Crdyboot is a UEFI bootloader for ChromeOS Flex.
 
 Crdyboot acts as a bridge between UEFI firmware and the Chromebook style
 of booting. It uses [vboot] to select and validate an appropriate
