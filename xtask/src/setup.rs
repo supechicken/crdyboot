@@ -51,7 +51,7 @@ fn init_vboot_reference(conf: &Config) -> Result<()> {
 }
 
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
-    let tmp_dir = TempDir::new()?;
+    let tmp_dir = TempDir::new_in(conf.workspace_path())?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let hash = config::TEST_DATA_HASH;
     let test_data_file_name = format!("crdyboot_test_data_{}.tar.xz", &hash[..8]);
@@ -90,7 +90,7 @@ fn download_and_extract_disk_image(
     expected_hash: Option<&str>,
 ) -> Result<()> {
     // Download the compressed test image to a temporary directory.
-    let tmp_dir = TempDir::new()?;
+    let tmp_dir = TempDir::new_in(conf.workspace_path())?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
     let download_path = tmp_path.join("chromiumos_test_image.tar.xz");
     gs_resource.download_to_file(&download_path)?;
