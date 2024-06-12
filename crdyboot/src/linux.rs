@@ -128,11 +128,11 @@ fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootE
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
 fn execute_linux_kernel(
-    kernel: &LoadedKernel,
+    kernel_data: &[u8],
     cmdline: &CStr16,
     system_table: SystemTable<Boot>,
 ) -> Result<(), CrdybootError> {
-    let pe = PeFile64::parse(kernel.data()).map_err(CrdybootError::InvalidPe)?;
+    let pe = PeFile64::parse(kernel_data).map_err(CrdybootError::InvalidPe)?;
 
     nx::update_mem_attrs(&pe, system_table.boot_services())
         .map_err(CrdybootError::MemoryProtection)?;
@@ -145,7 +145,7 @@ fn execute_linux_kernel(
     };
 
     let next_stage = NextStage {
-        image_data: kernel.data(),
+        image_data: kernel_data,
         load_options: cmdline.as_bytes(),
         entry_point_offset,
     };
@@ -213,5 +213,5 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
 
     let cmdline = get_kernel_command_line(&kernel)?;
 
-    execute_linux_kernel(&kernel, &cmdline, system_table)
+    execute_linux_kernel(kernel.data(), &cmdline, system_table)
 }
