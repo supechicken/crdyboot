@@ -11,6 +11,7 @@ use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point}
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
+use libcrdy::relocation::RelocationError;
 use libcrdy::tpm::extend_pcr_and_log;
 use log::info;
 use object::read::pe::PeFile64;
@@ -54,6 +55,10 @@ pub enum CrdybootError {
     /// Vboot failed to find a valid kernel partition.
     LoadKernelFailed(LoadKernelError),
 
+    /// Failed to relocate a PE executable.
+    #[allow(dead_code)]
+    Relocation(RelocationError),
+
     /// Failed to parse the kernel as a PE executable.
     InvalidPe(object::Error),
 
@@ -81,6 +86,9 @@ impl Display for CrdybootError {
             Self::GptDisk(err) => write!(f, "failed to open GPT disk: {err}"),
             Self::LoadKernelFailed(err) => write!(f, "failed to load kernel: {err}"),
             Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
+            Self::Relocation(err) => {
+                write!(f, "failed to relocate the kernel: {err}")
+            }
             Self::MissingIa32CompatEntryPoint => {
                 write!(f, "missing ia32 compatibility entry point")
             }
