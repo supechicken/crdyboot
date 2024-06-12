@@ -11,7 +11,7 @@ use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point}
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
-use libcrdy::relocation::RelocationError;
+use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::tpm::extend_pcr_and_log;
 use log::info;
 use object::read::pe::PeFile64;
@@ -56,7 +56,6 @@ pub enum CrdybootError {
     LoadKernelFailed(LoadKernelError),
 
     /// Failed to relocate a PE executable.
-    #[allow(dead_code)]
     Relocation(RelocationError),
 
     /// Failed to parse the kernel as a PE executable.
@@ -170,9 +169,6 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot. Allocating 64MiB should be
     // more than enough for the forseeable future.
-    //
-    // This buffer will never be freed, unless loading or executing the
-    // kernel fails.
     let mut kernel_buffer = ScopedPageAllocation::new(
         // Safety: this system table clone will remain valid until
         // ExitBootServices is called. That won't happen until after the
@@ -213,5 +209,44 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
 
     let cmdline = get_kernel_command_line(&kernel)?;
 
-    execute_linux_kernel(kernel.data(), &cmdline, system_table)
+    // Allocate a buffer to relocate the kernel into. As of R127 the
+    // minimum size is about 17MiB, so allocate 20MiB to provide some
+    // headroom.
+    //
+    // This buffer will never be freed, unless loading or executing the
+    // kernel fails.
+    let mut kernel_reloc_buffer = ScopedPageAllocation::new(
+        // Safety: this system table clone will remain valid until
+        // ExitBootServices is called. That won't happen until after the
+        // kernel is executed, at which point crdyboot code is no longer
+        // running.
+        unsafe { system_table.unsafe_clone() },
+        AllocateType::AnyPages,
+        MemoryType::LOADER_CODE,
+        // 20 MiB.
+        20 * 1024 * 1024,
+    )
+    .map_err(CrdybootError::Allocation)?;
+
+    // Relocate the kernel into the new buffer. Even though the kernel
+    // doesn't have a `.reloc` section, it still needs to be relocated
+    // to ensure that sections are properly aligned and unused data is
+    // zeroed. In particular, the `.data` section has a larger virtual
+    // size than the file size, and that data must be zeroed per the PE
+    // spec. The kernel uses that space for the BSS section during
+    // decompression, and depending on the kernel version, it may or may
+    // not clear the BSS itself. This has been observed to cause boot
+    // failures on 32-bit UEFI.
+    //
+    // See this discussion thread:
+    // https://lore.kernel.org/linux-efi/CAAzv750HTnposziTOPDjnUQM0K2JVrE3-1HCxiPkp+QtWi=jEw@mail.gmail.com/T/#u
+    {
+        let pe = PeFile64::parse(kernel.data()).map_err(CrdybootError::InvalidPe)?;
+        relocate_pe_into(&pe, &mut kernel_reloc_buffer).map_err(CrdybootError::Relocation)?;
+    }
+
+    // Drop the original kernel buffer, not needed anymore.
+    drop(kernel_buffer);
+
+    execute_linux_kernel(&kernel_reloc_buffer, &cmdline, system_table)
 }
