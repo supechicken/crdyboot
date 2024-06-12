@@ -18,7 +18,7 @@ use object::read::pe::PeFile64;
 use uefi::proto::tcg::PcrIndex;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::{Boot, SystemTable};
-use uefi::CString16;
+use uefi::{CStr16, CString16};
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 
 /// TPM PCR to measure into.
@@ -98,6 +98,18 @@ impl Display for CrdybootError {
     }
 }
 
+/// Get the kernel command line as a UCS-2 string.
+fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootError> {
+    let cmdline = kernel
+        .command_line()
+        .ok_or(CrdybootError::GetCommandLineFailed)?;
+    info!("command line: {cmdline}");
+
+    // Convert the command-line to UCS-2.
+    CString16::try_from(cmdline.as_str())
+        .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)
+}
+
 /// Hand off control to the Linux EFI stub.
 ///
 /// As mentioned in [1], the preferred method for loading the kernel
@@ -117,17 +129,9 @@ impl Display for CrdybootError {
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
 fn execute_linux_kernel(
     kernel: &LoadedKernel,
+    cmdline: &CStr16,
     system_table: SystemTable<Boot>,
 ) -> Result<(), CrdybootError> {
-    let cmdline = kernel
-        .command_line()
-        .ok_or(CrdybootError::GetCommandLineFailed)?;
-    info!("command line: {cmdline}");
-
-    // Convert the command-line to UCS-2.
-    let cmdline = CString16::try_from(cmdline.as_str())
-        .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)?;
-
     let pe = PeFile64::parse(kernel.data()).map_err(CrdybootError::InvalidPe)?;
 
     nx::update_mem_attrs(&pe, system_table.boot_services())
@@ -207,5 +211,7 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     // Measure the kernel into the TPM.
     extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, kernel.data());
 
-    execute_linux_kernel(&kernel, system_table)
+    let cmdline = get_kernel_command_line(&kernel)?;
+
+    execute_linux_kernel(&kernel, &cmdline, system_table)
 }
