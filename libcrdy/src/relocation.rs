@@ -21,8 +21,8 @@
 //!
 //! [`LoadImage`]: https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-loadimage
 
+use crate::util::u32_to_usize;
 use core::fmt::{self, Display, Formatter};
-use libcrdy::util::u32_to_usize;
 use log::info;
 use object::pe::{IMAGE_REL_BASED_ABSOLUTE, IMAGE_REL_BASED_DIR64, IMAGE_REL_BASED_HIGHLOW};
 use object::read::pe::{
@@ -155,6 +155,7 @@ fn apply_relocations(
 ///
 /// Precondition: the `dst` buffer should be initialized to all zero
 /// bytes to ensure there's no junk data in the result.
+#[allow(clippy::missing_panics_doc)]
 pub fn relocate_pe_into<N: ImageNtHeaders>(
     src: &PeFile<N>,
     dst: &mut [u8],

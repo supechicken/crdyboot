@@ -12,7 +12,6 @@
 extern crate alloc;
 
 mod fs;
-mod relocation;
 mod sbat_revocation;
 
 use core::fmt::{self, Display, Formatter};
@@ -23,10 +22,10 @@ use libcrdy::entry_point::get_primary_entry_point;
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
+use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::set_log_level;
 use libcrdy::tpm::extend_pcr_and_log;
 use log::{error, info};
-use relocation::{relocate_pe_into, RelocationError};
 use sbat::RevocationSbat;
 use sbat_revocation::RevocationError;
 use uefi::prelude::*;

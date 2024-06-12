@@ -16,6 +16,7 @@ pub mod launch;
 mod logging;
 pub mod nx;
 pub mod page_alloc;
+pub mod relocation;
 pub mod tpm;
 pub mod util;
 
