@@ -1,6 +1,11 @@
 # Crdyboot Changelog
 
 ## 1.0.2
+* Update to uefi-0.29. <https://crrev.com/c/5688491>
+* firmware: Added firmware.rs, a module for installing firmware updates in
+  tandem with the fwupd UEFI plugin. Initially only queries UEFI vars
+  for updates and sets the status of any found
+  updates. <https://crrev.com/c/5644131>
 
 ## 1.0.1
 

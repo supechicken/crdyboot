@@ -11,14 +11,23 @@
 #![cfg_attr(target_os = "uefi", no_std)]
 
 mod disk;
+mod firmware;
 mod linux;
 mod revocation;
 mod vbpubk;
 
+use firmware::update_firmware;
 use libcrdy::{embed_section, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
+use log::error;
 use revocation::self_revocation_check;
 use uefi::prelude::*;
+
+// TODO(b/338423918): firmware updates are disabled for now to allow
+// work-in-progress code to land.
+fn allow_firmware_updates() -> bool {
+    false
+}
 
 fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
@@ -27,6 +36,12 @@ fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
     self_revocation_check(st.runtime_services()).map_err(CrdybootError::Revocation)?;
+
+    if allow_firmware_updates() {
+        if let Err(err) = update_firmware(&st) {
+            error!("firmware update failed: {err}");
+        };
+    };
 
     load_and_execute_kernel(st)
 }
