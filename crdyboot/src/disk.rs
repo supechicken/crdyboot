@@ -145,16 +145,22 @@ fn find_parent_disk(
     Err(GptDiskError::ParentDiskNotFound)
 }
 
-fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
-    // Get the LoadedImage protocol for the image handle. This provides a
-    // device handle which should correspond to the disk that the image was
-    // loaded from.
+/// Find the [`Handle`] corresponding to the ESP partition that this
+/// executable is running from.
+fn find_esp_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskError> {
+    // Get the LoadedImage protocol for the image handle. This provides
+    // a device handle which should correspond to the partition that the
+    // image was loaded from.
     let loaded_image = bt
         .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
         .map_err(|err| GptDiskError::OpenLoadedImageProtocolFailed(err.status()))?;
-    let partition_handle = loaded_image
+    loaded_image
         .device()
-        .ok_or(GptDiskError::LoadedImageHasNoDevice)?;
+        .ok_or(GptDiskError::LoadedImageHasNoDevice)
+}
+
+fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
+    let partition_handle = find_esp_partition_handle(bt)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
