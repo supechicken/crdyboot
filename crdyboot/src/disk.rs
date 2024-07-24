@@ -9,7 +9,10 @@ use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
+use uefi::proto::media::disk::DiskIo as UefiDiskIo;
+use uefi::proto::media::partition::PartitionInfo;
 use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
+use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
 pub enum GptDiskError {
@@ -22,14 +25,23 @@ pub enum GptDiskError {
     /// No handles support the [`BlockIO`] protocol.
     BlockIoProtocolMissing(Status),
 
+    /// No handles support the [`PartitionInfo`] protocol.
+    PartitionInfoProtocolMissing(Status),
+
     /// Failed to open the [`BlockIO`] protocol.
     OpenBlockIoProtocolFailed(Status),
 
     /// Failed to open the [`DevicePath`] protocol.
     OpenDevicePathProtocolFailed(Status),
 
+    /// Failed to open the [`UefiDiskIo`] protocol.
+    OpenDiskIoProtocolFailed(Status),
+
     /// Failed to open the [`LoadedImage`] protocol.
     OpenLoadedImageProtocolFailed(Status),
+
+    /// Failed to open the [`PartitionInfo`] protocol.
+    OpenPartitionInfoProtocolFailed(Status),
 
     /// The [`LoadedImage`] does not have a device handle set.
     LoadedImageHasNoDevice,
@@ -37,6 +49,9 @@ pub enum GptDiskError {
     /// Failed to find the handle for the disk that the current
     /// executable was booted from.
     ParentDiskNotFound,
+
+    /// Failed to find the handle for the stateful partition.
+    StatefulPartitionNotFound,
 }
 
 impl Display for GptDiskError {
@@ -51,20 +66,32 @@ impl Display for GptDiskError {
             Self::BlockIoProtocolMissing(status) => {
                 write!(f, "no handles support the BlockIO protocol: {status}")
             }
+            Self::PartitionInfoProtocolMissing(status) => {
+                write!(f, "no handles support the PartitionInfo protocol: {status}")
+            }
             Self::OpenBlockIoProtocolFailed(status) => {
                 write!(f, "failed to open the BlockIO protocol: {status}")
             }
             Self::OpenDevicePathProtocolFailed(status) => {
                 write!(f, "failed to open the DevicePath protocol: {status}")
             }
+            Self::OpenDiskIoProtocolFailed(status) => {
+                write!(f, "failed to open the DiskIO protocol: {status}")
+            }
             Self::OpenLoadedImageProtocolFailed(status) => {
                 write!(f, "failed to open the LoadedImage protocol: {status}")
+            }
+            Self::OpenPartitionInfoProtocolFailed(status) => {
+                write!(f, "failed to open the PartitionInfo protocol: {status}")
             }
             Self::LoadedImageHasNoDevice => {
                 write!(f, "the LoadedImage does not have a device handle set")
             }
             Self::ParentDiskNotFound => {
                 write!(f, "failed to get parent disk")
+            }
+            Self::StatefulPartitionNotFound => {
+                write!(f, "failed to find stateful partition handle")
             }
         }
     }
@@ -188,6 +215,141 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptD
             OpenProtocolAttributes::GetProtocol,
         )
         .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
+    }
+}
+
+/// Check if `p1` and `p2` are handles of partitions on the same
+/// disk. Returns `Ok(true)` if they are on the same disk, `Ok(false)`
+/// otherwise.
+///
+/// Both handles are assumed to be partition handles. If they are not,
+/// the function may fail with an error or return `Ok(false)`.
+fn is_sibling_partition(p1: Handle, p2: Handle, bt: &BootServices) -> Result<bool, GptDiskError> {
+    // Get the device path for both partitions.
+    let p1 = device_paths_for_handle(p1, bt)?;
+    let p2 = device_paths_for_handle(p2, bt)?;
+
+    // Check that both paths have the same number of nodes.
+    let count = p1.node_iter().count();
+    if count != p2.node_iter().count() {
+        return Ok(false);
+    }
+
+    for (i, (n1, n2)) in p1.node_iter().zip(p2.node_iter()).enumerate() {
+        // `count - 1` cannot fail because if we are in this loop then
+        // `count` is not zero.
+        #[allow(clippy::arithmetic_side_effects)]
+        if i < count - 1 {
+            // Check that all nodes except the last are the same.
+            if n1 != n2 {
+                return Ok(false);
+            }
+        } else {
+            // For the last node of each path, check that they are of
+            // the expected type.
+            let hd = (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE);
+            if n1.full_type() != hd || n2.full_type() != hd {
+                return Ok(false);
+            }
+        }
+    }
+
+    Ok(true)
+}
+
+// Turn off lint that incorrectly fires on "ChromeOS".
+#[allow(clippy::doc_markdown)]
+/// Use the `PartitionInfo` protocol to test if `partition_handle`
+/// corresponds to a ChromeOS stateful partition.
+///
+/// This checks if the partition's name is "STATE".
+fn is_stateful_partition(
+    partition_handle: Handle,
+    bt: &BootServices,
+) -> Result<bool, GptDiskError> {
+    // Name of the stateful partition.
+    const STATE_NAME: &[Char16] = cstr16!("STATE").as_slice_with_nul();
+
+    // See comment in `find_disk_block_io` for why the non-exclusive
+    // mode is used.
+    let partition_info = unsafe {
+        bt.open_protocol::<PartitionInfo>(
+            OpenProtocolParams {
+                handle: partition_handle,
+                agent: bt.image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
+        .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))
+    }?;
+
+    // Ignore non-GPT partitions.
+    let Some(partition_info) = partition_info.gpt_partition_entry() else {
+        return Ok(false);
+    };
+
+    // `PartitionInfo` is `repr(packed)`, which limits operations on
+    // fields. Copy the `name` field to a local variable to work around
+    // this.
+    let name: [Char16; 36] = partition_info.partition_name;
+
+    // Check the partition name. Indexing cannot fail since `name` is
+    // longer than `STATE_NAME`.
+    #[allow(clippy::indexing_slicing)]
+    Ok(name[..STATE_NAME.len()] == *STATE_NAME)
+}
+
+/// Get the handle of the stateful partition.
+///
+/// This finds the stateful partition by its label, and excludes
+/// partitions from disks other than the one this executable is running
+/// from.
+fn find_stateful_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskError> {
+    let esp_partition_handle = find_esp_partition_handle(bt)?;
+
+    // Get all handles that support the partition info protocol.
+    let partition_info_handles = bt
+        .find_handles::<PartitionInfo>()
+        .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
+
+    for handle in partition_info_handles {
+        // Ignore partitions with a name other than "STATE".
+        if !is_stateful_partition(handle, bt)? {
+            continue;
+        }
+
+        // Ignore partitions from a different disk. For example, if the
+        // user is running from an installed system but also has an
+        // installer USB plugged in, this ensures that we find the
+        // partition on the internal disk.
+        if is_sibling_partition(esp_partition_handle, handle, bt)? {
+            return Ok(handle);
+        }
+    }
+
+    Err(GptDiskError::StatefulPartitionNotFound)
+}
+
+/// Open the Disk IO protocol for the stateful partition. This allows
+/// byte-level access to partition data.
+pub fn open_stateful_partition(
+    bt: &BootServices,
+) -> Result<ScopedProtocol<UefiDiskIo>, GptDiskError> {
+    let stateful_partition_handle = find_stateful_partition_handle(bt)?;
+
+    // See comment in `find_disk_block_io` for why the non-exclusive
+    // mode is used.
+    unsafe {
+        bt.open_protocol::<UefiDiskIo>(
+            OpenProtocolParams {
+                handle: stateful_partition_handle,
+                agent: bt.image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
+        .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
     }
 }
 

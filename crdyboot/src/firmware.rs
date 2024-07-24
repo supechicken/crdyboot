@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+use crate::disk;
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use core::mem::size_of;
@@ -214,6 +215,8 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> uefi::Result {
         info!("no firmware updates available");
         return Ok(());
     }
+
+    let _ = disk::open_stateful_partition(st.boot_services());
 
     // TODO(b/338423918): Create update capsules from each
     // [`UpdateInfo`]. In particular, implement the translation from
