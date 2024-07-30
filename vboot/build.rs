@@ -164,7 +164,7 @@ fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
         // Turn off a bunch of layout tests because they generate
         // "reference to packed field is unaligned" warnings.
         .layout_tests(false)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     if let Some(target) = target.c_target_override() {
         builder = builder.clang_arg(format!("--target={target}"));

@@ -22,7 +22,7 @@ uefi.workspace = true
 uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }
 
 [dev-dependencies]
-mockall = "0.11.4"
+mockall = "0.12.1"
 
 [features]
 # If enabled, embed a locally-created test public key (produced by xtask)

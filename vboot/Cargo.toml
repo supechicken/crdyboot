@@ -12,4 +12,4 @@ printf-compat = { version = "0.1.1", default-features = false }
 uguid = "2.0.0"
 
 [build-dependencies]
-bindgen = "0.64.0"
+bindgen = "0.69.4"
