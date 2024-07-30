@@ -26,7 +26,7 @@ pub enum LoadKernelError {
     /// Call to `vb2api_init` failed.
     ApiInitFailed(ReturnCode),
 
-    /// Call to vb2api_init_ctx_for_kernel_verification_only` failed.
+    /// Call to `vb2api_init_ctx_for_kernel_verification_only` failed.
     ApiKernelInitFailed(ReturnCode),
 
     /// Call to `LoadKernel` failed.
