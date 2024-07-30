@@ -238,6 +238,7 @@ dependencies = [
 name = "crdyboot"
 version = "1.0.2"
 dependencies = [
+ "ext4-view",
  "libcrdy",
  "log",
  "object",
@@ -349,6 +350,16 @@ checksum = "aa68f1b12764fab894d2755d2518754e71b4fd80ecfb822714a1206c2aab39bf"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "ext4-view"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bafa6e9d9c744fd159e93a272745881bbfe4539cc9fc799e64a96a35e0128f4"
+dependencies = [
+ "bitflags 2.3.2",
+ "crc",
 ]
 
 [[package]]
