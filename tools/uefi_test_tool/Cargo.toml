@@ -12,7 +12,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-libcrdy = { path = "../../libcrdy" }
+libcrdy.workspace = true
 log.workspace = true
 uefi.workspace = true
 
