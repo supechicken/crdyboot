@@ -334,14 +334,34 @@ fn find_stateful_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskEr
 
 /// Open the Disk IO protocol for the stateful partition. This allows
 /// byte-level access to partition data.
+///
+/// Returns a tuple containing the protocol and a media ID of type
+/// `u32`. The ID is passed in as a parameter of the protocol's methods.
 pub fn open_stateful_partition(
     bt: &BootServices,
-) -> Result<ScopedProtocol<UefiDiskIo>, GptDiskError> {
+) -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
     let stateful_partition_handle = find_stateful_partition_handle(bt)?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
-    unsafe {
+
+    // Get the disk's media ID. This value is needed when calling disk
+    // IO operations.
+    let media_id = unsafe {
+        bt.open_protocol::<BlockIO>(
+            OpenProtocolParams {
+                handle: stateful_partition_handle,
+                agent: bt.image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
+        .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
+        .media()
+        .media_id()
+    };
+
+    let disk_io = unsafe {
         bt.open_protocol::<UefiDiskIo>(
             OpenProtocolParams {
                 handle: stateful_partition_handle,
@@ -351,7 +371,9 @@ pub fn open_stateful_partition(
             OpenProtocolAttributes::GetProtocol,
         )
         .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
-    }
+    }?;
+
+    Ok((disk_io, media_id))
 }
 
 pub struct GptDisk<'a> {
