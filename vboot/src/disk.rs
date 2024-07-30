@@ -76,7 +76,7 @@ impl<'a> Disk<'a> {
     }
 
     fn as_handle(&mut self) -> vb2ex_disk_handle_t {
-        (self as *mut Disk).cast::<c_void>()
+        ptr::from_mut(self).cast::<c_void>()
     }
 
     unsafe fn from_handle(handle: vb2ex_disk_handle_t) -> &'a mut Disk<'a> {
