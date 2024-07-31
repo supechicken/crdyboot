@@ -55,8 +55,22 @@ struct UpdateInfo<'a> {
 }
 
 impl UpdateInfo<'_> {
+    /// Get the size in bytes of `self` when serialized to bytes.
+    fn serialized_len(&self) -> usize {
+        // 52 for the fixed fields (plus padding), plus the size of the
+        // device path.
+        //
+        // This should never overflow since we successfully read the
+        // data from a variable and the device path should not have
+        // changed since then.
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            52 + self.path.as_bytes().len()
+        }
+    }
+
     fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(52);
+        let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_len());
         bytes.extend(self.version.to_le_bytes());
         bytes.extend(self.efi_guid.to_bytes());
         bytes.extend(self.capsule_flags.bits().to_le_bytes());
@@ -286,5 +300,8 @@ mod tests {
 
         // Verify that converting it back to bytes gives the same value.
         assert_eq!(info.to_bytes(), data);
+
+        // Check the serialized length calculation.
+        assert_eq!(info.serialized_len(), data.len());
     }
 }
