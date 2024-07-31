@@ -36,6 +36,7 @@ const MAX_UPDATE_CAPSULES: usize = 128;
 /// [`TryFrom<&[u8]>`] for [`UpdateInfo`].
 ///
 /// [1]: https://github.com/fwupd/fwupd/tree/main/plugins/uefi-capsule
+#[derive(Debug, Eq, PartialEq)]
 struct UpdateInfo<'a> {
     // Version of UpdateInfo struct.
     version: u32,
@@ -226,4 +227,64 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> uefi::Result {
     set_update_statuses(st, &updates)
 
     // TODO(b/338423918): Apply the update capsules and reboot.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uefi::proto::device_path::build::{self, DevicePathBuilder};
+    use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
+
+    #[test]
+    fn test_update_info() {
+        // This test file is a direct copy of an efivarfs file created
+        // by `fwupd install`.
+        let data = include_bytes!(
+            "../test_data/\
+            fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
+        );
+        // Efivarfs stores the UEFI variable attributes in the first
+        // four bytes. Drop those bytes so that only the variable's
+        // value remains.
+        let data = &data[4..];
+
+        // Create the expected device path.
+        let mut storage = Vec::new();
+        let expected_path = DevicePathBuilder::with_vec(&mut storage)
+            .push(&build::media::HardDrive {
+                partition_number: 12,
+                partition_start: 0,
+                partition_size: 0,
+                partition_signature: PartitionSignature::Guid(guid!(
+                    "99cc6f39-2fd1-4d85-b15a-543e7b023a1f"
+                )),
+                partition_format: PartitionFormat::GPT,
+            })
+            .unwrap()
+            .push(&build::media::FilePath {
+                path_name: cstr16!(
+                    r"\EFI\chromeos\fw\fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"
+                ),
+            })
+            .unwrap()
+            .finalize()
+            .unwrap();
+
+        let expected_info = UpdateInfo {
+            version: 7,
+            efi_guid: guid!("61b65ccc-0116-4b62-80ed-ec5f089ae523"),
+            capsule_flags: CapsuleFlags::empty(),
+            hw_inst: 0,
+            time_attempted: Time::invalid(),
+            status: FWUPDATE_ATTEMPT_UPDATE,
+            path: expected_path,
+        };
+
+        // Parse the test data and compare with the expected value.
+        let info = UpdateInfo::try_from(data).unwrap();
+        assert_eq!(info, expected_info);
+
+        // Verify that converting it back to bytes gives the same value.
+        assert_eq!(info.to_bytes(), data);
+    }
 }
