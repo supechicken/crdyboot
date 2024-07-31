@@ -185,8 +185,18 @@ fn get_update_table(
         let mut info = match UpdateInfo::try_from(&*data) {
             Ok(i) => i,
             Err(err) => {
-                st.runtime_services()
-                    .delete_variable(&name, &FWUPDATE_VENDOR)?;
+                // Delete the malformed variable. If this fails, log the
+                // error but otherwise ignore it.
+                if let Err(err) = st
+                    .runtime_services()
+                    .delete_variable(&name, &FWUPDATE_VENDOR)
+                {
+                    warn!(
+                        "failed to delete variable {name}-{vendor}: {err}",
+                        vendor = FWUPDATE_VENDOR.0
+                    );
+                }
+
                 warn!("could not populate update info for {name}");
                 return Err(err);
             }
