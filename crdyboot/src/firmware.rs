@@ -10,7 +10,6 @@ use crate::disk;
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
-use core::mem::size_of;
 use log::{error, info, warn};
 use uefi::prelude::*;
 use uefi::proto::device_path::DevicePath;
@@ -81,6 +80,10 @@ struct UpdateInfo<'a> {
 }
 
 impl UpdateInfo<'_> {
+    /// Size of the fixed fields (plus padding) when in serialized
+    /// form. The rest of the data is a variable-length device path.
+    const HEADER_SIZE_IN_BYTES: usize = 52;
+
     /// Get the size in bytes of `self` when serialized to bytes.
     fn serialized_len(&self) -> usize {
         // 52 for the fixed fields (plus padding), plus the size of the
@@ -91,7 +94,7 @@ impl UpdateInfo<'_> {
         // changed since then.
         #[allow(clippy::arithmetic_side_effects)]
         {
-            52 + self.path.as_bytes().len()
+            Self::HEADER_SIZE_IN_BYTES + self.path.as_bytes().len()
         }
     }
 
@@ -139,7 +142,7 @@ impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
     type Error = FirmwareError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if size_of::<UpdateInfo>() <= bytes.len() {
+        if bytes.len() >= Self::HEADER_SIZE_IN_BYTES {
             let version = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
             let efi_guid = Guid::from_bytes(bytes[4..20].try_into().unwrap());
             let raw_flag_bits = u32::from_le_bytes(bytes[20..24].try_into().unwrap());
