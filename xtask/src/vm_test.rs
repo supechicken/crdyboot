@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 const VM_TIMEOUT_SHORT: Duration = Duration::from_secs(30);
 
 /// Timeout used for tests that need to wait for SSH.
-const VM_TIMEOUT_LONG: Duration = Duration::from_secs(180);
+const VM_TIMEOUT_LONG: Duration = Duration::from_secs(240);
 
 /// Download the well-known testing_rsa key for ChromeOS test images.
 fn download_test_key(conf: &Config) -> Result<()> {
