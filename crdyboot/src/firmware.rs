@@ -9,12 +9,13 @@ extern crate alloc;
 use crate::disk;
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
+use core::fmt::{self, Display, Formatter};
 use core::mem::size_of;
 use log::{error, info, warn};
 use uefi::prelude::*;
 use uefi::proto::device_path::DevicePath;
 use uefi::table::runtime::{CapsuleFlags, Time, VariableAttributes, VariableKey, VariableVendor};
-use uefi::{guid, CStr16, CString16, Guid};
+use uefi::{guid, CStr16, CString16, Guid, Status};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
 const FWUPDATE_ATTEMPTED: u32 = 0x0000_0002;
@@ -26,6 +27,31 @@ const FWUPDATE_VERBOSE: &CStr16 = cstr16!("FWUPDATE_VERBOSE");
 const FWUPDATE_DEBUG_LOG: &CStr16 = cstr16!("FWUPDATE_DEBUG_LOG");
 
 const MAX_UPDATE_CAPSULES: usize = 128;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum FirmwareError {
+    GetVariableKeysFailed(Status),
+    GetVariableFailed(Status),
+    SetVariableFailed(Status),
+    UpdateInfoTooShort,
+    UpdateInfoMalformedDevicePath,
+}
+
+impl Display for FirmwareError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::GetVariableKeysFailed(status) => {
+                write!(f, "failed to get variable keys: {status}")
+            }
+            Self::GetVariableFailed(status) => write!(f, "failed to read variable: {status}"),
+            Self::SetVariableFailed(status) => write!(f, "failed to write variable: {status}"),
+            Self::UpdateInfoTooShort => write!(f, "invalid update variable: not enough data"),
+            Self::UpdateInfoMalformedDevicePath => {
+                write!(f, "invalid update variable: malformed device path")
+            }
+        }
+    }
+}
 
 /// This struct closely matches the format of the data written to UEFI
 /// vars by the fwupd UEFI plugin [1], with an exception noted below. It
@@ -110,7 +136,7 @@ impl UpdateInfo<'_> {
 }
 
 impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
-    type Error = uefi::Error;
+    type Error = FirmwareError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if size_of::<UpdateInfo>() <= bytes.len() {
@@ -125,7 +151,7 @@ impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
             let time_attempted = Time::try_from(time).unwrap_or(Time::invalid());
             let status = u32::from_le_bytes(bytes[48..52].try_into().unwrap());
             let path = <&DevicePath>::try_from(&bytes[52..])
-                .map_err(|_| uefi::Error::from(Status::INVALID_PARAMETER))?;
+                .map_err(|_| FirmwareError::UpdateInfoMalformedDevicePath)?;
 
             let update = UpdateInfo {
                 version,
@@ -138,7 +164,7 @@ impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
             };
             Ok(update)
         } else {
-            Err(uefi::Error::from(Status::INVALID_PARAMETER))
+            Err(FirmwareError::UpdateInfoTooShort)
         }
     }
 }
@@ -164,7 +190,7 @@ struct UpdateTable<'a> {
 fn get_update_table(
     st: &SystemTable<Boot>,
     variables: Vec<VariableKey>,
-) -> uefi::Result<Vec<UpdateTable>> {
+) -> Result<Vec<UpdateTable>, FirmwareError> {
     let mut updates: Vec<UpdateTable> = Vec::new();
     for var in variables {
         // Must be a fwupd state variable.
@@ -193,7 +219,8 @@ fn get_update_table(
 
         let (data, attrs) = st
             .runtime_services()
-            .get_variable_boxed(&name, &FWUPDATE_VENDOR)?;
+            .get_variable_boxed(&name, &FWUPDATE_VENDOR)
+            .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
 
         let mut info = match UpdateInfo::try_from(&*data) {
             Ok(i) => i,
@@ -225,26 +252,34 @@ fn get_update_table(
 }
 
 /// Mark all updates as [`FWUPDATE_ATTEMPTED`] and note the time of the attempt.
-fn set_update_statuses(st: &SystemTable<Boot>, updates: &Vec<UpdateTable>) -> uefi::Result {
+fn set_update_statuses(
+    st: &SystemTable<Boot>,
+    updates: &Vec<UpdateTable>,
+) -> Result<(), FirmwareError> {
     for update in updates {
-        if let Err(err) = st.runtime_services().set_variable(
-            &update.name,
-            &FWUPDATE_VENDOR,
-            update.attrs,
-            &update.info.to_bytes(),
-        ) {
-            warn!(
-                "could not update variable status for {0}: {err}",
-                update.name
-            );
-            return Err(err);
-        };
+        st.runtime_services()
+            .set_variable(
+                &update.name,
+                &FWUPDATE_VENDOR,
+                update.attrs,
+                &update.info.to_bytes(),
+            )
+            .map_err(|err| {
+                warn!(
+                    "could not update variable status for {0}: {err}",
+                    update.name
+                );
+                FirmwareError::SetVariableFailed(err.status())
+            })?;
     }
     Ok(())
 }
 
-pub fn update_firmware(st: &SystemTable<Boot>) -> uefi::Result {
-    let variables = st.runtime_services().variable_keys()?;
+pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
+    let variables = st
+        .runtime_services()
+        .variable_keys()
+        .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
     let updates = get_update_table(st, variables)?;
