@@ -8,13 +8,16 @@ extern crate alloc;
 
 use crate::disk;
 use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
+use core::ops::Range;
+use core::{mem, ptr, slice};
 use log::{error, info, warn};
 use uefi::prelude::*;
 use uefi::proto::device_path::DevicePath;
-use uefi::table::runtime::{CapsuleFlags, Time, VariableAttributes, VariableKey, VariableVendor};
-use uefi::{guid, CStr16, CString16, Guid, Status};
+use uefi::table::runtime::{Time, VariableAttributes, VariableKey, VariableVendor};
+use uefi::{guid, CStr16, CString16, Status};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
 const FWUPDATE_ATTEMPTED: u32 = 0x0000_0002;
@@ -52,76 +55,50 @@ impl Display for FirmwareError {
     }
 }
 
-/// This struct closely matches the format of the data written to UEFI
-/// vars by the fwupd UEFI plugin [1], with an exception noted below. It
-/// is used to create an update capsule.
+/// Info for a single capsule update, provided by fwupd's [uefi-capsule]
+/// plugin via a UEFI variable.
 ///
-/// [`UpdateInfo::path`] is stored by reference rather than value, however
-/// this is accounted for by both [`UpdateInfo::to_bytes`] and
-/// [`TryFrom<&[u8]>`] for [`UpdateInfo`].
-///
-/// [1]: https://github.com/fwupd/fwupd/tree/main/plugins/uefi-capsule
+/// [uefi-capsule]: https://github.com/fwupd/fwupd/tree/main/plugins/uefi-capsule
 #[derive(Debug, Eq, PartialEq)]
-struct UpdateInfo<'a> {
-    // Version of UpdateInfo struct.
-    version: u32,
+struct UpdateInfo {
+    /// Name of the update's UEFI variable.
+    name: CString16,
 
-    // Info needed to apply an update.
-    efi_guid: Guid,
-    capsule_flags: CapsuleFlags,
-    hw_inst: u64,
+    /// Attributes of the update's UEFI variable.
+    attrs: VariableAttributes,
 
-    // Metadata used by fwupd to determine whether and when an update was attempted.
-    time_attempted: Time,
-    status: u32,
-
-    // Path to firmware update blob.
-    path: &'a DevicePath,
+    /// Raw data from the variable.
+    data: Box<[u8]>,
 }
 
-impl UpdateInfo<'_> {
+impl UpdateInfo {
+    /// Byte range of the `time_attempted` field.
+    const TIME_ATTEMPTED_RANGE: Range<usize> = 32..48;
+
+    /// Byte range of the `status` field.
+    const STATUS_RANGE: Range<usize> = 48..52;
+
     /// Size of the fixed fields (plus padding) when in serialized
     /// form. The rest of the data is a variable-length device path.
     const HEADER_SIZE_IN_BYTES: usize = 52;
 
-    /// Get the size in bytes of `self` when serialized to bytes.
-    fn serialized_len(&self) -> usize {
-        // 52 for the fixed fields (plus padding), plus the size of the
-        // device path.
-        //
-        // This should never overflow since we successfully read the
-        // data from a variable and the device path should not have
-        // changed since then.
-        #[allow(clippy::arithmetic_side_effects)]
-        {
-            Self::HEADER_SIZE_IN_BYTES + self.path.as_bytes().len()
+    /// Create an `UpdateInfo` from a variable's name, attributes, and
+    /// data. Some minimal validation is performed.
+    fn new(
+        name: CString16,
+        attrs: VariableAttributes,
+        data: Box<[u8]>,
+    ) -> Result<Self, FirmwareError> {
+        // Return an error if there's not enough data.
+        if data.len() < UpdateInfo::HEADER_SIZE_IN_BYTES {
+            return Err(FirmwareError::UpdateInfoTooShort);
         }
-    }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_len());
-        bytes.extend(self.version.to_le_bytes());
-        bytes.extend(self.efi_guid.to_bytes());
-        bytes.extend(self.capsule_flags.bits().to_le_bytes());
-        bytes.extend(self.hw_inst.to_le_bytes());
-        bytes.extend(self.time_attempted.year().to_le_bytes());
+        // Return an error if the device path is not valid.
+        <&DevicePath>::try_from(&data[Self::HEADER_SIZE_IN_BYTES..])
+            .map_err(|_| FirmwareError::UpdateInfoMalformedDevicePath)?;
 
-        bytes.push(self.time_attempted.month());
-        bytes.push(self.time_attempted.day());
-        bytes.push(self.time_attempted.hour());
-        bytes.push(self.time_attempted.minute());
-        bytes.push(self.time_attempted.second());
-        bytes.push(0);
-        bytes.extend(self.time_attempted.nanosecond().to_le_bytes());
-        let time_zone = self.time_attempted.time_zone().unwrap_or(0x07ff);
-        bytes.extend(time_zone.to_le_bytes());
-        bytes.push(self.time_attempted.daylight().bits());
-        bytes.push(0);
-
-        bytes.extend(self.status.to_le_bytes());
-        bytes.extend(self.path.as_bytes());
-
-        bytes
+        Ok(Self { name, attrs, data })
     }
 
     /// Set the `time_attempted` field to the current time.
@@ -129,57 +106,43 @@ impl UpdateInfo<'_> {
     /// If the current time cannot be retrieved, log an error and leave
     /// the `time_attempted` field unchanged.
     fn update_time_attempted(&mut self, rt: &RuntimeServices) {
-        match rt.get_time() {
-            Ok(time) => self.time_attempted = time,
+        // Get the current time.
+        let time: Time = match rt.get_time() {
+            Ok(time) => time,
             Err(err) => {
                 warn!("failed to get current time: {err}");
+                return;
             }
-        }
+        };
+
+        self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
+    }
+
+    fn status(&self) -> u32 {
+        u32::from_le_bytes(self.data[Self::STATUS_RANGE].try_into().unwrap())
+    }
+
+    fn set_status(&mut self, status: u32) {
+        self.data[Self::STATUS_RANGE].copy_from_slice(&status.to_le_bytes());
+    }
+
+    fn device_path(&self) -> &DevicePath {
+        let path = <&DevicePath>::try_from(&self.data[Self::HEADER_SIZE_IN_BYTES..]);
+        // OK to unwrap: the validity of the device path was checked in
+        // `UpdateInfo::new`.
+        path.unwrap()
     }
 }
 
-impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
-    type Error = FirmwareError;
+// TODO(nicholasbishop): add a variation of this function to uefi-rs.
+fn time_to_bytes(time: &Time) -> &[u8] {
+    let time_ptr: *const Time = ptr::from_ref(time);
+    let byte_ptr: *const u8 = time_ptr.cast();
+    let num_bytes = mem::size_of::<Time>();
 
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.len() >= Self::HEADER_SIZE_IN_BYTES {
-            let version = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-            let efi_guid = Guid::from_bytes(bytes[4..20].try_into().unwrap());
-            let raw_flag_bits = u32::from_le_bytes(bytes[20..24].try_into().unwrap());
-            let capsule_flags = CapsuleFlags::from_bits_retain(raw_flag_bits);
-            let hw_inst = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
-            let time = &bytes[32..48];
-            // fwupd sometimes has invalid EFI_TIME structs in its vars.
-            // We update the time anyways, so just continue.
-            let time_attempted = Time::try_from(time).unwrap_or(Time::invalid());
-            let status = u32::from_le_bytes(bytes[48..52].try_into().unwrap());
-            let path = <&DevicePath>::try_from(&bytes[52..])
-                .map_err(|_| FirmwareError::UpdateInfoMalformedDevicePath)?;
-
-            let update = UpdateInfo {
-                version,
-                efi_guid,
-                capsule_flags,
-                hw_inst,
-                time_attempted,
-                status,
-                path,
-            };
-            Ok(update)
-        } else {
-            Err(FirmwareError::UpdateInfoTooShort)
-        }
-    }
-}
-
-/// A complete firmware update.
-struct UpdateTable<'a> {
-    // Name of the update's associated UEFI variable.
-    name: CString16,
-    // The attributes of the update's associated UEFI variable.
-    attrs: VariableAttributes,
-    // The info needed to create an update capsule.
-    info: UpdateInfo<'a>,
+    // SAFETY: `time` contains 16 bytes of valid data. It is correctly
+    // aligned since u8 has an alignment of 1.
+    unsafe { slice::from_raw_parts(byte_ptr, num_bytes) }
 }
 
 /// Get a list of all available updates by iterating through all UEFI
@@ -193,8 +156,8 @@ struct UpdateTable<'a> {
 fn get_update_table(
     st: &SystemTable<Boot>,
     variables: Vec<VariableKey>,
-) -> Result<Vec<UpdateTable>, FirmwareError> {
-    let mut updates: Vec<UpdateTable> = Vec::new();
+) -> Result<Vec<UpdateInfo>, FirmwareError> {
+    let mut updates: Vec<UpdateInfo> = Vec::new();
     for var in variables {
         // Must be a fwupd state variable.
         if var.vendor != FWUPDATE_VENDOR {
@@ -225,8 +188,8 @@ fn get_update_table(
             .get_variable_boxed(&name, &FWUPDATE_VENDOR)
             .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
 
-        let mut info = match UpdateInfo::try_from(&*data) {
-            Ok(i) => i,
+        let mut info = match UpdateInfo::new(name.clone(), attrs, data) {
+            Ok(info) => info,
             Err(err) => {
                 // Delete the malformed variable. If this fails, log the
                 // error but otherwise ignore it.
@@ -245,10 +208,10 @@ fn get_update_table(
             }
         };
 
-        if (info.status & FWUPDATE_ATTEMPT_UPDATE) != 0 {
+        if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
             info.update_time_attempted(st.runtime_services());
-            info.status = FWUPDATE_ATTEMPTED;
-            updates.push(UpdateTable { name, attrs, info });
+            info.set_status(FWUPDATE_ATTEMPTED);
+            updates.push(info);
         }
     }
     Ok(updates)
@@ -257,16 +220,11 @@ fn get_update_table(
 /// Mark all updates as [`FWUPDATE_ATTEMPTED`] and note the time of the attempt.
 fn set_update_statuses(
     st: &SystemTable<Boot>,
-    updates: &Vec<UpdateTable>,
+    updates: &[UpdateInfo],
 ) -> Result<(), FirmwareError> {
     for update in updates {
         st.runtime_services()
-            .set_variable(
-                &update.name,
-                &FWUPDATE_VENDOR,
-                update.attrs,
-                &update.info.to_bytes(),
-            )
+            .set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data)
             .map_err(|err| {
                 warn!(
                     "could not update variable status for {0}: {err}",
@@ -297,7 +255,10 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     // TODO(b/338423918): Create update capsules from each
     // [`UpdateInfo`]. In particular, implement the translation from
     // [`UpdateInfo::path`]` to its actual location on the stateful
-    // partition.
+    // partition. For now, just print the update info.
+    for update in &updates {
+        info!("update {} path: {:?}", update.name, update.device_path());
+    }
 
     set_update_statuses(st, &updates)
 
@@ -318,10 +279,15 @@ mod tests {
             "../test_data/\
             fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
         );
+        let name = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0").to_owned();
         // Efivarfs stores the UEFI variable attributes in the first
-        // four bytes. Drop those bytes so that only the variable's
-        // value remains.
+        // four bytes.
+        let attrs = VariableAttributes::from_bits_retain(u32::from_le_bytes(
+            data[0..4].try_into().unwrap(),
+        ));
         let data = &data[4..];
+
+        let mut info = UpdateInfo::new(name, attrs, data.to_vec().into_boxed_slice()).unwrap();
 
         // Create the expected device path.
         let mut storage = Vec::new();
@@ -345,24 +311,11 @@ mod tests {
             .finalize()
             .unwrap();
 
-        let expected_info = UpdateInfo {
-            version: 7,
-            efi_guid: guid!("61b65ccc-0116-4b62-80ed-ec5f089ae523"),
-            capsule_flags: CapsuleFlags::empty(),
-            hw_inst: 0,
-            time_attempted: Time::invalid(),
-            status: FWUPDATE_ATTEMPT_UPDATE,
-            path: expected_path,
-        };
+        assert_eq!(info.device_path(), expected_path);
+        assert_eq!(info.status(), FWUPDATE_ATTEMPT_UPDATE);
 
-        // Parse the test data and compare with the expected value.
-        let info = UpdateInfo::try_from(data).unwrap();
-        assert_eq!(info, expected_info);
-
-        // Verify that converting it back to bytes gives the same value.
-        assert_eq!(info.to_bytes(), data);
-
-        // Check the serialized length calculation.
-        assert_eq!(info.serialized_len(), data.len());
+        // Check setting the status.
+        info.set_status(123);
+        assert_eq!(info.status(), 123);
     }
 }
