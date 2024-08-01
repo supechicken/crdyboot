@@ -94,6 +94,19 @@ impl UpdateInfo<'_> {
 
         bytes
     }
+
+    /// Set the `time_attempted` field to the current time.
+    ///
+    /// If the current time cannot be retrieved, log an error and leave
+    /// the `time_attempted` field unchanged.
+    fn update_time_attempted(&mut self, rt: &RuntimeServices) {
+        match rt.get_time() {
+            Ok(time) => self.time_attempted = time,
+            Err(err) => {
+                warn!("failed to get current time: {err}");
+            }
+        }
+    }
 }
 
 impl<'a> TryFrom<&[u8]> for UpdateInfo<'a> {
@@ -203,7 +216,7 @@ fn get_update_table(
         };
 
         if (info.status & FWUPDATE_ATTEMPT_UPDATE) != 0 {
-            info.time_attempted = st.runtime_services().get_time()?;
+            info.update_time_attempted(st.runtime_services());
             info.status = FWUPDATE_ATTEMPTED;
             updates.push(UpdateTable { name, attrs, info });
         }
