@@ -354,9 +354,9 @@ dependencies = [
 
 [[package]]
 name = "ext4-view"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bafa6e9d9c744fd159e93a272745881bbfe4539cc9fc799e64a96a35e0128f4"
+checksum = "01c0f839e2ebf1d8b94d1c4b3aae27e7688d8f0a230f62b268926f76b6831488"
 dependencies = [
  "bitflags 2.3.2",
  "crc",
