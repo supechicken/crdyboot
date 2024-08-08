@@ -4,8 +4,6 @@
 
 #![allow(clippy::indexing_slicing)]
 
-extern crate alloc;
-
 use crate::disk;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;

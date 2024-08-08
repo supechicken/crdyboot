@@ -10,6 +10,8 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
+extern crate alloc;
+
 mod disk;
 mod firmware;
 mod linux;
