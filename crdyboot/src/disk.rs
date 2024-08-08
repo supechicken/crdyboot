@@ -15,6 +15,7 @@ use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams, ScopedProtoc
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
+#[derive(Debug)]
 pub enum GptDiskError {
     /// The disk block size is zero.
     InvalidBlockSize,
