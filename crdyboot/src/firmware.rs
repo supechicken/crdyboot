@@ -4,7 +4,9 @@
 
 #![allow(clippy::indexing_slicing)]
 
-use crate::disk;
+mod load_capsules;
+
+use crate::disk::GptDiskError;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -12,7 +14,8 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use core::{mem, ptr, slice};
-use ext4_view::{PathBuf, PathError};
+use ext4_view::{Ext4Error, PathBuf, PathError};
+use load_capsules::load_capsules_from_disk;
 use log::{error, info, warn};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
@@ -30,7 +33,7 @@ const FWUPDATE_DEBUG_LOG: &CStr16 = cstr16!("FWUPDATE_DEBUG_LOG");
 
 const MAX_UPDATE_CAPSULES: usize = 128;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum FirmwareError {
     GetVariableKeysFailed(Status),
     GetVariableFailed(Status),
@@ -40,6 +43,9 @@ pub enum FirmwareError {
     FilePathMissing,
     FilePathEncodingInvalid,
     FilePathInvalid(PathError),
+    OpenStatefulPartitionFailed(GptDiskError),
+    Ext4LoadFailed(Ext4Error),
+    Ext4ReadFailed(Ext4Error),
 }
 
 impl Display for FirmwareError {
@@ -59,6 +65,11 @@ impl Display for FirmwareError {
             }
             Self::FilePathEncodingInvalid => write!(f, "file path encoding is invalid"),
             Self::FilePathInvalid(err) => write!(f, "file path is not valid for ext4: {err}"),
+            Self::OpenStatefulPartitionFailed(err) => {
+                write!(f, "failed to open the stateful partition: {err}")
+            }
+            Self::Ext4LoadFailed(err) => write!(f, "failed to load the stateful filesystem: {err}"),
+            Self::Ext4ReadFailed(err) => write!(f, "failed to read an update capsule: {err}"),
         }
     }
 }
@@ -294,7 +305,7 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
         return Ok(());
     }
 
-    let _ = disk::open_stateful_partition(st.boot_services());
+    let _capsules = load_capsules_from_disk(st.boot_services(), &updates)?;
 
     // TODO(b/338423918): Create update capsules from each
     // [`UpdateInfo`]. In particular, implement the translation from
