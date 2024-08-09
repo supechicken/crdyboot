@@ -7,13 +7,15 @@
 use crate::disk;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use core::{mem, ptr, slice};
+use ext4_view::{PathBuf, PathError};
 use log::{error, info, warn};
 use uefi::prelude::*;
-use uefi::proto::device_path::DevicePath;
+use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
 use uefi::table::runtime::{Time, VariableAttributes, VariableKey, VariableVendor};
 use uefi::{guid, CStr16, CString16, Status};
 
@@ -35,6 +37,9 @@ pub enum FirmwareError {
     SetVariableFailed(Status),
     UpdateInfoTooShort,
     UpdateInfoMalformedDevicePath,
+    FilePathMissing,
+    FilePathEncodingInvalid,
+    FilePathInvalid(PathError),
 }
 
 impl Display for FirmwareError {
@@ -49,6 +54,11 @@ impl Display for FirmwareError {
             Self::UpdateInfoMalformedDevicePath => {
                 write!(f, "invalid update variable: malformed device path")
             }
+            Self::FilePathMissing => {
+                write!(f, "file path is not present in update info device path")
+            }
+            Self::FilePathEncodingInvalid => write!(f, "file path encoding is invalid"),
+            Self::FilePathInvalid(err) => write!(f, "file path is not valid for ext4: {err}"),
         }
     }
 }
@@ -129,6 +139,42 @@ impl UpdateInfo {
         // OK to unwrap: the validity of the device path was checked in
         // `UpdateInfo::new`.
         path.unwrap()
+    }
+
+    /// Get the file path of the update capsule.
+    ///
+    /// The path is extracted from the final node of the device
+    /// path. The path is converted from a Windows-style path to a
+    /// Unix-style path, and made relative instead of absolute.
+    fn file_path(&self) -> Result<PathBuf, FirmwareError> {
+        let device_path = self.device_path();
+
+        // Get the last node, which should be a file path node.
+        let Some(DevicePathNodeEnum::MediaFilePath(path)) = device_path
+            .node_iter()
+            .last()
+            .and_then(|node| node.as_enum().ok())
+        else {
+            return Err(FirmwareError::FilePathMissing);
+        };
+
+        // The file path node contains an unaligned UCS-2 string.
+        // Convert it to a `CString16`.
+        let path = path
+            .path_name()
+            .to_cstring16()
+            .map_err(|_| FirmwareError::FilePathEncodingInvalid)?;
+
+        // Convert from UCS-2 to UTF-8.
+        let path = String::from(&path);
+
+        // Convert path separator style from Windows to Unix.
+        let path = path.replace('\\', "/");
+
+        // Make the path relative instead of absolute.
+        let path = path.trim_start_matches('/');
+
+        PathBuf::try_from(path).map_err(FirmwareError::FilePathInvalid)
     }
 }
 
@@ -255,7 +301,7 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     // [`UpdateInfo::path`]` to its actual location on the stateful
     // partition. For now, just print the update info.
     for update in &updates {
-        info!("update {} path: {:?}", update.name, update.device_path());
+        info!("update {} path: {:?}", update.name, update.file_path());
     }
 
     set_update_statuses(st, &updates)
@@ -315,5 +361,10 @@ mod tests {
         // Check setting the status.
         info.set_status(123);
         assert_eq!(info.status(), 123);
+
+        assert_eq!(
+            info.file_path().unwrap(),
+            "EFI/chromeos/fw/fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"
+        );
     }
 }
