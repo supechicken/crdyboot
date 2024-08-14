@@ -8,27 +8,13 @@ mod load_capsules;
 mod update_info;
 
 use crate::disk::GptDiskError;
-use alloc::borrow::ToOwned;
-use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4Error, PathError};
 use load_capsules::load_capsules_from_disk;
-use log::{error, info, warn};
+use log::info;
 use uefi::prelude::*;
-use uefi::table::runtime::{VariableKey, VariableVendor};
-use uefi::{guid, CStr16, CString16, Status};
-use update_info::UpdateInfo;
-
-const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
-const FWUPDATE_ATTEMPTED: u32 = 0x0000_0002;
-
-const FWUPDATE_VENDOR: VariableVendor =
-    VariableVendor(guid!("0abba7dc-e516-4167-bbf5-4d9d1c739416"));
-
-const FWUPDATE_VERBOSE: &CStr16 = cstr16!("FWUPDATE_VERBOSE");
-const FWUPDATE_DEBUG_LOG: &CStr16 = cstr16!("FWUPDATE_DEBUG_LOG");
-
-const MAX_UPDATE_CAPSULES: usize = 128;
+use uefi::Status;
+use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
 #[derive(Debug)]
 pub enum FirmwareError {
@@ -69,97 +55,6 @@ impl Display for FirmwareError {
             Self::Ext4ReadFailed(err) => write!(f, "failed to read an update capsule: {err}"),
         }
     }
-}
-
-/// Get a list of all available updates by iterating through all UEFI
-/// variables, searching for those with the [`FWUPDATE_VENDOR`]
-/// GUID. Any such variables will be parsed into an [`UpdateInfo`], from
-/// which an update can be applied.
-///
-/// If no updates are found, an empty vector is returned.
-///
-/// Any UEFI error causes early termination and the error to be returned.
-fn get_update_table(
-    st: &SystemTable<Boot>,
-    variables: Vec<VariableKey>,
-) -> Result<Vec<UpdateInfo>, FirmwareError> {
-    let mut updates: Vec<UpdateInfo> = Vec::new();
-    for var in variables {
-        // Must be a fwupd state variable.
-        if var.vendor != FWUPDATE_VENDOR {
-            continue;
-        }
-
-        let name: CString16 = match var.name() {
-            Ok(n) => n.to_owned(),
-            Err(err) => {
-                error!("could not get variable name: {err}");
-                continue;
-            }
-        };
-
-        // Skip fwupd-efi debugging settings.
-        if name == FWUPDATE_VERBOSE || name == FWUPDATE_DEBUG_LOG {
-            continue;
-        }
-
-        if updates.len() > MAX_UPDATE_CAPSULES {
-            warn!("too many updates, ignoring {name}");
-        }
-
-        info!("found update {name}");
-
-        let (data, attrs) = st
-            .runtime_services()
-            .get_variable_boxed(&name, &FWUPDATE_VENDOR)
-            .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
-
-        let mut info = match UpdateInfo::new(name.clone(), attrs, data) {
-            Ok(info) => info,
-            Err(err) => {
-                // Delete the malformed variable. If this fails, log the
-                // error but otherwise ignore it.
-                if let Err(err) = st
-                    .runtime_services()
-                    .delete_variable(&name, &FWUPDATE_VENDOR)
-                {
-                    warn!(
-                        "failed to delete variable {name}-{vendor}: {err}",
-                        vendor = FWUPDATE_VENDOR.0
-                    );
-                }
-
-                warn!("could not populate update info for {name}");
-                return Err(err);
-            }
-        };
-
-        if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
-            info.update_time_attempted(st.runtime_services());
-            info.set_status(FWUPDATE_ATTEMPTED);
-            updates.push(info);
-        }
-    }
-    Ok(updates)
-}
-
-/// Mark all updates as [`FWUPDATE_ATTEMPTED`] and note the time of the attempt.
-fn set_update_statuses(
-    st: &SystemTable<Boot>,
-    updates: &[UpdateInfo],
-) -> Result<(), FirmwareError> {
-    for update in updates {
-        st.runtime_services()
-            .set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data)
-            .map_err(|err| {
-                warn!(
-                    "could not update variable status for {0}: {err}",
-                    update.name
-                );
-                FirmwareError::SetVariableFailed(err.status())
-            })?;
-    }
-    Ok(())
 }
 
 pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
