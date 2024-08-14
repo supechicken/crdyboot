@@ -16,7 +16,7 @@ use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::info;
 use uefi::prelude::*;
-use uefi::table::runtime::CapsuleHeader;
+use uefi::table::runtime::{CapsuleBlockDescriptor, CapsuleHeader};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
@@ -118,6 +118,38 @@ fn get_capsule_refs(capsules: &[Vec<u8>]) -> Vec<&CapsuleHeader> {
     capsule_refs
 }
 
+/// Get a `Vec` of `CapsuleBlockDescriptor` from the list of capsule
+/// headers.
+///
+/// This is used as the "scatter gather list" argument to
+/// `update_capsule`. The vec is terminated with an all-zero sentinel
+/// value, as required by the spec.
+fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBlockDescriptor> {
+    // One entry for each capsule, plus a sentinel value at the end.
+    //
+    // OK to unwrap: the number of capsules is capped to a relatively
+    // low value (see `MAX_UPDATE_CAPSULES` in update_info.rs).
+    let len = capsules.len().checked_add(1).unwrap();
+
+    let mut descriptors: Vec<CapsuleBlockDescriptor> = Vec::with_capacity(len);
+
+    for capsule in capsules {
+        let capsule_ptr: *const CapsuleHeader = *capsule;
+        descriptors.push(CapsuleBlockDescriptor {
+            length: u64::from(capsule.capsule_image_size),
+            address: capsule_ptr as u64,
+        });
+    }
+
+    // Add sentinel value of all zeroes to terminate the list.
+    descriptors.push(CapsuleBlockDescriptor {
+        length: 0,
+        address: 0,
+    });
+
+    descriptors
+}
+
 pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     let variables = st
         .runtime_services()
@@ -133,7 +165,8 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     }
 
     let capsules = load_capsules_from_disk(st.boot_services(), &updates)?;
-    let _capsule_refs = get_capsule_refs(&capsules);
+    let capsule_refs = get_capsule_refs(&capsules);
+    let _capsule_descriptors = get_capsule_block_descriptors(&capsule_refs);
 
     // TODO(b/338423918): Create update capsules from each
     // [`UpdateInfo`]. In particular, implement the translation from
