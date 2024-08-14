@@ -16,7 +16,7 @@ use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::info;
 use uefi::prelude::*;
-use uefi::table::runtime::{CapsuleBlockDescriptor, CapsuleHeader};
+use uefi::table::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
@@ -63,6 +63,22 @@ impl Display for FirmwareError {
             Self::CapsuleTooSmall { required, actual } => {
                 write!(f, "capsule is too small: {actual} < {required}")
             }
+        }
+    }
+}
+
+/// Ask the firmware what type of system reset is needed for capsule updates.
+///
+/// If an error occurs, default to [`ResetType::WARM`].
+fn get_reset_type(runtime_services: &RuntimeServices, capsules: &[&CapsuleHeader]) -> ResetType {
+    match runtime_services.query_capsule_capabilities(capsules) {
+        Ok(capabilities) => {
+            info!("query capsule capabilities: {capabilities:?}");
+            capabilities.reset_type
+        }
+        Err(err) => {
+            info!("query capsule capabilities failed: {err}");
+            ResetType::WARM
         }
     }
 }
@@ -176,7 +192,13 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
         info!("update {} path: {:?}", update.name(), update.file_path());
     }
 
-    set_update_statuses(st, &updates)
+    set_update_statuses(st, &updates)?;
 
-    // TODO(b/338423918): Apply the update capsules and reboot.
+    let reset_type = get_reset_type(st.runtime_services(), &capsule_refs);
+
+    // TODO(b/338423918): Apply the update capsules
+
+    info!("resetting the system: {reset_type:?}");
+    st.runtime_services()
+        .reset(reset_type, Status::SUCCESS, None);
 }
