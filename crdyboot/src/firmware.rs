@@ -78,7 +78,7 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     // [`UpdateInfo::path`]` to its actual location on the stateful
     // partition. For now, just print the update info.
     for update in &updates {
-        info!("update {} path: {:?}", update.name, update.file_path());
+        info!("update {} path: {:?}", update.name(), update.file_path());
     }
 
     set_update_statuses(st, &updates)

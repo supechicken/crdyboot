@@ -19,7 +19,7 @@ fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>,
 
     info!(
         "reading update {} from path: {}",
-        update.name,
+        update.name(),
         path.display()
     );
 

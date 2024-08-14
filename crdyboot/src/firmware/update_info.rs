@@ -36,13 +36,13 @@ const MAX_UPDATE_CAPSULES: usize = 128;
 #[derive(Debug, Eq, PartialEq)]
 pub struct UpdateInfo {
     /// Name of the update's UEFI variable.
-    pub name: CString16,
+    name: CString16,
 
     /// Attributes of the update's UEFI variable.
-    pub attrs: VariableAttributes,
+    attrs: VariableAttributes,
 
     /// Raw data from the variable.
-    pub data: Box<[u8]>,
+    data: Box<[u8]>,
 }
 
 impl UpdateInfo {
@@ -58,7 +58,7 @@ impl UpdateInfo {
 
     /// Create an `UpdateInfo` from a variable's name, attributes, and
     /// data. Some minimal validation is performed.
-    pub fn new(
+    fn new(
         name: CString16,
         attrs: VariableAttributes,
         data: Box<[u8]>,
@@ -79,7 +79,7 @@ impl UpdateInfo {
     ///
     /// If the current time cannot be retrieved, log an error and leave
     /// the `time_attempted` field unchanged.
-    pub fn update_time_attempted(&mut self, rt: &RuntimeServices) {
+    fn update_time_attempted(&mut self, rt: &RuntimeServices) {
         // Get the current time.
         let time: Time = match rt.get_time() {
             Ok(time) => time,
@@ -92,11 +92,16 @@ impl UpdateInfo {
         self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
     }
 
-    pub fn status(&self) -> u32 {
+    /// Get the UEFI variable name.
+    pub fn name(&self) -> &CStr16 {
+        &self.name
+    }
+
+    fn status(&self) -> u32 {
         u32::from_le_bytes(self.data[Self::STATUS_RANGE].try_into().unwrap())
     }
 
-    pub fn set_status(&mut self, status: u32) {
+    fn set_status(&mut self, status: u32) {
         self.data[Self::STATUS_RANGE].copy_from_slice(&status.to_le_bytes());
     }
 
@@ -251,7 +256,6 @@ mod tests {
     use super::*;
     use uefi::proto::device_path::build::{self, DevicePathBuilder};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
-    use uefi::{cstr16, guid};
 
     #[test]
     fn test_update_info() {
