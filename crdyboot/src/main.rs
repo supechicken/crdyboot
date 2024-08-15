@@ -21,7 +21,6 @@ mod vbpubk;
 use firmware::update_firmware;
 use libcrdy::{embed_section, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
-use log::error;
 use revocation::self_revocation_check;
 use uefi::prelude::*;
 
@@ -40,9 +39,7 @@ fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     self_revocation_check(st.runtime_services()).map_err(CrdybootError::Revocation)?;
 
     if allow_firmware_updates() {
-        if let Err(err) = update_firmware(&st) {
-            error!("firmware update failed: {err}");
-        };
+        update_firmware(&st);
     };
 
     load_and_execute_kernel(st)

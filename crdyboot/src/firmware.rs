@@ -14,14 +14,14 @@ use core::mem;
 use ext4_view::{Ext4Error, PathError};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
-use log::info;
+use log::{error, info};
 use uefi::prelude::*;
 use uefi::table::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
 #[derive(Debug)]
-pub enum FirmwareError {
+enum FirmwareError {
     GetVariableKeysFailed(Status),
     GetVariableFailed(Status),
     SetVariableFailed(Status),
@@ -170,7 +170,15 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
     descriptors
 }
 
-pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
+/// Try to install firmware update capsules, if any are present.
+///
+/// If successful, the system will reset and this function will never
+/// return.
+///
+/// Some errors are logged but otherwise ignored, with the intent of
+/// processing as many valid capsules as possible. Fatal errors are
+/// propagated to the caller.
+fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     let variables = st
         .runtime_services()
         .variable_keys()
@@ -205,4 +213,16 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     info!("resetting the system: {reset_type:?}");
     st.runtime_services()
         .reset(reset_type, Status::SUCCESS, None);
+}
+
+/// Try to install firmware update capsules, if any are present.
+///
+/// If successful, the system will reset and this function will never
+/// return.
+///
+/// Errors are logged but otherwise ignored.
+pub fn update_firmware(st: &SystemTable<Boot>) {
+    if let Err(err) = update_firmware_impl(st) {
+        error!("firmware update failed: {err}");
+    }
 }
