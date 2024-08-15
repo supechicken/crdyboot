@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Temporary feature flag to control whether firmware updates are allowed.
+firmware_update = []
+
 [dependencies]
 ext4-view = "0.4.2"
 libcrdy.workspace = true

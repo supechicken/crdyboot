@@ -215,12 +215,6 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
         .reset(reset_type, Status::SUCCESS, None);
 }
 
-// TODO(b/338423918): firmware updates are disabled for now to allow
-// work-in-progress code to land.
-fn allow_firmware_updates() -> bool {
-    false
-}
-
 /// Try to install firmware update capsules, if any are present.
 ///
 /// If successful, the system will reset and this function will never
@@ -228,7 +222,8 @@ fn allow_firmware_updates() -> bool {
 ///
 /// Errors are logged but otherwise ignored.
 pub fn update_firmware(st: &SystemTable<Boot>) {
-    if !allow_firmware_updates() {
+    if !cfg!(feature = "firmware_update") {
+        info!("firmware updates disabled");
         return;
     }
 
