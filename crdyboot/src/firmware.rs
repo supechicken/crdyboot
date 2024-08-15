@@ -184,14 +184,6 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     let capsule_refs = get_capsule_refs(&capsules);
     let _capsule_descriptors = get_capsule_block_descriptors(&capsule_refs);
 
-    // TODO(b/338423918): Create update capsules from each
-    // [`UpdateInfo`]. In particular, implement the translation from
-    // [`UpdateInfo::path`]` to its actual location on the stateful
-    // partition. For now, just print the update info.
-    for update in &updates {
-        info!("update {} path: {:?}", update.name(), update.file_path());
-    }
-
     set_update_statuses(st, &updates)?;
 
     let reset_type = get_reset_type(st.runtime_services(), &capsule_refs);
