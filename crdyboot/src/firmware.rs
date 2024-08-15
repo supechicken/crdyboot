@@ -35,6 +35,7 @@ pub enum FirmwareError {
     Ext4ReadFailed(Ext4Error),
     CapsuleNotAligned,
     CapsuleTooSmall { required: usize, actual: usize },
+    UpdateCapsuleFailed(Status),
 }
 
 impl Display for FirmwareError {
@@ -62,6 +63,9 @@ impl Display for FirmwareError {
             Self::CapsuleNotAligned => write!(f, "capsule is not aligned"),
             Self::CapsuleTooSmall { required, actual } => {
                 write!(f, "capsule is too small: {actual} < {required}")
+            }
+            Self::UpdateCapsuleFailed(status) => {
+                write!(f, "firmware capsule update failed: {status}")
             }
         }
     }
@@ -182,7 +186,7 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     let capsule_refs = get_capsule_refs(&capsules);
     info!("got {} valid capsule headers", capsule_refs.len());
 
-    let _capsule_descriptors = get_capsule_block_descriptors(&capsule_refs);
+    let descriptors = get_capsule_block_descriptors(&capsule_refs);
 
     set_update_statuses(st, &updates)?;
 
@@ -193,7 +197,10 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
 
     let reset_type = get_reset_type(st.runtime_services(), &capsule_refs);
 
-    // TODO(b/338423918): Apply the update capsules
+    info!("calling update_capsule");
+    st.runtime_services()
+        .update_capsule(&capsule_refs, &descriptors)
+        .map_err(|err| FirmwareError::UpdateCapsuleFailed(err.status()))?;
 
     info!("resetting the system: {reset_type:?}");
     st.runtime_services()
