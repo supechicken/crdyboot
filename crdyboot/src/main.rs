@@ -24,12 +24,6 @@ use linux::{load_and_execute_kernel, CrdybootError};
 use revocation::self_revocation_check;
 use uefi::prelude::*;
 
-// TODO(b/338423918): firmware updates are disabled for now to allow
-// work-in-progress code to land.
-fn allow_firmware_updates() -> bool {
-    false
-}
-
 fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
     set_log_level(st.boot_services());
@@ -38,9 +32,9 @@ fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     // do it right after setting the log level.
     self_revocation_check(st.runtime_services()).map_err(CrdybootError::Revocation)?;
 
-    if allow_firmware_updates() {
-        update_firmware(&st);
-    };
+    // Install firmware update capsules if needed. This may reset the
+    // system.
+    update_firmware(&st);
 
     load_and_execute_kernel(st)
 }
