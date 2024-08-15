@@ -174,17 +174,22 @@ pub fn update_firmware(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     // Check if any updates are available by searching for and validating
     // any update state variables.
     let updates = get_update_table(st, variables)?;
-
-    if updates.is_empty() {
-        info!("no firmware updates available");
-        return Ok(());
-    }
+    info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(st.boot_services(), &updates)?;
+    info!("loaded {} capsules from disk", capsules.len());
+
     let capsule_refs = get_capsule_refs(&capsules);
+    info!("got {} valid capsule headers", capsule_refs.len());
+
     let _capsule_descriptors = get_capsule_block_descriptors(&capsule_refs);
 
     set_update_statuses(st, &updates)?;
+
+    // If there are no capsules at this point then there's nothing left to do.
+    if capsule_refs.is_empty() {
+        return Ok(());
+    }
 
     let reset_type = get_reset_type(st.runtime_services(), &capsule_refs);
 
