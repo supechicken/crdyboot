@@ -1,0 +1,13 @@
+[package]
+name = "avb"
+version = "1.0.0"
+
+edition.workspace = true
+# MIT for libavb, BSD3 for sha512impl
+license = "MIT AND BSD-3-Clause"
+repository.workspace = true
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.69.4"

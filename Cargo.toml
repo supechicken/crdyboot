@@ -2,6 +2,7 @@
 # This list is altered via sed when building with the ebuild, keep in
 # sync with `src_prepare` in `crdyboot-9999.ebuild`.
 members = [
+    "avb",
     "bootimg",
     "cmem",
     "crdyboot",
