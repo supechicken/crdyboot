@@ -17,6 +17,7 @@
 
 extern crate alloc;
 
+pub mod avb_ops;
 mod avb_sysdeps;
 
 /// Bindgen wrappers for parts of avb.
