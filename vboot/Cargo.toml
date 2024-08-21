@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 cmem.workspace = true
 log.workspace = true
-printf-compat = { version = "0.1.1", default-features = false }
+printf-compat.workspace = true
 uguid = "2.0.0"
 
 [build-dependencies]

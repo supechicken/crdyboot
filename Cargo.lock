@@ -50,6 +50,8 @@ version = "1.0.0"
 dependencies = [
  "bindgen",
  "cmem",
+ "log",
+ "printf-compat",
 ]
 
 [[package]]
