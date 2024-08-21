@@ -133,6 +133,22 @@ fn gen_avblib_bindings(include_dirs: &[PathBuf], target: Target) {
             is_bitfield: false,
             is_global: false,
         })
+        // Block avb_sysdep.h declarations that are meant
+        // to be provided by the caller.
+        // See libavb/avb_sysdeps.h and avb/avb_sysdeps.rs
+        .blocklist_function("avb_memcmp")
+        .blocklist_function("avb_strcmp")
+        .blocklist_function("avb_strncmp")
+        .blocklist_function("avb_memcpy")
+        .blocklist_function("avb_memset")
+        .blocklist_function("avb_print")
+        .blocklist_function("avb_printv")
+        .blocklist_function("avb_printf")
+        .blocklist_function("avb_abort")
+        .blocklist_function("avb_malloc_")
+        .blocklist_function("avb_free")
+        .blocklist_function("avb_strlen")
+        .blocklist_function("avb_div_by_10")
         .translate_enum_integer_types(true)
         .use_core()
         .ctypes_prefix("core::ffi")

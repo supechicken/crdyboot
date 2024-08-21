@@ -17,6 +17,8 @@
 
 extern crate alloc;
 
+mod avb_sysdeps;
+
 /// Bindgen wrappers for parts of avb.
 #[allow(clippy::pub_underscore_fields)]
 #[allow(clippy::unreadable_literal)]
