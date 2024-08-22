@@ -16,6 +16,7 @@ mod disk;
 mod firmware;
 mod linux;
 mod revocation;
+mod sbat;
 mod vbpubk;
 
 use firmware::update_firmware;
@@ -31,6 +32,10 @@ fn run(mut st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
     self_revocation_check(st.runtime_services()).map_err(CrdybootError::Revocation)?;
+
+    // For debugging purposes, conditionally copy SBAT revocations to a
+    // runtime-accessible UEFI variable.
+    sbat::maybe_copy_sbat_revocations(st.runtime_services());
 
     // Install firmware update capsules if needed. This may reset the
     // system.

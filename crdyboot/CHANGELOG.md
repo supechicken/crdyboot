@@ -1,6 +1,8 @@
 # Crdyboot Changelog
 
 ## 1.0.3
+* When verbose logging is enabled, copy SbatLevel to SbatLevelRT so that
+  it can be viewed while the OS is running. <https://crrev.com/c/5802606>
 
 ## 1.0.2
 * Update to uefi-0.29. <https://crrev.com/c/5688491>
