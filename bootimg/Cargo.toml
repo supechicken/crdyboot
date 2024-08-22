@@ -1,0 +1,17 @@
+[package]
+name = "bootimg"
+version = "1.0.0"
+
+description = "Package to parse the bootimg structs from on disk boot image headers."
+
+edition.workspace = true
+# Android-Apache-2.0 license from mkbootimg/Android.bp
+license = "Apache-2.0"
+repository.workspace = true
+
+[lib]
+# Doctests don't pass for mkbootimg.
+doctest = false
+
+[dependencies]
+zerocopy.workspace = true

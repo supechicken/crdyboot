@@ -2,6 +2,7 @@
 # This list is altered via sed when building with the ebuild, keep in
 # sync with `src_prepare` in `crdyboot-9999.ebuild`.
 members = [
+    "bootimg",
     "cmem",
     "crdyboot",
     "crdyshim",
@@ -29,6 +30,7 @@ sbat = "0.5.0"
 sha2 = { version = "0.10.6", default-features = false }
 uefi = { version = "0.32.0", default-features = false, features = ["alloc"] }
 uefi-raw = "0.8.0"
+zerocopy = { version = "0.7.32", features = ["derive"] }
 
 [profile.release]
 overflow-checks = true
