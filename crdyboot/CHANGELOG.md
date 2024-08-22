@@ -1,5 +1,7 @@
 # Crdyboot Changelog
 
+## 1.0.3
+
 ## 1.0.2
 * Update to uefi-0.29. <https://crrev.com/c/5688491>
 * Relocate the kernel before booting it.
