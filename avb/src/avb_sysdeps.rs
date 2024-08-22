@@ -4,7 +4,7 @@
 
 /// Implement [avb_sysdeps.h](https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_sysdeps.h) libavb usage.
 use alloc::string::String;
-use core::ffi::{c_char, c_int, c_void};
+use core::ffi::{c_char, c_int, c_void, CStr};
 use log::{Level, Record};
 use printf_compat as printf;
 
@@ -146,8 +146,8 @@ unsafe extern "C" fn avb_free(ptr: *mut c_void) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_strlen(_str_: *const c_char) -> usize {
-    todo!()
+unsafe extern "C" fn avb_strlen(s: *const c_char) -> usize {
+    CStr::from_ptr(s).count_bytes()
 }
 
 #[no_mangle]
@@ -158,6 +158,7 @@ unsafe extern "C" fn avb_div_by_10(_dividend: *mut u64) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::CString;
 
     #[test]
     fn test_avb_printf_split_log_ok() {
@@ -209,5 +210,16 @@ mod tests {
             split_avb_log_line("example.c:755:DEBUG: Loading"),
             (Some("example.c"), Some(755), "DEBUG: Loading"),
         );
+    }
+
+    #[test]
+    fn test_avb_strlen() {
+        let s = CString::new("123456").unwrap();
+        assert_eq!(unsafe { avb_strlen(s.as_ptr()) }, 6);
+
+        let s = CString::new("").unwrap();
+        assert_eq!(unsafe { avb_strlen(s.as_ptr()) }, 0);
+
+        assert_eq!(unsafe { avb_strlen(b"1234\0678\0".as_ptr().cast()) }, 4);
     }
 }
