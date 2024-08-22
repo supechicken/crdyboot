@@ -81,8 +81,12 @@ impl Config {
         )?)
     }
 
+    pub fn third_party_path(&self) -> Utf8PathBuf {
+        self.repo.join("third_party")
+    }
+
     pub fn vboot_reference_path(&self) -> Utf8PathBuf {
-        self.repo.join("third_party/vboot_reference")
+        self.third_party_path().join("vboot_reference")
     }
 
     pub fn futility_executable_path(&self) -> Utf8PathBuf {

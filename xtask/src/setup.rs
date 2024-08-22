@@ -9,7 +9,7 @@ use crate::qemu::{Display, QemuOpts};
 use crate::util::check_sha256_hash;
 use crate::{copy_file, gen_disk, run_build_enroller, secure_boot, Action, SetupAction};
 use anyhow::Result;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use command_run::Command;
 use tempfile::TempDir;
 
@@ -23,31 +23,41 @@ const VBOOT_REFERENCE_REV: &str = "4cc5d090364d87a7db5b9ad20b08d6938e8c558c";
 const CHROMEOS_IMAGE_ARCHIVE_BUCKET: &str = "chromeos-image-archive";
 const CHROMEOS_LOCALMIRROR_BUCKET: &str = "chromeos-localmirror";
 
-fn init_vboot_reference(conf: &Config) -> Result<()> {
-    let vboot_dir = conf.vboot_reference_path();
+struct RepoRev {
+    repo: &'static str,
+    rev: &'static str,
+    dir: Utf8PathBuf,
+}
 
+fn init_repo(repo: RepoRev) -> Result<()> {
     // Clone the repo if it doesn't exist.
-    if !vboot_dir.exists() {
-        Command::with_args("git", ["clone", VBOOT_REFERENCE_REPO, vboot_dir.as_str()]).run()?;
+    if !repo.dir.exists() {
+        Command::with_args("git", ["clone", repo.repo, repo.dir.as_str()]).run()?;
     }
 
     // Get the commit that is currently checked out.
-    let output = Command::with_args("git", ["-C", vboot_dir.as_str(), "rev-parse", "HEAD"])
+    let output = Command::with_args("git", ["-C", repo.dir.as_str(), "rev-parse", "HEAD"])
         .enable_capture()
         .run()?;
     let stdout = String::from_utf8(output.stdout)?;
     let current_commit = stdout.trim();
 
     // Update the checkout if necessary.
-    if current_commit != VBOOT_REFERENCE_REV {
-        Command::with_args(
-            "git",
-            ["-C", vboot_dir.as_str(), "checkout", VBOOT_REFERENCE_REV],
-        )
-        .run()?;
+    if current_commit != repo.rev {
+        Command::with_args("git", ["-C", repo.dir.as_str(), "checkout", repo.rev]).run()?;
     }
 
     Ok(())
+}
+
+fn init_vboot_reference(conf: &Config) -> Result<()> {
+    let repo = RepoRev {
+        repo: VBOOT_REFERENCE_REPO,
+        rev: VBOOT_REFERENCE_REV,
+        dir: conf.vboot_reference_path(),
+    };
+
+    init_repo(repo)
 }
 
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
