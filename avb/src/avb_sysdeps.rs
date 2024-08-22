@@ -151,14 +151,32 @@ unsafe extern "C" fn avb_strlen(s: *const c_char) -> usize {
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_div_by_10(_dividend: *mut u64) -> u32 {
-    todo!()
+/// Divides `dividend` by 10.
+/// Sets `dividend` to the quotient and returns the remainder.
+unsafe extern "C" fn avb_div_by_10(dividend: *mut u64) -> u32 {
+    let q = *dividend / 10;
+    // unwrap is ok: the result will always will be < 10.
+    let r: u32 = (*dividend % 10).try_into().unwrap();
+    *dividend = q;
+    r
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::ffi::CString;
+
+    #[test]
+    fn test_avb_div_by_10() {
+        let mut d: u64 = 250;
+        let r = unsafe { avb_div_by_10(&mut d) };
+        assert_eq!((d, r), (25, 0));
+
+        // A number greater than u32 max will return something OK.
+        let mut d: u64 = (u64::from(u32::MAX) * 10) + 5;
+        let r = unsafe { avb_div_by_10(&mut d) };
+        assert_eq!((d, r), (u64::from(u32::MAX), 5));
+    }
 
     #[test]
     fn test_avb_printf_split_log_ok() {
