@@ -71,13 +71,24 @@ unsafe extern "C" fn avb_strncmp(s1: *const c_char, s2: *const c_char, n: usize)
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_memcpy(_dest: *mut c_void, _src: *const c_void, _n: usize) -> *mut c_void {
-    todo!()
+unsafe extern "C" fn avb_memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
+    assert!(!dest.is_null());
+    assert!(!src.is_null());
+    // memcpy states these destinations should never
+    // overlap. Trust that libavb does not pass overlapping
+    // buffers.
+    core::ptr::copy_nonoverlapping(src, dest, n);
+    dest
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_memset(_dest: *mut c_void, _c: c_int, _n: usize) -> *mut c_void {
-    todo!()
+unsafe extern "C" fn avb_memset(dest: *mut c_void, value: c_int, count: usize) -> *mut c_void {
+    assert!(!dest.is_null());
+    // OK: The `as` truncation conversion of the c_int to the u8 is the expected behavior.
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    dest.write_bytes(value as u8, count);
+    dest
 }
 
 #[no_mangle]
@@ -357,5 +368,52 @@ mod tests {
 
         // Length of 0 is always 0 (equal).
         assert_eq!(call_memcmp(b"", b"", 0), 0);
+    }
+
+    #[test]
+    fn test_avb_memcpy() {
+        let src: [u8; 25] = [u8::MAX - 3; 25];
+        let mut dst: [u8; 25] = [15; 25];
+
+        let destp: *mut c_void = dst.as_mut_ptr().cast();
+
+        let result = unsafe { avb_memcpy(destp, src.as_ptr().cast(), 25) };
+        assert_eq!(destp, result);
+        assert_eq!(src, dst);
+
+        for c in dst.each_mut() {
+            *c = 33;
+        }
+        let destp: *mut c_void = dst.as_mut_ptr().cast();
+
+        // Copy only a length of 15.
+        let result = unsafe { avb_memcpy(destp, src.as_ptr().cast(), 15) };
+        assert_eq!(destp, result);
+        assert_eq!(src[..15], dst[..15]);
+        // Confirm the trailing 10 values are unchanged.
+        assert_eq!(dst[15..], [33; 10]);
+    }
+
+    #[test]
+    fn test_avb_memset() {
+        let mut dst: [u8; 25] = [15; 25];
+
+        let destp: *mut c_void = dst.as_mut_ptr().cast();
+
+        let result = unsafe { avb_memset(destp, 33, 25) };
+        assert_eq!(destp, result);
+        assert_eq!(dst, [33; 25]);
+
+        for c in dst.each_mut() {
+            *c = 15;
+        }
+        let destp: *mut c_void = dst.as_mut_ptr().cast();
+
+        // Only set a length of 15.
+        let result = unsafe { avb_memset(destp, 33, 15) };
+        assert_eq!(destp, result);
+        assert_eq!(dst[..15], [33; 15]);
+        // Confirm the trailing 10 values are unchanged.
+        assert_eq!(dst[15..], [15; 10]);
     }
 }
