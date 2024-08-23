@@ -5,22 +5,69 @@
 /// Implement [avb_sysdeps.h](https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_sysdeps.h) libavb usage.
 use alloc::string::String;
 use core::ffi::{c_char, c_int, c_void, CStr};
+use core::slice;
 use log::{Level, Record};
 use printf_compat as printf;
 
 #[no_mangle]
-unsafe extern "C" fn avb_memcmp(_src1: *const c_void, _src2: *const c_void, _n: usize) -> c_int {
-    todo!()
+/// Compares `src1` with `src2` as an array of `u8` up to a length of `n`.
+///
+/// Both buffers must be non-null and valid for at least the length of `n`.
+///
+/// Returns 0 if the buffers are the same up to `n`.
+/// Returns -1, 1 if the first differing `u8` in `src1` is is less than, or greater than
+/// the value in `src2` respectively.
+unsafe extern "C" fn avb_memcmp(src1: *const c_void, src2: *const c_void, n: usize) -> c_int {
+    assert!(!src1.is_null());
+    assert!(!src2.is_null());
+    let src1: &[u8] = slice::from_raw_parts(src1.cast(), n);
+    let src2: &[u8] = slice::from_raw_parts(src2.cast(), n);
+    src1.cmp(src2) as c_int
+}
+
+// compare chars for strncmp and strcmp
+// see man strncmp, man strcmp
+unsafe fn stroncmp(mut a: *const c_char, mut b: *const c_char, n: Option<usize>) -> c_int {
+    assert!(!a.is_null());
+    assert!(!b.is_null());
+
+    let mut count = 0;
+
+    loop {
+        // Stop if count is specified and has
+        // been reached.
+        if let Some(n) = n {
+            if count >= n {
+                break;
+            }
+        }
+
+        if *a != *b {
+            // man strncmp claims that most implementations
+            // return the difference of the last compared bytes.
+            return (*a - *b).into();
+        }
+
+        if *a == 0 {
+            break;
+        }
+
+        count += 1;
+        a = a.add(1);
+        b = b.add(1);
+    }
+    0
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_strcmp(_s1: *const c_char, _s2: *const c_char) -> c_int {
-    todo!()
+unsafe extern "C" fn avb_strcmp(s1: *const c_char, s2: *const c_char) -> c_int {
+    stroncmp(s1, s2, None)
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_strncmp(_s1: *const c_char, _s2: *const c_char, _n: usize) -> c_int {
-    todo!()
+/// strncmp, see man strncmp
+unsafe extern "C" fn avb_strncmp(s1: *const c_char, s2: *const c_char, n: usize) -> c_int {
+    stroncmp(s1, s2, Some(n))
 }
 
 #[no_mangle]
@@ -239,5 +286,76 @@ mod tests {
         assert_eq!(unsafe { avb_strlen(s.as_ptr()) }, 0);
 
         assert_eq!(unsafe { avb_strlen(b"1234\0678\0".as_ptr().cast()) }, 4);
+    }
+
+    fn call_strncmp(a: &[u8], b: &[u8], len: usize) -> c_int {
+        unsafe { avb_strncmp(a.as_ptr().cast(), b.as_ptr().cast(), len) }
+    }
+
+    #[test]
+    fn test_avb_strncmp() {
+        let a = b"test\0\0\0\0";
+        let b = b"test\0x\0\0";
+
+        assert_eq!(call_strncmp(a, b, a.len()), 0);
+        assert_eq!(call_strncmp(b, a, b.len()), 0);
+        assert_eq!(call_strncmp(a, b, 5), 0);
+        assert_eq!(call_strncmp(b, a, 5), 0);
+
+        let b = b"tesv";
+        assert_eq!(call_strncmp(a, b, a.len()), -2);
+        assert_eq!(call_strncmp(b, a, b.len()), 2);
+        assert_eq!(call_strncmp(a, b, 3), 0);
+
+        // Length of 0 is always 0 (equal).
+        assert_eq!(call_strncmp(b"a", b"b", 0), 0);
+    }
+
+    fn call_strcmp(a: &[u8], b: &[u8]) -> c_int {
+        unsafe { avb_strcmp(a.as_ptr().cast(), b.as_ptr().cast()) }
+    }
+
+    #[test]
+    fn test_avb_strcmp() {
+        let a = b"test\0\0\0\0";
+        let b = b"test\0test\0";
+        assert_eq!(call_strcmp(a, b), 0);
+        assert_eq!(call_strcmp(b, a), 0);
+
+        let b = b"test\0";
+        assert_eq!(call_strcmp(a, b), 0);
+        assert_eq!(call_strcmp(b, a), 0);
+
+        let b = b"tesv";
+        assert_eq!(call_strcmp(a, b), -2);
+        assert_eq!(call_strcmp(b, a), 2);
+    }
+
+    fn call_memcmp(a: &[u8], b: &[u8], len: usize) -> c_int {
+        unsafe { avb_memcmp(a.as_ptr().cast(), b.as_ptr().cast(), len) }
+    }
+
+    #[test]
+    fn test_avb_memcmp() {
+        let a = b"test\0test\0";
+        let b = b"test\0test\0";
+        assert_eq!(call_memcmp(a, b, a.len()), 0);
+        assert_eq!(call_memcmp(a, b, a.len() - 2), 0);
+
+        let a = b"0123\0abcd\0";
+        let b = b"0123\0adcd\0";
+        // Continue checking past any NUL (0) values.
+        assert_eq!(call_memcmp(a, b, 5), 0);
+        assert_eq!(call_memcmp(b, a, 5), 0);
+        // 7th value differs by more than 1 but
+        // -1/1 is returned.
+        assert_eq!(call_memcmp(a, b, 7), -1);
+        assert_eq!(call_memcmp(b, a, 7), 1);
+
+        // Length of 0 is always 0 (equal).
+        assert_eq!(call_memcmp(b"abc", b"cba", 0), 0);
+
+        // Length of 0 is always 0 (equal).
+        assert_eq!(call_memcmp(b"", b"", 0), 0);
     }
 }
