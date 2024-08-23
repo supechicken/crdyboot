@@ -12,8 +12,8 @@ use uefi::prelude::*;
 use uefi::table::runtime::{ResetType, VariableAttributes, VariableVendor};
 
 #[entry]
-fn efi_main(_image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
+fn efi_main(_image: Handle, st: SystemTable<Boot>) -> Status {
+    uefi::helpers::init().expect("failed to initialize uefi::helpers");
 
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),

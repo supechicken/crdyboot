@@ -61,8 +61,8 @@ impl Operation {
 }
 
 #[entry]
-fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Status {
-    uefi::helpers::init(&mut st).expect("failed to initialize uefi::helpers");
+fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
+    uefi::helpers::init().expect("failed to initialize uefi::helpers");
 
     Operation::init(st.boot_services());
 

@@ -8,6 +8,7 @@ use uefi::cstr16;
 use uefi::proto::device_path::build::{self, DevicePathBuilder};
 use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType, LoadedImageDevicePath};
+use uefi::proto::BootPolicy;
 use uefi::table::boot::{BootServices, LoadImageSource};
 
 /// Get the device path of crdyshim. This is the same as the
@@ -51,7 +52,7 @@ pub fn launch_crdyshim(boot_services: &BootServices) {
             boot_services.image_handle(),
             LoadImageSource::FromDevicePath {
                 device_path: crdyshim_path,
-                from_boot_manager: false,
+                boot_policy: BootPolicy::ExactMatch,
             },
         )
         .expect("failed to load crdyshim");

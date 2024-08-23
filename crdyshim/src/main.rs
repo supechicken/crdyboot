@@ -439,8 +439,8 @@ fn run(system_table: SystemTable<Boot>) -> Result<(), CrdyshimError> {
 }
 
 #[entry]
-fn efi_main(image: Handle, mut system_table: SystemTable<Boot>) -> Status {
-    uefi::helpers::init(&mut system_table).expect("failed to initialize uefi::helpers");
+fn efi_main(image: Handle, system_table: SystemTable<Boot>) -> Status {
+    uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level(system_table.boot_services());
 
     match run(system_table) {

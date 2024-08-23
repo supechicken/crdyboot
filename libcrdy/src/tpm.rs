@@ -35,7 +35,6 @@
 //! <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
 
 use core::fmt::{self, Display, Formatter};
-use core::mem::MaybeUninit;
 use log::info;
 use uefi::proto::tcg::{v1, v2, EventType, PcrIndex};
 use uefi::table::boot::{BootServices, ScopedProtocol};
@@ -247,7 +246,7 @@ fn extend_pcr_and_log_v1(
     data_to_hash: &[u8],
 ) -> Result<(), TpmError> {
     // Make a buffer big enough to hold the event.
-    let mut event_buf = [MaybeUninit::uninit(); 64];
+    let mut event_buf = [0; 64];
 
     let event = v1::PcrEvent::new_in_buffer(
         &mut event_buf,
@@ -258,7 +257,7 @@ fn extend_pcr_and_log_v1(
         [0; 20],
         EVENT_DATA,
     )
-    .map_err(|err| TpmError::v1(TpmErrorKind::InvalidPcrEvent, err))?;
+    .map_err(|err| TpmError::v1(TpmErrorKind::InvalidPcrEvent, err.to_err_without_payload()))?;
 
     tcg.hash_log_extend_event(event, Some(data_to_hash))
         .map_err(|err| TpmError::v1(TpmErrorKind::HashLogExtendEventFailed, err))?;
@@ -272,11 +271,13 @@ fn extend_pcr_and_log_v2(
     data_to_hash: &[u8],
 ) -> Result<(), TpmError> {
     // Make a buffer big enough to hold the event.
-    let mut event_buf = [MaybeUninit::uninit(); 64];
+    let mut event_buf = [0; 64];
 
     let event =
         v2::PcrEventInputs::new_in_buffer(&mut event_buf, pcr_index, EVENT_TYPE, EVENT_DATA)
-            .map_err(|err| TpmError::v2(TpmErrorKind::InvalidPcrEvent, err))?;
+            .map_err(|err| {
+                TpmError::v2(TpmErrorKind::InvalidPcrEvent, err.to_err_without_payload())
+            })?;
 
     tcg.hash_log_extend_event(v2::HashLogExtendEventFlags::empty(), data_to_hash, event)
         .map_err(|err| TpmError::v2(TpmErrorKind::HashLogExtendEventFailed, err))?;
