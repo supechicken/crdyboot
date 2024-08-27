@@ -11,8 +11,9 @@
 //! [`avb_slot_verify`]: https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_slot_verify.h#391
 //! [avb_ops.h]: https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_ops.h
 use crate::avb_sys::{AvbIOResult, AvbOps};
-use core::ffi::{c_char, c_void};
-use core::ptr;
+use core::ffi::{c_char, c_void, CStr};
+use core::{ptr, str};
+use log::info;
 
 /// Wrapper around a `&mut AvbDiskOps`. A pointer to this type is thin,
 /// unlike a pointer to `AvbDiskOps`, allowing it to be used in
@@ -97,6 +98,13 @@ pub fn create_ops(ops_impl: &mut AvbDiskOpsRef) -> AvbOps {
         write_persistent_value: Some(write_persistent_value),
         validate_public_key_for_partition: Some(validate_public_key_for_partition),
     }
+}
+
+/// Cast the avbops `user_data` pointer to the expected contained
+/// value set by `create_ops`.
+unsafe fn ops_to_dimpl<'a>(ops: *mut AvbOps) -> &'a mut dyn AvbDiskOps {
+    let user_data: *mut AvbDiskOpsRef = (*ops).user_data.cast();
+    (*user_data).0
 }
 
 // `AvbOps` callback functions:
@@ -231,11 +239,27 @@ unsafe extern "C" fn get_unique_guid_for_partition(
 #[no_mangle]
 /// [get_size_of_partition](https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_ops.h#263)
 unsafe extern "C" fn get_size_of_partition(
-    _ops: *mut AvbOps,
-    _partition: *const c_char,
-    _out_size_num_bytes: *mut u64,
+    ops: *mut AvbOps,
+    partition: *const c_char,
+    out_size_num_bytes: *mut u64,
 ) -> AvbIOResult {
-    todo!()
+    let Ok(pname) = CStr::from_ptr(partition).to_str() else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    };
+
+    #[cfg(test)]
+    println!("get_size_of_partition: {pname}");
+    info!("get_size_of_partition: {pname}");
+
+    let dimpl = ops_to_dimpl(ops);
+
+    let size = match dimpl.get_size_of_partition(pname) {
+        Err(e) => return e,
+        Ok(f) => f,
+    };
+
+    *out_size_num_bytes = size;
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
@@ -270,7 +294,9 @@ unsafe extern "C" fn validate_public_key_for_partition(
     _out_is_trusted: *mut bool,
     _out_rollback_index_location: *mut u32,
 ) -> AvbIOResult {
-    todo!()
+    // This is only needed if AVB_SLOT_VERIFY_FLAGS_NO_VBMETA_PARTITION is being
+    // used with slot_verify.
+    panic!("validate public key for partition was called, must use vbmeta")
 }
 
 #[cfg(test)]
