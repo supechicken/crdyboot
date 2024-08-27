@@ -2,7 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::disk;
+use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
+use avb::avb_sys::{
+    avb_slot_verify, AvbHashtreeErrorMode, AvbIOResult, AvbSlotVerifyData, AvbSlotVerifyFlags,
+    AvbSlotVerifyResult,
+};
+use core::{ptr, str};
 use libcrdy::page_alloc::ScopedPageAllocation;
+use libcrdy::uefi::UefiImpl;
 use uefi::CString16;
 
 /// Allocated buffers from AVB to execute the kernel.
@@ -12,9 +20,117 @@ pub struct LoadedBuffersAvb {
     pub cmdline: CString16,
 }
 
+pub struct AvbDiskOpsImpl;
+
+// Allow pass by value as it makes the usage easier.
+#[expect(clippy::needless_pass_by_value)]
+fn map_uefi_status(us: uefi::Error) -> AvbIOResult {
+    match us.status() {
+        uefi::Status::INVALID_PARAMETER => AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION,
+        // TODO: Are there better mappings?
+        _ => AvbIOResult::AVB_IO_RESULT_ERROR_IO,
+    }
+}
+
+impl AvbDiskOps for AvbDiskOpsImpl {
+    fn read_from_partition(
+        &mut self,
+        name: &str,
+        start_byte: u64,
+        dst: &mut [u8],
+    ) -> Result<(), AvbIOResult> {
+        let uefi = &UefiImpl;
+        let name = CString16::try_from(name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        let (disk_io, media_id) = disk::open_partition_by_name(uefi, &name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        disk_io
+            .read_disk(media_id, start_byte, dst)
+            .map_err(map_uefi_status)
+    }
+
+    fn write_to_partition(
+        &mut self,
+        name: &str,
+        offset: u64,
+        buffer: &[u8],
+    ) -> Result<(), AvbIOResult> {
+        let uefi = &UefiImpl;
+        let name = CString16::try_from(name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        let (mut disk_io, media_id) = disk::open_partition_by_name(uefi, &name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        disk_io
+            .write_disk(media_id, offset, buffer)
+            .map_err(map_uefi_status)
+    }
+
+    fn get_size_of_partition(&mut self, name: &str) -> Result<u64, AvbIOResult> {
+        let uefi = &UefiImpl;
+        let name = CString16::try_from(name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        // TODO: map to better error?
+        disk::get_partition_size_in_bytes(uefi, &name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)
+    }
+
+    fn get_unique_guid_for_partition(
+        &mut self,
+        name: &str,
+        dest: &mut [u8; 36],
+    ) -> Result<(), AvbIOResult> {
+        let uefi = &UefiImpl;
+        let name = CString16::try_from(name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        // TODO: map to more specific error?
+        let guid = disk::get_partition_unique_guid(uefi, &name)
+            .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
+        dest.copy_from_slice(&guid.to_ascii_hex_lower());
+        Ok(())
+    }
+}
+
 /// Use AVB to verify the partitions and return buffers
 /// including the loaded data from the partitions
 /// necessary to boot the kernel.
 pub fn do_avb_verify() -> LoadedBuffersAvb {
-    todo!("verify, allocate, load and return buffers");
+    let mut holder = AvbDiskOpsImpl;
+    let mut disk_ops_ref = AvbDiskOpsRef(&mut holder);
+
+    let mut avbops = create_ops(&mut disk_ops_ref);
+
+    let boot_partition_name = c"boot";
+    let init_partition_name = c"init_boot";
+    let vendor_boot_partition_name = c"vendor_boot";
+
+    // Null-pointer terminated list of partitions for
+    // the call to `avb_slot_verify`.
+    let requested_partitions = [
+        boot_partition_name.as_ptr(),
+        init_partition_name.as_ptr(),
+        vendor_boot_partition_name.as_ptr(),
+        ptr::null(),
+    ];
+
+    // Forcing only slot a for now.
+    // TODO: support boot priority flag checking.
+    let slot = c"_a";
+
+    let mut verify_data: *mut AvbSlotVerifyData = ptr::null_mut();
+    let res = unsafe {
+        avb_slot_verify(
+            &mut avbops,
+            requested_partitions.as_ptr(),
+            slot.as_ptr(),
+            AvbSlotVerifyFlags::AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR,
+            AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_LOGGING,
+            &mut verify_data,
+        )
+    };
+    assert!(
+        !(res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK),
+        "avb_slot_verify not OK with: {res:?}"
+    );
+
+    todo!("allocate, load and return buffers");
 }
