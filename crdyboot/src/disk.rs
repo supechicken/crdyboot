@@ -9,6 +9,8 @@ use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::media::partition::GptPartitionEntry;
+#[cfg(any(feature = "android", test))]
+use uefi::Guid;
 use uefi::{CStr16, Char16};
 use vboot::{DiskIo, ReturnCode};
 
@@ -285,6 +287,16 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
         .ok_or(GptDiskError::InvalidBlockSize)?
         .checked_mul(bytes_per_block.get())
         .ok_or(GptDiskError::InvalidPartitionSize)
+}
+
+/// Get the `Guid` of the GPT partition with `name`.
+///
+/// This finds the `name` partition by its label and excludes
+/// partitions from disks other than the one this executable is running
+/// from.
+#[cfg(any(feature = "android", test))]
+pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid, GptDiskError> {
+    Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)
 }
 
 /// Get the handle and `GptPartitionEntry` of the named GPT partition.
@@ -748,6 +760,17 @@ mod tests {
         assert_eq!(
             get_partition_size_in_bytes(&uefi, pname).unwrap(),
             (10001 * 512)
+        );
+    }
+
+    /// Test that `get_partition_unique_guid` succeeds.
+    #[test]
+    fn test_get_partition_unique_guid_success() {
+        let pname = cstr16!("STATE");
+        let uefi = setup_find_partition_by_name(pname, create_mock_uefi());
+        assert_eq!(
+            get_partition_unique_guid(&uefi, pname).unwrap(),
+            guid!("1fa90113-672a-4c30-89c6-1b87fe019adc")
         );
     }
 
