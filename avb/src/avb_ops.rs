@@ -245,13 +245,54 @@ unsafe extern "C" fn get_preloaded_partition(
 /// * `AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION` if the `offset` is out of
 ///   range for the partition.
 unsafe extern "C" fn write_to_partition(
-    _ops: *mut AvbOps,
-    _partition: *const c_char,
-    _offset: i64,
-    _num_bytes: usize,
-    _buffer: *const c_void,
+    ops: *mut AvbOps,
+    partition: *const c_char,
+    offset: i64,
+    num_bytes: usize,
+    buffer: *const c_void,
 ) -> AvbIOResult {
-    todo!()
+    let dimpl = ops_to_dimpl(ops);
+    let Ok(pname) = CStr::from_ptr(partition).to_str() else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    };
+
+    #[cfg(test)]
+    println!("write_to_partition: {pname} {offset} {num_bytes}");
+    info!("write_to_partition: {pname} {offset} {num_bytes}");
+
+    // Must get the size to determine what the offset from
+    // the end and if the write is too large.
+    let size = match dimpl.get_size_of_partition(pname) {
+        Err(e) => return e,
+        Ok(f) => f,
+    };
+
+    // Callers are allowed to pass in a negative offset indicating
+    // that it's a write starting from an offset from the
+    // end of the partition.
+    // Calculate the actual offset from the front.
+    let Some(offset) = actual_offset(size, offset) else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION;
+    };
+
+    // Determine the maximum write length from the offset.
+    let Some(max_write) = bytes_left(size, offset) else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION;
+    };
+
+    // Writes must not exceed the size of the partition.
+    if num_bytes > max_write {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION;
+    }
+
+    // Must take the word of the caller that the buffer is long enough.
+    let buffer: &[u8] = slice::from_raw_parts(buffer.cast(), num_bytes);
+
+    if let Err(e) = dimpl.write_to_partition(pname, offset, buffer) {
+        return e;
+    }
+
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
