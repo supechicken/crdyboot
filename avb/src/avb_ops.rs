@@ -12,7 +12,7 @@
 //! [avb_ops.h]: https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_ops.h
 use crate::avb_sys::{AvbIOResult, AvbOps};
 use core::ffi::{c_char, c_void, CStr};
-use core::{ptr, str};
+use core::{ptr, slice, str};
 use log::info;
 
 /// Wrapper around a `&mut AvbDiskOps`. A pointer to this type is thin,
@@ -107,6 +107,30 @@ unsafe fn ops_to_dimpl<'a>(ops: *mut AvbOps) -> &'a mut dyn AvbDiskOps {
     (*user_data).0
 }
 
+/// Return the positive offset from the front of the
+/// partition of `partition_size` for `offset`.
+/// If the `offset` is negative this will give the
+/// offset from the front of the partition.
+///
+/// Returns `None` if the offset is out of range for
+/// the partition.
+fn actual_offset(partition_size: u64, offset: i64) -> Option<u64> {
+    Some(if offset < 0 {
+        let offset = u64::try_from(-offset).ok()?;
+        partition_size.checked_sub(offset)?
+    } else {
+        u64::try_from(offset).ok()?
+    })
+}
+
+/// Determine the bytes remaining for the `partition_size` from
+/// the given `offset` from the beginning.
+/// Returns `None` if offset is too large or the difference cannot
+/// be converted to a usize.
+fn bytes_left(partition_size: u64, offset: u64) -> Option<usize> {
+    partition_size.checked_sub(offset)?.try_into().ok()
+}
+
 // `AvbOps` callback functions:
 #[no_mangle]
 /// Read `num_bytes` from the `offset` from the partition
@@ -134,14 +158,58 @@ unsafe fn ops_to_dimpl<'a>(ops: *mut AvbOps) -> &'a mut dyn AvbDiskOps {
 /// * `AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION` if the `start_byte` is out of
 ///   range for the partition.
 unsafe extern "C" fn read_from_partition(
-    _ops: *mut AvbOps,
-    _partition: *const c_char,
-    _offset: i64,
-    _num_bytes: usize,
-    _buffer: *mut c_void,
-    _out_num_read: *mut usize,
+    ops: *mut AvbOps,
+    partition: *const c_char,
+    offset: i64,
+    num_bytes: usize,
+    buffer: *mut c_void,
+    out_num_read: *mut usize,
 ) -> AvbIOResult {
-    todo!()
+    let Ok(pname) = CStr::from_ptr(partition).to_str() else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    };
+
+    #[cfg(test)]
+    println!("read_from_partition: {pname} {offset} {num_bytes}");
+    info!("read_from_partition: {pname} {offset} {num_bytes}");
+
+    let dimpl = ops_to_dimpl(ops);
+
+    // Must get the size to determine what the offset from
+    // the end might be.
+    let size = match dimpl.get_size_of_partition(pname) {
+        Err(e) => return e,
+        Ok(f) => f,
+    };
+
+    // Callers are allowed to pass in a negative offset indicating
+    // that it's a read from the end of the partition.
+    // Calculate the actual offset from the front.
+    let Some(offset) = actual_offset(size, offset) else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION;
+    };
+
+    // Determine the bytes between the offset and end of the partition.
+    let Some(bytes_available) = bytes_left(size, offset) else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_RANGE_OUTSIDE_PARTITION;
+    };
+
+    // Callers expect that this function will limit the read
+    // length by the bytes remaining in the partition from the
+    // offset.
+    let num_bytes = num_bytes.min(bytes_available);
+
+    // Must take the word of the caller that the buffer is long enough.
+    let dst: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), num_bytes);
+
+    if let Err(e) = dimpl.read_from_partition(pname, offset, dst) {
+        return e;
+    }
+
+    let bytes_read = dst.len();
+
+    *out_num_read = bytes_read;
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
