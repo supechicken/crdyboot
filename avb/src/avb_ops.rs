@@ -13,7 +13,7 @@
 use crate::avb_sys::{AvbIOResult, AvbOps};
 use core::ffi::{c_char, c_void, CStr};
 use core::{ptr, slice, str};
-use log::info;
+use log::{error, info};
 
 /// Wrapper around a `&mut AvbDiskOps`. A pointer to this type is thin,
 /// unlike a pointer to `AvbDiskOps`, allowing it to be used in
@@ -337,12 +337,43 @@ unsafe extern "C" fn read_is_device_unlocked(
 /// See
 /// [get_unique_guid_for_partition](https://android.googlesource.com/platform/external/avb/+/refs/heads/main/libavb/avb_ops.h#249)
 unsafe extern "C" fn get_unique_guid_for_partition(
-    _ops: *mut AvbOps,
-    _partition: *const c_char,
-    _guid_buf: *mut c_char,
-    _guid_buf_size: usize,
+    ops: *mut AvbOps,
+    partition: *const c_char,
+    guid_buf: *mut c_char,
+    guid_buf_size: usize,
 ) -> AvbIOResult {
-    todo!()
+    let dimpl = ops_to_dimpl(ops);
+    let Ok(pname) = CStr::from_ptr(partition).to_str() else {
+        return AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    };
+
+    #[cfg(test)]
+    println!("get_unique_guid_for_partition: {pname}");
+    info!("get_unique_guid_for_partition: {pname}");
+
+    // The trait writes a 36 character string without a NUL
+    // terminator.
+    let mut guid: [u8; 36] = [0; 36];
+
+    // The passed buffer includes space for a trailing NUL.
+    // Don't allow a buffer of the wrong size.
+    if guid_buf_size != guid.len() + 1 {
+        error!("guid_buf_size must be 37");
+        return AvbIOResult::AVB_IO_RESULT_ERROR_INVALID_VALUE_SIZE;
+    }
+
+    if let Err(e) = dimpl.get_unique_guid_for_partition(pname, &mut guid) {
+        return e;
+    }
+
+    // Must trust caller that their buffer is the size they claim.
+    let guid_buf: &mut [u8] = slice::from_raw_parts_mut(guid_buf.cast(), guid_buf_size);
+
+    guid_buf[..guid.len()].copy_from_slice(&guid);
+    // Add the NUL terminator.
+    guid_buf[guid.len()] = 0;
+
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
