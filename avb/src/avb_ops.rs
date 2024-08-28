@@ -13,7 +13,7 @@
 use crate::avb_sys::{AvbIOResult, AvbOps};
 use core::ffi::{c_char, c_void, CStr};
 use core::{ptr, slice, str};
-use log::{error, info};
+use log::{error, info, warn};
 
 /// Wrapper around a `&mut AvbDiskOps`. A pointer to this type is thin,
 /// unlike a pointer to `AvbDiskOps`, allowing it to be used in
@@ -302,35 +302,49 @@ unsafe extern "C" fn validate_vbmeta_public_key(
     _public_key_length: usize,
     _public_key_metadata: *const u8,
     _public_key_metadata_length: usize,
-    _out_is_trusted: *mut bool,
+    out_is_trusted: *mut bool,
 ) -> AvbIOResult {
-    todo!()
+    // TODO(b/378751463): Check the key against the one embedded in crdyboot.
+    warn!("b/78751463: vbmeta key check skipped");
+    *out_is_trusted = true;
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
 unsafe extern "C" fn read_rollback_index(
     _ops: *mut AvbOps,
-    _rollback_index_location: usize,
-    _out_rollback_index: *mut u64,
+    rollback_index_location: usize,
+    out_rollback_index: *mut u64,
 ) -> AvbIOResult {
-    todo!()
+    // TODO(b/378751466): Implement an appropriate rollback index.
+    info!("rollback_index_location: {rollback_index_location}");
+    if !out_rollback_index.is_null() {
+        *out_rollback_index = 0;
+    }
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
 unsafe extern "C" fn write_rollback_index(
     _ops: *mut AvbOps,
-    _rollback_index_location: usize,
+    rollback_index_location: usize,
     _rollback_index: u64,
 ) -> AvbIOResult {
-    todo!()
+    // This is not called by libavb for this bootloader.
+    // Warn and fail if this happens to change avoiding
+    // the need to audit possible NULL pointer uses.
+    error!("write_rollback_index is not implemented: {rollback_index_location}");
+    AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION
 }
 
 #[no_mangle]
 unsafe extern "C" fn read_is_device_unlocked(
     _ops: *mut AvbOps,
-    _out_is_unlocked: *mut bool,
+    out_is_unlocked: *mut bool,
 ) -> AvbIOResult {
-    todo!()
+    // TODO(b/378751102): Determine if devices can be considered locked.
+    *out_is_unlocked = true;
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
@@ -410,7 +424,12 @@ unsafe extern "C" fn read_persistent_value(
     _out_buffer: *mut u8,
     _out_num_bytes_read: *mut usize,
 ) -> AvbIOResult {
-    todo!()
+    // `read_persistent_value` is only needed for `avb_slot_verify` with
+    // `AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO`.
+    // Avoid any potential NULL access and return a failure if it does
+    // get called.
+    error!("read_persistent_value is not implemented");
+    AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION
 }
 
 #[no_mangle]
@@ -420,7 +439,12 @@ unsafe extern "C" fn write_persistent_value(
     _value_size: usize,
     _value: *const u8,
 ) -> AvbIOResult {
-    todo!()
+    // `write_persistent_value` is only needed for `avb_slot_verify` with
+    // `AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_MANAGED_RESTART_AND_EIO`.
+    // Avoid any potential NULL access and return a failure if it does
+    // get called.
+    error!("write_persistent_value is not implemented");
+    AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION
 }
 
 #[no_mangle]
