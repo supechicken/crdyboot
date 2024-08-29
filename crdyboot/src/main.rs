@@ -31,7 +31,7 @@ fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
 
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
-    self_revocation_check(st.runtime_services()).map_err(CrdybootError::Revocation)?;
+    self_revocation_check().map_err(CrdybootError::Revocation)?;
 
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.

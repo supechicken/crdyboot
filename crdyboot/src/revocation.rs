@@ -51,7 +51,7 @@ use core::cmp::Ordering;
 use core::{fmt, mem};
 use log::{error, info};
 use uefi::prelude::*;
-use uefi::table::runtime::{RuntimeServices, VariableAttributes, VariableVendor};
+use uefi::runtime::{self, VariableAttributes, VariableVendor};
 use uefi::{guid, CStr16};
 
 /// Revocation level.
@@ -113,14 +113,18 @@ trait UefiVarAccess {
     ) -> uefi::Result;
 }
 
-impl UefiVarAccess for RuntimeServices {
+struct UefiVarAccessImpl;
+
+impl UefiVarAccess for UefiVarAccessImpl {
     fn get_variable<'a>(
         &self,
         name: &CStr16,
         vendor: &VariableVendor,
         buf: &'a mut [u8],
     ) -> uefi::Result<(&'a [u8], VariableAttributes)> {
-        self.get_variable(name, vendor, buf)
+        runtime::get_variable(name, vendor, buf)
+            .discard_errdata()
+            .map(|(data, attrs)| (&*data, attrs))
     }
 
     fn set_variable(
@@ -130,7 +134,7 @@ impl UefiVarAccess for RuntimeServices {
         attributes: VariableAttributes,
         data: &[u8],
     ) -> uefi::Result {
-        self.set_variable(name, vendor, attributes, data)
+        runtime::set_variable(name, vendor, attributes, data)
     }
 }
 
@@ -295,8 +299,8 @@ impl<'a> Revocation<'a> {
 }
 
 /// Check if the currently-running executable has been revoked.
-pub fn self_revocation_check(runtime_services: &RuntimeServices) -> Result<(), RevocationError> {
-    Revocation::new(runtime_services).check_revocation()
+pub fn self_revocation_check() -> Result<(), RevocationError> {
+    Revocation::new(&UefiVarAccessImpl).check_revocation()
 }
 
 #[cfg(test)]
