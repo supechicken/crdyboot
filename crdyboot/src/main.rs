@@ -35,7 +35,7 @@ fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
 
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.
-    sbat::maybe_copy_sbat_revocations(st.runtime_services());
+    sbat::maybe_copy_sbat_revocations();
 
     // Install firmware update capsules if needed. This may reset the
     // system.

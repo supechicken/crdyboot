@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use log::{info, LevelFilter};
-use uefi::table::runtime::{RuntimeServices, VariableAttributes, VariableVendor};
+use uefi::runtime::{self, VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16};
 
 // These constants match shim.
@@ -20,7 +20,7 @@ const SBAT_RT_VAR_ATTRS: VariableAttributes =
 /// This is helpful for seeing what SBAT revocations are currently
 /// installed while the OS is running, since the `SbatLevel` variable
 /// cannot be accessed from the OS.
-pub fn maybe_copy_sbat_revocations(runtime_services: &RuntimeServices) {
+pub fn maybe_copy_sbat_revocations() {
     // Do nothing if verbose logging isn't enabled. This ensures that in
     // a normal end-user boot this function does nothing and takes
     // essentially no time.
@@ -29,7 +29,7 @@ pub fn maybe_copy_sbat_revocations(runtime_services: &RuntimeServices) {
     }
 
     // Read SbatLevel.
-    let sbat_level = match runtime_services.get_variable_boxed(SBAT_VAR_NAME, &SBAT_VAR_VENDOR) {
+    let sbat_level = match runtime::get_variable_boxed(SBAT_VAR_NAME, &SBAT_VAR_VENDOR) {
         Ok((sbat_level, _attrs)) => sbat_level,
         Err(err) => {
             info!("failed to read {SBAT_VAR_NAME}: {err}");
@@ -38,7 +38,7 @@ pub fn maybe_copy_sbat_revocations(runtime_services: &RuntimeServices) {
     };
 
     // Write SbatLevel to SbatLevelRT.
-    match runtime_services.set_variable(
+    match runtime::set_variable(
         SBAT_RT_VAR_NAME,
         &SBAT_VAR_VENDOR,
         SBAT_RT_VAR_ATTRS,
