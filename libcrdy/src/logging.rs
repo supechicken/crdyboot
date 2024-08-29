@@ -5,14 +5,13 @@
 use log::{info, LevelFilter};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
-use uefi::table::boot::BootServices;
-use uefi::{CStr16, Status};
+use uefi::{boot, CStr16, Status};
 
 /// Check if `efi\boot\crdyboot_verbose` exists on the boot
 /// filesystem. If any error occurs when checking for this file, `false`
 /// is returned.
-fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
-    let mut sfs = match boot_services.get_image_file_system(boot_services.image_handle()) {
+fn does_verbose_file_exist() -> bool {
+    let mut sfs = match boot::get_image_file_system(boot::image_handle()) {
         Ok(sfs) => sfs,
         Err(err) => {
             info!("failed to open SimpleFileSystem: {err:?}");
@@ -45,13 +44,13 @@ fn does_verbose_file_exist(boot_services: &BootServices) -> bool {
 /// no output. If a file named `crdyboot_verbose` exists in the same
 /// directory as the bootloader executable, the log level will be set to
 /// `Debug`.
-pub fn set_log_level(boot_services: &BootServices) {
+pub fn set_log_level() {
     // Default to only warnings and errors. Set this before calling
     // `does_verbose_file_exist` to guard against any early verbose
     // logs.
     log::set_max_level(LevelFilter::Warn);
 
-    if does_verbose_file_exist(boot_services) {
+    if does_verbose_file_exist() {
         log::set_max_level(LevelFilter::Debug);
     }
 }

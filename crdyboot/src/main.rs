@@ -27,7 +27,7 @@ use uefi::prelude::*;
 
 fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
-    set_log_level(st.boot_services());
+    set_log_level();
 
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
