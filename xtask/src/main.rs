@@ -283,13 +283,7 @@ fn run_bootloader_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()
 }
 
 fn run_build_enroller(conf: &Config) -> Result<()> {
-    let features = if conf.workspace_path().join("shim_verbose").exists() {
-        vec!["shim_verbose"]
-    } else {
-        vec![]
-    };
-
-    run_uefi_build(Package::Enroller, features)?;
+    run_uefi_build(Package::Enroller, vec![])?;
 
     gen_disk::gen_enroller_disk(conf)
 }

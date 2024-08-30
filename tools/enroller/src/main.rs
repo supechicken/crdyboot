@@ -7,7 +7,6 @@
 
 use core::mem;
 use log::info;
-use uefi::guid;
 use uefi::prelude::*;
 use uefi::runtime::{self, ResetType, VariableAttributes, VariableVendor};
 
@@ -58,17 +57,6 @@ fn efi_main() -> Status {
     .expect("failed to write PK");
 
     info!("Successfully set custom db, KEK, and PK variables");
-
-    if cfg!(feature = "shim_verbose") {
-        info!("writing SHIM_VERBOSE var");
-        runtime::set_variable(
-            cstr16!("SHIM_VERBOSE"),
-            &VariableVendor(guid!("605dab50-e046-4300-abb6-3dd810dd8b23")),
-            VariableAttributes::NON_VOLATILE | VariableAttributes::BOOTSERVICE_ACCESS,
-            b"1",
-        )
-        .expect("failed to write SHIM_VERBOSE");
-    }
 
     runtime::reset(ResetType::SHUTDOWN, Status::SUCCESS, None);
 }
