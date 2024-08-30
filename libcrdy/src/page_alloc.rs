@@ -20,7 +20,6 @@ use core::slice;
 use log::info;
 use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::table::boot::PAGE_SIZE;
-use uefi::table::{Boot, SystemTable};
 use uefi::Status;
 
 pub enum PageAllocationError {
@@ -54,17 +53,11 @@ pub struct ScopedPageAllocation {
     allocation: NonNull<u8>,
     num_pages: usize,
     num_bytes: usize,
-
-    // TODO(nicholasbishop): this unused arg will be dropped in the
-    // following commit.
-    #[allow(unused)]
-    system_table: SystemTable<Boot>,
 }
 
 impl ScopedPageAllocation {
     /// Allocate `num_bytes` of page-aligned memory.
     pub fn new(
-        system_table: SystemTable<Boot>,
         allocate_type: AllocateType,
         memory_type: MemoryType,
         num_bytes: usize,
@@ -90,7 +83,6 @@ impl ScopedPageAllocation {
             allocation,
             num_pages,
             num_bytes,
-            system_table,
         })
     }
 }

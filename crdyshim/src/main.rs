@@ -274,11 +274,6 @@ fn load_and_validate_next_stage(
 
     // Allocate space for the raw next stage executable.
     let mut raw_exe_alloc = ScopedPageAllocation::new(
-        // Safety: this system table clone will remain valid until
-        // ExitBootServices is called. That won't happen until after the
-        // next stage is executed, at which point this buffer will have
-        // already been freed.
-        unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         // Use `LOADER_DATA` because this buffer will not be used
         // for code execution. The executable will be relocated in a
@@ -390,11 +385,6 @@ fn load_and_execute_next_stage(
     // the allocation the next stage will actually run from, so it is
     // allocated as type `LOADER_CODE`.
     let mut relocated_exe_alloc = ScopedPageAllocation::new(
-        // Safety: this system table clone will remain valid until
-        // ExitBootServices is called. That won't happen until after
-        // the kernel is executed, at which point the bootloader
-        // code is no longer in use.
-        unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
         NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES,

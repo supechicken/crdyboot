@@ -155,11 +155,6 @@ fn execute_linux_kernel(
 /// then execute it. If successful, this function will never return.
 pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
-        // Safety: this system table clone will remain valid until
-        // ExitBootServices is called. That won't happen until after the
-        // kernel is executed, at which point crdyboot code is no longer
-        // running.
-        unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
         LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
@@ -170,11 +165,6 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     // hold the kernel data loaded by vboot. Allocating 64MiB should be
     // more than enough for the forseeable future.
     let mut kernel_buffer = ScopedPageAllocation::new(
-        // Safety: this system table clone will remain valid until
-        // ExitBootServices is called. That won't happen until after the
-        // kernel is executed, at which point crdyboot code is no longer
-        // running.
-        unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
         // 64 MiB.
@@ -216,11 +206,6 @@ pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), Cr
     // This buffer will never be freed, unless loading or executing the
     // kernel fails.
     let mut kernel_reloc_buffer = ScopedPageAllocation::new(
-        // Safety: this system table clone will remain valid until
-        // ExitBootServices is called. That won't happen until after the
-        // kernel is executed, at which point crdyboot code is no longer
-        // running.
-        unsafe { system_table.unsafe_clone() },
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
         // 20 MiB.
