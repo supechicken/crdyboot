@@ -39,7 +39,7 @@ fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
 
     // Install firmware update capsules if needed. This may reset the
     // system.
-    update_firmware(&st);
+    update_firmware();
 
     load_and_execute_kernel(st)
 }

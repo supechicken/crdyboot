@@ -15,8 +15,7 @@ use ext4_view::{Ext4Error, PathError};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
-use uefi::prelude::*;
-use uefi::table::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
+use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
@@ -74,8 +73,8 @@ impl Display for FirmwareError {
 /// Ask the firmware what type of system reset is needed for capsule updates.
 ///
 /// If an error occurs, default to [`ResetType::WARM`].
-fn get_reset_type(runtime_services: &RuntimeServices, capsules: &[&CapsuleHeader]) -> ResetType {
-    match runtime_services.query_capsule_capabilities(capsules) {
+fn get_reset_type(capsules: &[&CapsuleHeader]) -> ResetType {
+    match runtime::query_capsule_capabilities(capsules) {
         Ok(capabilities) => {
             info!("query capsule capabilities: {capabilities:?}");
             capabilities.reset_type
@@ -178,10 +177,9 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
 /// Some errors are logged but otherwise ignored, with the intent of
 /// processing as many valid capsules as possible. Fatal errors are
 /// propagated to the caller.
-fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
-    let variables = st
-        .runtime_services()
-        .variable_keys()
+fn update_firmware_impl() -> Result<(), FirmwareError> {
+    let variables = runtime::variable_keys()
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
@@ -203,16 +201,14 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
         return Ok(());
     }
 
-    let reset_type = get_reset_type(st.runtime_services(), &capsule_refs);
+    let reset_type = get_reset_type(&capsule_refs);
 
     info!("calling update_capsule");
-    st.runtime_services()
-        .update_capsule(&capsule_refs, &descriptors)
+    runtime::update_capsule(&capsule_refs, &descriptors)
         .map_err(|err| FirmwareError::UpdateCapsuleFailed(err.status()))?;
 
     info!("resetting the system: {reset_type:?}");
-    st.runtime_services()
-        .reset(reset_type, Status::SUCCESS, None);
+    runtime::reset(reset_type, Status::SUCCESS, None);
 }
 
 /// Try to install firmware update capsules, if any are present.
@@ -221,13 +217,13 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
 /// return.
 ///
 /// Errors are logged but otherwise ignored.
-pub fn update_firmware(st: &SystemTable<Boot>) {
+pub fn update_firmware() {
     if !cfg!(feature = "firmware_update") {
         info!("firmware updates disabled");
         return;
     }
 
-    if let Err(err) = update_firmware_impl(st) {
+    if let Err(err) = update_firmware_impl() {
         error!("firmware update failed: {err}");
     }
 }
