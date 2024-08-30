@@ -341,16 +341,12 @@ fn load_and_validate_next_stage(
     Ok(raw_exe_alloc)
 }
 
-fn execute_relocated_next_stage(
-    relocated_exe: &[u8],
-    system_table: &SystemTable<Boot>,
-) -> Result<(), CrdyshimError> {
+fn execute_relocated_next_stage(relocated_exe: &[u8]) -> Result<(), CrdyshimError> {
     let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
 
     let entry_point_offset = get_primary_entry_point(&pe);
 
-    nx::update_mem_attrs(&pe, system_table.boot_services())
-        .map_err(CrdyshimError::MemoryProtection)?;
+    nx::update_mem_attrs(&pe).map_err(CrdyshimError::MemoryProtection)?;
 
     let next_stage = NextStage {
         image_data: relocated_exe,
@@ -398,7 +394,7 @@ fn load_and_execute_next_stage(
         relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
     }
 
-    execute_relocated_next_stage(&relocated_exe_alloc, system_table)
+    execute_relocated_next_stage(&relocated_exe_alloc)
 }
 
 /// The main application.

@@ -18,9 +18,10 @@ use log::info;
 use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
 use object::read::pe::{ImageNtHeaders, ImageOptionalHeader, PeFile};
 use object::LittleEndian;
+use uefi::boot::{self, MemoryAttribute};
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
-use uefi::table::boot::{BootServices, MemoryAttribute, PAGE_SIZE};
+use uefi::table::boot::PAGE_SIZE;
 use uefi::Status;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -221,11 +222,8 @@ fn is_pe_nx_compat<N: ImageNtHeaders>(pe: &PeFile<N>) -> bool {
 }
 
 /// Set up memory protection attributes for the kernel data.
-pub fn update_mem_attrs<N: ImageNtHeaders>(
-    pe: &PeFile<N>,
-    boot_services: &BootServices,
-) -> Result<(), NxError> {
-    let handle = match boot_services.get_handle_for_protocol::<MemoryProtection>() {
+pub fn update_mem_attrs<N: ImageNtHeaders>(pe: &PeFile<N>) -> Result<(), NxError> {
+    let handle = match boot::get_handle_for_protocol::<MemoryProtection>() {
         Ok(handle) => handle,
         Err(err) => {
             // Only very recent systems will support this protocol, so
@@ -240,8 +238,7 @@ pub fn update_mem_attrs<N: ImageNtHeaders>(
         return Err(NxError::PeNotNxCompat);
     }
 
-    let memory_protection = boot_services
-        .open_protocol_exclusive::<MemoryProtection>(handle)
+    let memory_protection = boot::open_protocol_exclusive::<MemoryProtection>(handle)
         .map_err(|err| NxError::OpenProtocolFailed(err.status()))?;
 
     for section in get_section_iter(pe) {

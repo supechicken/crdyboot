@@ -126,15 +126,10 @@ fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootE
 /// would be an unnecessary verification.
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
-fn execute_linux_kernel(
-    kernel_data: &[u8],
-    cmdline: &CStr16,
-    system_table: &SystemTable<Boot>,
-) -> Result<(), CrdybootError> {
+fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), CrdybootError> {
     let pe = PeFile64::parse(kernel_data).map_err(CrdybootError::InvalidPe)?;
 
-    nx::update_mem_attrs(&pe, system_table.boot_services())
-        .map_err(CrdybootError::MemoryProtection)?;
+    nx::update_mem_attrs(&pe).map_err(CrdybootError::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
         Arch::X86_64 => get_primary_entry_point(&pe),
@@ -233,5 +228,5 @@ pub fn load_and_execute_kernel(system_table: &SystemTable<Boot>) -> Result<(), C
     // Drop the original kernel buffer, not needed anymore.
     drop(kernel_buffer);
 
-    execute_linux_kernel(&kernel_reloc_buffer, &cmdline, system_table)
+    execute_linux_kernel(&kernel_reloc_buffer, &cmdline)
 }
