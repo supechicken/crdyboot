@@ -33,9 +33,8 @@ use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
+use uefi::runtime::{self, VariableVendor};
 use uefi::table::boot::{AllocateType, MemoryType};
-use uefi::table::runtime::VariableVendor;
-use uefi::table::{Boot, SystemTable};
 use uefi::{cstr16, CStr16, CString16};
 
 /// TPM PCR to measure into.
@@ -149,9 +148,9 @@ impl Display for CrdyshimError {
 /// If the variable cannot be read, or if the value is anything other
 /// than 0 or 1, log an error and treat it as secure boot being
 /// disabled.
-fn is_secure_boot_enabled(runtime_services: &RuntimeServices) -> bool {
+fn is_secure_boot_enabled() -> bool {
     let mut buf: [u8; 1] = [0];
-    match runtime_services.get_variable(
+    match runtime::get_variable(
         cstr16!("SecureBoot"),
         &VariableVendor::GLOBAL_VARIABLE,
         &mut buf,
@@ -264,9 +263,8 @@ fn get_public_key() -> Result<ed25519_compact::PublicKey, CrdyshimError> {
 
 fn load_and_validate_next_stage(
     next_stage_name: &CStr16,
-    system_table: &SystemTable<Boot>,
 ) -> Result<ScopedPageAllocation, CrdyshimError> {
-    let is_secure_boot_enabled = is_secure_boot_enabled(system_table.runtime_services());
+    let is_secure_boot_enabled = is_secure_boot_enabled();
     info!("secure boot enabled? {}", is_secure_boot_enabled);
 
     // Allocate space for the raw next stage executable.
@@ -362,10 +360,7 @@ fn execute_relocated_next_stage(relocated_exe: &[u8]) -> Result<(), CrdyshimErro
 ///
 /// The relocated executable is then launched, and control transfers to
 /// that executable.
-fn load_and_execute_next_stage(
-    system_table: &SystemTable<Boot>,
-    revocations: &RevocationSbat,
-) -> Result<(), CrdyshimError> {
+fn load_and_execute_next_stage(revocations: &RevocationSbat) -> Result<(), CrdyshimError> {
     // Base file name of the next stage. The actual file name will have
     // an arch suffix and extension, e.g. "crdybootx64.efi".
     let next_stage_name = cstr16!("crdyboot");
@@ -381,7 +376,7 @@ fn load_and_execute_next_stage(
     .map_err(CrdyshimError::Allocation)?;
 
     {
-        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name, system_table)?;
+        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name)?;
         let pe = PeFileForCurrentArch::parse(&raw_exe_alloc).map_err(CrdyshimError::InvalidPe)?;
         sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)?;
         relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
@@ -399,7 +394,7 @@ fn load_and_execute_next_stage(
 ///
 /// This is separated out from `efi_main` so that it can return a
 /// `Result` and propagate errors with `?`.
-fn run(system_table: &SystemTable<Boot>) -> Result<(), CrdyshimError> {
+fn run() -> Result<(), CrdyshimError> {
     let embedded_revocations = include_bytes!("../revocations.csv");
     let revocations = sbat_revocation::update_and_get_revocations(embedded_revocations)
         .map_err(CrdyshimError::RevocationDataError)?;
@@ -411,15 +406,15 @@ fn run(system_table: &SystemTable<Boot>) -> Result<(), CrdyshimError> {
     // little code as possible prior to this point.
     sbat_revocation::validate_image(&SBAT, &revocations).map_err(CrdyshimError::SelfRevoked)?;
 
-    load_and_execute_next_stage(system_table, &revocations)
+    load_and_execute_next_stage(&revocations)
 }
 
 #[entry]
-fn efi_main(image: Handle, system_table: SystemTable<Boot>) -> Status {
+fn efi_main() -> Status {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level();
 
-    match run(&system_table) {
+    match run() {
         Ok(()) => unreachable!("next stage did not take control"),
         Err(err) => {
             panic!("boot failed: {err}");
