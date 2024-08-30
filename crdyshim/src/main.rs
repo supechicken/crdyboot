@@ -408,11 +408,8 @@ fn load_and_execute_next_stage(
 /// `Result` and propagate errors with `?`.
 fn run(system_table: &SystemTable<Boot>) -> Result<(), CrdyshimError> {
     let embedded_revocations = include_bytes!("../revocations.csv");
-    let revocations = sbat_revocation::update_and_get_revocations(
-        system_table.runtime_services(),
-        embedded_revocations,
-    )
-    .map_err(CrdyshimError::RevocationDataError)?;
+    let revocations = sbat_revocation::update_and_get_revocations(embedded_revocations)
+        .map_err(CrdyshimError::RevocationDataError)?;
 
     // IMPORTANT: this self revocation check must happen as early in the
     // program as possible. If a security flaw is found that

@@ -33,7 +33,7 @@ use libcrdy::arch::PeFileForCurrentArch;
 use log::info;
 use object::{Object, ObjectSection};
 use sbat::{ImageSbat, RevocationSbat, RevocationSbatOwned, ValidationResult};
-use uefi::table::runtime::{RuntimeServices, VariableAttributes, VariableVendor};
+use uefi::runtime::{self, VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16};
 
 const REVOCATION_VAR_ATTRS: VariableAttributes =
@@ -68,13 +68,15 @@ trait UefiVarAccess {
     ) -> uefi::Result;
 }
 
-impl UefiVarAccess for RuntimeServices {
+struct UefiVarAccessImpl;
+
+impl UefiVarAccess for UefiVarAccessImpl {
     fn get_variable_boxed(
         &self,
         name: &CStr16,
         vendor: &VariableVendor,
     ) -> uefi::Result<(Box<[u8]>, VariableAttributes)> {
-        self.get_variable_boxed(name, vendor)
+        runtime::get_variable_boxed(name, vendor)
     }
 
     fn set_variable(
@@ -84,7 +86,7 @@ impl UefiVarAccess for RuntimeServices {
         attributes: VariableAttributes,
         data: &[u8],
     ) -> uefi::Result {
-        self.set_variable(name, vendor, attributes, data)
+        runtime::set_variable(name, vendor, attributes, data)
     }
 }
 
@@ -267,11 +269,11 @@ impl<'a> Revocation<'a> {
 ///
 /// See [`Revocation::update_and_get_revocations`] for details.
 pub fn update_and_get_revocations(
-    runtime_services: &RuntimeServices,
     embedded_revocations: &[u8],
 ) -> Result<RevocationSbatOwned, RevocationError> {
+    let var_access = UefiVarAccessImpl;
     let revocation = Revocation {
-        var_access: runtime_services,
+        var_access: &var_access,
         var_vendor: &REVOCATION_VAR_VENDOR,
         var_name: REVOCATION_VAR_NAME,
         embedded_revocations,
