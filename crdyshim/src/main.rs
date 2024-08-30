@@ -265,10 +265,10 @@ fn get_public_key() -> Result<ed25519_compact::PublicKey, CrdyshimError> {
         .map_err(|_| CrdyshimError::InvalidPublicKey)
 }
 
-fn load_and_validate_next_stage<'a>(
+fn load_and_validate_next_stage(
     next_stage_name: &CStr16,
     system_table: &SystemTable<Boot>,
-) -> Result<ScopedPageAllocation<'a>, CrdyshimError> {
+) -> Result<ScopedPageAllocation, CrdyshimError> {
     let is_secure_boot_enabled = is_secure_boot_enabled(system_table.runtime_services());
     info!("secure boot enabled? {}", is_secure_boot_enabled);
 

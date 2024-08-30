@@ -15,9 +15,11 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::ops::{Deref, DerefMut};
+use core::ptr::NonNull;
 use core::slice;
 use log::info;
-use uefi::table::boot::{AllocateType, MemoryType, PAGE_SIZE};
+use uefi::boot::{self, AllocateType, MemoryType};
+use uefi::table::boot::PAGE_SIZE;
 use uefi::table::{Boot, SystemTable};
 use uefi::Status;
 
@@ -48,13 +50,18 @@ impl Display for PageAllocationError {
 /// Page-aligned memory allocation that will be freed on drop. This
 /// implements [`Deref`] and [`DerefMut`] to provide access to the
 /// allocation.
-pub struct ScopedPageAllocation<'a> {
-    allocation: &'a mut [u8],
+pub struct ScopedPageAllocation {
+    allocation: NonNull<u8>,
     num_pages: usize,
+    num_bytes: usize,
+
+    // TODO(nicholasbishop): this unused arg will be dropped in the
+    // following commit.
+    #[allow(unused)]
     system_table: SystemTable<Boot>,
 }
 
-impl<'a> ScopedPageAllocation<'a> {
+impl ScopedPageAllocation {
     /// Allocate `num_bytes` of page-aligned memory.
     pub fn new(
         system_table: SystemTable<Boot>,
@@ -70,39 +77,30 @@ impl<'a> ScopedPageAllocation<'a> {
         let num_pages = num_bytes / PAGE_SIZE;
 
         info!("allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})");
-        let addr = system_table
-            .boot_services()
-            .allocate_pages(allocate_type, memory_type, num_pages)
+        let allocation = boot::allocate_pages(allocate_type, memory_type, num_pages)
             .map_err(|err| PageAllocationError::AllocationFailed(num_pages, err.status()))?;
-        info!("allocation address: {addr:#x}");
+        info!("allocation address: {allocation:#x?}");
 
-        // Convert the physical address to a pointer.
-        let ptr = addr as *mut u8;
-
-        // Zero-initialize the allocation and convert to a slice.
-        //
-        // Safety:
-        //
-        // We zero-initialize the whole allocation using `write_bytes`,
-        // so no invalid reference is created. Then it is safe to
-        // convert the allocation to a slice.
-        let allocation: &mut [u8] = unsafe {
-            ptr.write_bytes(0, num_bytes);
-            slice::from_raw_parts_mut(ptr, num_bytes)
-        };
+        // Zero-initialize the allocation.
+        unsafe {
+            allocation.as_ptr().write_bytes(0, num_bytes);
+        }
 
         Ok(Self {
             allocation,
             num_pages,
+            num_bytes,
             system_table,
         })
     }
 }
 
-impl<'a> Drop for ScopedPageAllocation<'a> {
+impl Drop for ScopedPageAllocation {
     fn drop(&mut self) {
-        let addr = self.allocation.as_mut_ptr() as u64;
-        info!("freeing {} pages at {addr:#x}", self.num_pages);
+        info!(
+            "freeing {} pages at {:#x?}",
+            self.num_pages, self.allocation
+        );
 
         // Can't propagate an error from here, so just log it.
         //
@@ -111,26 +109,30 @@ impl<'a> Drop for ScopedPageAllocation<'a> {
         // By the time we call `drop` no other references to the
         // allocation can exist, so it is safe to de-allocate the
         // pages.
-        if let Err(err) = unsafe {
-            self.system_table
-                .boot_services()
-                .free_pages(addr, self.num_pages)
-        } {
+        if let Err(err) = unsafe { boot::free_pages(self.allocation, self.num_pages) } {
             info!("free_pages failed: {:?}", err.status());
         }
     }
 }
 
-impl<'a> Deref for ScopedPageAllocation<'a> {
+impl Deref for ScopedPageAllocation {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.allocation
+        // Safety:
+        //
+        // The whole allocation was initialized with `write_bytes`, so
+        // there is no uninitialized memory.
+        unsafe { slice::from_raw_parts(self.allocation.as_ptr(), self.num_bytes) }
     }
 }
 
-impl<'a> DerefMut for ScopedPageAllocation<'a> {
+impl DerefMut for ScopedPageAllocation {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.allocation
+        // Safety:
+        //
+        // The whole allocation was initialized with `write_bytes`, so
+        // there is no uninitialized memory.
+        unsafe { slice::from_raw_parts_mut(self.allocation.as_ptr(), self.num_bytes) }
     }
 }
