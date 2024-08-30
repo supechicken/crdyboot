@@ -9,7 +9,6 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4, Ext4Read, IoError, PathBuf};
 use log::info;
-use uefi::prelude::*;
 use uefi::proto::media::disk::DiskIo;
 
 /// Load a single update capsule from the stateful partition.
@@ -29,13 +28,10 @@ fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>,
 /// Load all update capsules from the stateful partition.
 ///
 /// Any capsule that cannot be read is skipped.
-pub fn load_capsules_from_disk(
-    boot_services: &BootServices,
-    updates: &[UpdateInfo],
-) -> Result<Vec<Vec<u8>>, FirmwareError> {
+pub fn load_capsules_from_disk(updates: &[UpdateInfo]) -> Result<Vec<Vec<u8>>, FirmwareError> {
     // Find and open the stateful partition block device.
-    let (stateful_disk_io, media_id) = disk::open_stateful_partition(boot_services)
-        .map_err(FirmwareError::OpenStatefulPartitionFailed)?;
+    let (stateful_disk_io, media_id) =
+        disk::open_stateful_partition().map_err(FirmwareError::OpenStatefulPartitionFailed)?;
 
     // Create a reader and load the stateful filesystem.
     let stateful_reader = Box::new(DiskReader {

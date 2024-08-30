@@ -15,11 +15,6 @@ use uefi::proto::media::partition::PartitionInfo;
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
-// TODO(nicholasbishop): temporarily import the old `ScopedProtocol`
-// type under a different name. This will be removed in the following
-// CL.
-use uefi::table::boot::ScopedProtocol as ScopedProtocolWithLifetime;
-
 #[derive(Debug)]
 pub enum GptDiskError {
     /// The disk block size is zero.
@@ -183,15 +178,12 @@ fn find_esp_partition_handle() -> Result<Handle, GptDiskError> {
         .ok_or(GptDiskError::LoadedImageHasNoDevice)
 }
 
-fn find_disk_block_io(
-    bt: &BootServices,
-) -> Result<ScopedProtocolWithLifetime<BlockIO>, GptDiskError> {
+fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
     let partition_handle = find_esp_partition_handle()?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
-    let block_io_handles = bt
-        .find_handles::<BlockIO>()
+    let block_io_handles = boot::find_handles::<BlockIO>()
         .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
@@ -205,10 +197,10 @@ fn find_disk_block_io(
     // crdyboot is the only code that should be running other than the
     // firmware. Grub also opens the protocol in non-exclusive mode.
     unsafe {
-        bt.open_protocol::<BlockIO>(
+        boot::open_protocol::<BlockIO>(
             OpenProtocolParams {
                 handle: disk_handle,
-                agent: bt.image_handle(),
+                agent: boot::image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -331,9 +323,7 @@ fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
 ///
 /// Returns a tuple containing the protocol and a media ID of type
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_stateful_partition(
-    bt: &BootServices,
-) -> Result<(ScopedProtocolWithLifetime<UefiDiskIo>, u32), GptDiskError> {
+pub fn open_stateful_partition() -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
     let stateful_partition_handle = find_stateful_partition_handle()?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
@@ -342,10 +332,10 @@ pub fn open_stateful_partition(
     // Get the disk's media ID. This value is needed when calling disk
     // IO operations.
     let media_id = unsafe {
-        bt.open_protocol::<BlockIO>(
+        boot::open_protocol::<BlockIO>(
             OpenProtocolParams {
                 handle: stateful_partition_handle,
-                agent: bt.image_handle(),
+                agent: boot::image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -356,10 +346,10 @@ pub fn open_stateful_partition(
     };
 
     let disk_io = unsafe {
-        bt.open_protocol::<UefiDiskIo>(
+        boot::open_protocol::<UefiDiskIo>(
             OpenProtocolParams {
                 handle: stateful_partition_handle,
-                agent: bt.image_handle(),
+                agent: boot::image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -370,15 +360,15 @@ pub fn open_stateful_partition(
     Ok((disk_io, media_id))
 }
 
-pub struct GptDisk<'a> {
-    block_io: ScopedProtocolWithLifetime<'a, BlockIO>,
+pub struct GptDisk {
+    block_io: ScopedProtocol<BlockIO>,
     bytes_per_lba: NonZeroU64,
     lba_count: u64,
 }
 
-impl<'a> GptDisk<'a> {
-    pub fn new(bt: &'a BootServices) -> Result<GptDisk<'a>, GptDiskError> {
-        let block_io = find_disk_block_io(bt)?;
+impl GptDisk {
+    pub fn new() -> Result<GptDisk, GptDiskError> {
+        let block_io = find_disk_block_io()?;
 
         let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
             .ok_or(GptDiskError::InvalidBlockSize)?;
@@ -396,7 +386,7 @@ impl<'a> GptDisk<'a> {
     }
 }
 
-impl<'a> DiskIo for GptDisk<'a> {
+impl DiskIo for GptDisk {
     fn bytes_per_lba(&self) -> NonZeroU64 {
         self.bytes_per_lba
     }

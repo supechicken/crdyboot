@@ -188,7 +188,7 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
     let updates = get_update_table(variables)?;
     info!("found {} capsule update variables", updates.len());
 
-    let capsules = load_capsules_from_disk(st.boot_services(), &updates)?;
+    let capsules = load_capsules_from_disk(&updates)?;
     info!("loaded {} capsules from disk", capsules.len());
 
     let capsule_refs = get_capsule_refs(&capsules);
