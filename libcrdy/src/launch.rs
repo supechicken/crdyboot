@@ -3,15 +3,19 @@
 // found in the LICENSE file.
 
 use crate::util::{u32_to_usize, usize_to_u64};
+use core::ffi::c_void;
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::boot::BootServices;
-use uefi::table::{Boot, SystemTable};
+use uefi::table::{self, Boot, SystemTable};
 use uefi::{Handle, Status};
 
 pub enum LaunchError {
+    /// The system table is not set.
+    SystemTableNotSet,
+
     /// The entry point offset is outside the image bounds.
     InvalidEntryPointOffset(u32),
 
@@ -25,6 +29,7 @@ pub enum LaunchError {
 impl Display for LaunchError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Self::SystemTableNotSet => write!(f, "system table is not set"),
             Self::InvalidEntryPointOffset(offset) => {
                 write!(f, "entry point offset is out of bounds: {offset:#08x}")
             }
@@ -36,7 +41,7 @@ impl Display for LaunchError {
     }
 }
 
-type EntryPointFn = unsafe extern "efiapi" fn(Handle, SystemTable<Boot>);
+type EntryPointFn = unsafe extern "efiapi" fn(Handle, *mut c_void);
 
 pub struct NextStage<'a> {
     /// Raw executable image data.
@@ -126,13 +131,18 @@ impl<'a> NextStage<'a> {
     ///
     /// The caller must ensure that the image data and entry point
     /// provide a valid UEFI target to execute.
+    // TODO(nicholasbishop): the system_table param will be removed in
+    // the following commit.
+    #[allow(clippy::needless_pass_by_value)]
     pub unsafe fn launch(self, system_table: SystemTable<Boot>) -> Result<(), LaunchError> {
         let image_handle = system_table.boot_services().image_handle();
         self.modify_loaded_image(system_table.boot_services(), image_handle)?;
 
         let entry_point = self.entry_point_from_offset()?;
 
-        (entry_point)(image_handle, system_table);
+        let system_table = table::system_table_raw().ok_or(LaunchError::SystemTableNotSet)?;
+
+        (entry_point)(image_handle, system_table.as_ptr().cast());
 
         // We do not expect the next stage to ever exit back to our
         // code, so that code path is not tested. To avoid anything
