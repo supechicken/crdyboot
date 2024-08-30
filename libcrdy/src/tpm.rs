@@ -36,8 +36,8 @@
 
 use core::fmt::{self, Display, Formatter};
 use log::info;
+use uefi::boot::{self, ScopedProtocol};
 use uefi::proto::tcg::{v1, v2, EventType, PcrIndex};
-use uefi::table::boot::{BootServices, ScopedProtocol};
 use uefi::Status;
 
 const EVENT_TYPE: EventType = EventType::IPL;
@@ -134,18 +134,18 @@ impl Display for TpmError {
 }
 
 /// Storage for an open TPM protocol, either v1 or v2.
-enum TpmProtocol<'a> {
-    V1(ScopedProtocol<'a, v1::Tcg>),
-    V2(ScopedProtocol<'a, v2::Tcg>),
+enum TpmProtocol {
+    V1(ScopedProtocol<v1::Tcg>),
+    V2(ScopedProtocol<v2::Tcg>),
 }
 
-impl<'a> TpmProtocol<'a> {
+impl TpmProtocol {
     /// Open a TPM protocol, trying v2 first, then falling back to v1.
     ///
     /// If no handle exists for either protocol, returns `Ok(None)`.
-    fn open(boot_services: &'a BootServices) -> Result<Option<Self>, TpmError> {
+    fn open() -> Result<Option<Self>, TpmError> {
         // Try v2 first.
-        match open_protocol_v2(boot_services) {
+        match open_protocol_v2() {
             Ok(Some(v2)) => {
                 // Successfully opened v2 protocol.
                 return Ok(Some(Self::V2(v2)));
@@ -160,7 +160,7 @@ impl<'a> TpmProtocol<'a> {
         }
 
         // Fall back to v1.
-        let v1 = open_protocol_v1(boot_services)?;
+        let v1 = open_protocol_v1()?;
         Ok(v1.map(Self::V1))
     }
 }
@@ -168,10 +168,8 @@ impl<'a> TpmProtocol<'a> {
 /// Open the TPM v1 protocol if possible.
 ///
 /// If no handle exists, returns `Ok(None)`.
-fn open_protocol_v1(
-    boot_services: &BootServices,
-) -> Result<Option<ScopedProtocol<v1::Tcg>>, TpmError> {
-    let handle = match boot_services.get_handle_for_protocol::<v1::Tcg>() {
+fn open_protocol_v1() -> Result<Option<ScopedProtocol<v1::Tcg>>, TpmError> {
+    let handle = match boot::get_handle_for_protocol::<v1::Tcg>() {
         Ok(handle) => handle,
         Err(err) => {
             if err.status() == Status::NOT_FOUND {
@@ -181,8 +179,7 @@ fn open_protocol_v1(
         }
     };
 
-    let mut proto = boot_services
-        .open_protocol_exclusive::<v1::Tcg>(handle)
+    let mut proto = boot::open_protocol_exclusive::<v1::Tcg>(handle)
         .map_err(|err| TpmError::v1(TpmErrorKind::OpenProtocolFailed, err))?;
 
     let status_check = proto
@@ -209,10 +206,8 @@ fn open_protocol_v1(
 /// Open the TPM v2 protocol if possible.
 ///
 /// If no handle exists, returns `Ok(None)`.
-fn open_protocol_v2(
-    boot_services: &BootServices,
-) -> Result<Option<ScopedProtocol<v2::Tcg>>, TpmError> {
-    let handle = match boot_services.get_handle_for_protocol::<v2::Tcg>() {
+fn open_protocol_v2() -> Result<Option<ScopedProtocol<v2::Tcg>>, TpmError> {
+    let handle = match boot::get_handle_for_protocol::<v2::Tcg>() {
         Ok(handle) => handle,
         Err(err) => {
             if err.status() == Status::NOT_FOUND {
@@ -222,8 +217,7 @@ fn open_protocol_v2(
         }
     };
 
-    let mut proto = boot_services
-        .open_protocol_exclusive::<v2::Tcg>(handle)
+    let mut proto = boot::open_protocol_exclusive::<v2::Tcg>(handle)
         .map_err(|err| TpmError::v2(TpmErrorKind::OpenProtocolFailed, err))?;
 
     let caps = proto
@@ -286,12 +280,8 @@ fn extend_pcr_and_log_v2(
 }
 
 /// Extend a PCR with a measurement of `data_to_hash` and add to the event log.
-fn extend_pcr_and_log_impl(
-    boot_services: &BootServices,
-    pcr_index: PcrIndex,
-    data_to_hash: &[u8],
-) -> Result<(), TpmError> {
-    match TpmProtocol::open(boot_services) {
+fn extend_pcr_and_log_impl(pcr_index: PcrIndex, data_to_hash: &[u8]) -> Result<(), TpmError> {
+    match TpmProtocol::open() {
         Ok(Some(TpmProtocol::V1(protocol))) => {
             info!(
                 "measuring {} bytes to PCR {} of a v1 TPM",
@@ -322,9 +312,9 @@ fn extend_pcr_and_log_impl(
 /// Extend a PCR with a measurement of `data_to_hash` and add to the event log.
 ///
 /// Errors are logged but otherwise ignored.
-pub fn extend_pcr_and_log(boot_services: &BootServices, pcr_index: PcrIndex, data_to_hash: &[u8]) {
+pub fn extend_pcr_and_log(pcr_index: PcrIndex, data_to_hash: &[u8]) {
     // Log error, but otherwise ignore it.
-    if let Err(err) = extend_pcr_and_log_impl(boot_services, pcr_index, data_to_hash) {
+    if let Err(err) = extend_pcr_and_log_impl(pcr_index, data_to_hash) {
         // Log at info level since this is a non-fatal error.
         info!("failed to extend PCR: {err}");
     }

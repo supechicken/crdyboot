@@ -336,7 +336,7 @@ fn load_and_validate_next_stage(
     // We measure at this point because we still have access to
     // `raw_exe`. The full `raw_exe_alloc` has extra padding at the end
     // filled with zeroes, which would make the measurement less useful.
-    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, raw_exe);
+    extend_pcr_and_log(PCR_INDEX, raw_exe);
 
     Ok(raw_exe_alloc)
 }

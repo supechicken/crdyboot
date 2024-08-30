@@ -190,7 +190,7 @@ pub fn load_and_execute_kernel(system_table: &SystemTable<Boot>) -> Result<(), C
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(system_table.boot_services(), PCR_INDEX, kernel.data());
+    extend_pcr_and_log(PCR_INDEX, kernel.data());
 
     let cmdline = get_kernel_command_line(&kernel)?;
 
