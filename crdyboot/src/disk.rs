@@ -5,15 +5,20 @@
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
 use log::error;
+use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo as UefiDiskIo;
 use uefi::proto::media::partition::PartitionInfo;
-use uefi::table::boot::{OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
+
+// TODO(nicholasbishop): temporarily import the old `ScopedProtocol`
+// type under a different name. This will be removed in the following
+// CL.
+use uefi::table::boot::ScopedProtocol as ScopedProtocolWithLifetime;
 
 #[derive(Debug)]
 pub enum GptDiskError {
@@ -99,17 +104,14 @@ impl Display for GptDiskError {
 }
 
 /// Open `DevicePath` protocol for `handle`.
-fn device_paths_for_handle(
-    handle: Handle,
-    bt: &BootServices,
-) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
+fn device_paths_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
     // Safety: this protocol cannot be opened in exclusive mode. This
     // should be fine here as device paths are immutable.
     let device_path = unsafe {
-        bt.open_protocol::<DevicePath>(
+        boot::open_protocol::<DevicePath>(
             OpenProtocolParams {
                 handle,
-                agent: bt.image_handle(),
+                agent: boot::image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -125,14 +127,10 @@ fn device_paths_for_handle(
 /// This is determined by looking at the Device Paths associated with each
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
-fn is_parent_disk(
-    potential_parent: Handle,
-    partition: Handle,
-    bt: &BootServices,
-) -> Result<bool, GptDiskError> {
-    let potential_parent_device_path = device_paths_for_handle(potential_parent, bt)?;
+fn is_parent_disk(potential_parent: Handle, partition: Handle) -> Result<bool, GptDiskError> {
+    let potential_parent_device_path = device_paths_for_handle(potential_parent)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
-    let partition_device_path = device_paths_for_handle(partition, bt)?;
+    let partition_device_path = device_paths_for_handle(partition)?;
     let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
     for (parent_path, partition_path) in
@@ -162,10 +160,9 @@ fn is_parent_disk(
 fn find_parent_disk(
     block_io_handles: &[Handle],
     partition_handle: Handle,
-    bt: &BootServices,
 ) -> Result<Handle, GptDiskError> {
     for handle in block_io_handles {
-        if is_parent_disk(*handle, partition_handle, bt)? {
+        if is_parent_disk(*handle, partition_handle)? {
             return Ok(*handle);
         }
     }
@@ -175,20 +172,21 @@ fn find_parent_disk(
 
 /// Find the [`Handle`] corresponding to the ESP partition that this
 /// executable is running from.
-fn find_esp_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskError> {
+fn find_esp_partition_handle() -> Result<Handle, GptDiskError> {
     // Get the LoadedImage protocol for the image handle. This provides
     // a device handle which should correspond to the partition that the
     // image was loaded from.
-    let loaded_image = bt
-        .open_protocol_exclusive::<LoadedImage>(bt.image_handle())
+    let loaded_image = boot::open_protocol_exclusive::<LoadedImage>(boot::image_handle())
         .map_err(|err| GptDiskError::OpenLoadedImageProtocolFailed(err.status()))?;
     loaded_image
         .device()
         .ok_or(GptDiskError::LoadedImageHasNoDevice)
 }
 
-fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
-    let partition_handle = find_esp_partition_handle(bt)?;
+fn find_disk_block_io(
+    bt: &BootServices,
+) -> Result<ScopedProtocolWithLifetime<BlockIO>, GptDiskError> {
+    let partition_handle = find_esp_partition_handle()?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
@@ -197,7 +195,7 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptD
         .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle = find_parent_disk(&block_io_handles, partition_handle, bt)?;
+    let disk_handle = find_parent_disk(&block_io_handles, partition_handle)?;
 
     // Open the protocol with `GetProtocol` instead of `Exclusive`. On
     // the X1Cg9, opening the protocol in exclusive mode takes over
@@ -225,10 +223,10 @@ fn find_disk_block_io(bt: &BootServices) -> Result<ScopedProtocol<BlockIO>, GptD
 ///
 /// Both handles are assumed to be partition handles. If they are not,
 /// the function may fail with an error or return `Ok(false)`.
-fn is_sibling_partition(p1: Handle, p2: Handle, bt: &BootServices) -> Result<bool, GptDiskError> {
+fn is_sibling_partition(p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
     // Get the device path for both partitions.
-    let p1 = device_paths_for_handle(p1, bt)?;
-    let p2 = device_paths_for_handle(p2, bt)?;
+    let p1 = device_paths_for_handle(p1)?;
+    let p2 = device_paths_for_handle(p2)?;
 
     // Check that both paths have the same number of nodes.
     let count = p1.node_iter().count();
@@ -264,20 +262,17 @@ fn is_sibling_partition(p1: Handle, p2: Handle, bt: &BootServices) -> Result<boo
 /// corresponds to a ChromeOS stateful partition.
 ///
 /// This checks if the partition's name is "STATE".
-fn is_stateful_partition(
-    partition_handle: Handle,
-    bt: &BootServices,
-) -> Result<bool, GptDiskError> {
+fn is_stateful_partition(partition_handle: Handle) -> Result<bool, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &[Char16] = cstr16!("STATE").as_slice_with_nul();
 
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
     let partition_info = unsafe {
-        bt.open_protocol::<PartitionInfo>(
+        boot::open_protocol::<PartitionInfo>(
             OpenProtocolParams {
                 handle: partition_handle,
-                agent: bt.image_handle(),
+                agent: boot::image_handle(),
                 controller: None,
             },
             OpenProtocolAttributes::GetProtocol,
@@ -306,17 +301,16 @@ fn is_stateful_partition(
 /// This finds the stateful partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-fn find_stateful_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskError> {
-    let esp_partition_handle = find_esp_partition_handle(bt)?;
+fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
+    let esp_partition_handle = find_esp_partition_handle()?;
 
     // Get all handles that support the partition info protocol.
-    let partition_info_handles = bt
-        .find_handles::<PartitionInfo>()
+    let partition_info_handles = boot::find_handles::<PartitionInfo>()
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
         // Ignore partitions with a name other than "STATE".
-        if !is_stateful_partition(handle, bt)? {
+        if !is_stateful_partition(handle)? {
             continue;
         }
 
@@ -324,7 +318,7 @@ fn find_stateful_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskEr
         // user is running from an installed system but also has an
         // installer USB plugged in, this ensures that we find the
         // partition on the internal disk.
-        if is_sibling_partition(esp_partition_handle, handle, bt)? {
+        if is_sibling_partition(esp_partition_handle, handle)? {
             return Ok(handle);
         }
     }
@@ -339,8 +333,8 @@ fn find_stateful_partition_handle(bt: &BootServices) -> Result<Handle, GptDiskEr
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
 pub fn open_stateful_partition(
     bt: &BootServices,
-) -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
-    let stateful_partition_handle = find_stateful_partition_handle(bt)?;
+) -> Result<(ScopedProtocolWithLifetime<UefiDiskIo>, u32), GptDiskError> {
+    let stateful_partition_handle = find_stateful_partition_handle()?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
@@ -377,7 +371,7 @@ pub fn open_stateful_partition(
 }
 
 pub struct GptDisk<'a> {
-    block_io: ScopedProtocol<'a, BlockIO>,
+    block_io: ScopedProtocolWithLifetime<'a, BlockIO>,
     bytes_per_lba: NonZeroU64,
     lba_count: u64,
 }
