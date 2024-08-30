@@ -73,7 +73,7 @@ fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
         }
     }
 
-    launch::launch_crdyshim(st.boot_services());
+    launch::launch_crdyshim();
 
     Status::SUCCESS
 }
