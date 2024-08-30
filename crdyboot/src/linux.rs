@@ -17,7 +17,6 @@ use log::info;
 use object::read::pe::PeFile64;
 use uefi::proto::tcg::PcrIndex;
 use uefi::table::boot::{AllocateType, MemoryType};
-use uefi::table::{Boot, SystemTable};
 use uefi::{CStr16, CString16};
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 
@@ -148,7 +147,7 @@ fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), Crdy
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel(system_table: &SystemTable<Boot>) -> Result<(), CrdybootError> {
+pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
@@ -167,10 +166,7 @@ pub fn load_and_execute_kernel(system_table: &SystemTable<Boot>) -> Result<(), C
     )
     .map_err(CrdybootError::Allocation)?;
 
-    let boot_services = system_table.boot_services();
-
-    let kernel_verification_key =
-        get_vbpubk_from_image(boot_services).map_err(CrdybootError::Vbpubk)?;
+    let kernel_verification_key = get_vbpubk_from_image().map_err(CrdybootError::Vbpubk)?;
     info!(
         "kernel_verification_key len={}",
         kernel_verification_key.len()

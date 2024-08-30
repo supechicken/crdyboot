@@ -8,8 +8,7 @@ use libcrdy::arch::PeFileForCurrentArch;
 use libcrdy::util::u32_to_usize;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::BootServices;
-use uefi::Status;
+use uefi::{boot, Status};
 
 #[derive(Clone, Copy, Debug)]
 pub enum VbpubkError {
@@ -40,15 +39,12 @@ impl Display for VbpubkError {
 
 /// Get the currently-executing image's data.
 ///
-/// The returned slice is valid for as long as boot services are active
-/// (as enforced by the lifetime).
-fn get_loaded_image_data<'boot>(
-    boot_services: &'boot BootServices,
-) -> Result<&'boot [u8], VbpubkError> {
+/// The returned slice has a static lifetime because it's valid for as
+/// long as the executable is running.
+fn get_loaded_image_data() -> Result<&'static [u8], VbpubkError> {
     // Use the `LoadedImage` protocol to get a pointer to the data of
     // the currently-executing image.
-    let li = boot_services
-        .open_protocol_exclusive::<LoadedImage>(boot_services.image_handle())
+    let li = boot::open_protocol_exclusive::<LoadedImage>(boot::image_handle())
         .map_err(|err| VbpubkError::OpenLoadedImageProtocolFailed(err.status()))?;
     let (image_ptr, image_len) = li.info();
     let image_ptr: *const u8 = image_ptr.cast();
@@ -58,7 +54,7 @@ fn get_loaded_image_data<'boot>(
 
     // Convert the pointer and length to a byte slice.
     let image_len = usize::try_from(image_len).map_err(|_| VbpubkError::ImageTooBig(image_len))?;
-    let image_data: &'boot [u8] = unsafe { slice::from_raw_parts(image_ptr, image_len) };
+    let image_data: &'static [u8] = unsafe { slice::from_raw_parts(image_ptr, image_len) };
 
     Ok(image_data)
 }
@@ -102,10 +98,10 @@ fn get_vbpubk_from_image_data(image_data: &[u8]) -> Result<&[u8], VbpubkError> {
 /// Read the packed public key data from the `.vbpubk` section of the
 /// currently-executing image.
 ///
-/// The returned slice is valid for as long as boot services are active
-/// (as enforced by the lifetime).
-pub fn get_vbpubk_from_image(boot_services: &BootServices) -> Result<&[u8], VbpubkError> {
-    let image_data = get_loaded_image_data(boot_services)?;
+/// The returned slice has a static lifetime because it's valid for as
+/// long as the executable is running.
+pub fn get_vbpubk_from_image() -> Result<&'static [u8], VbpubkError> {
+    let image_data = get_loaded_image_data()?;
     get_vbpubk_from_image_data(image_data)
 }
 
