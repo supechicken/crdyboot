@@ -343,7 +343,7 @@ fn load_and_validate_next_stage(
 
 fn execute_relocated_next_stage(
     relocated_exe: &[u8],
-    system_table: SystemTable<Boot>,
+    system_table: &SystemTable<Boot>,
 ) -> Result<(), CrdyshimError> {
     let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
 
@@ -357,7 +357,7 @@ fn execute_relocated_next_stage(
         load_options: &[],
         entry_point_offset,
     };
-    unsafe { next_stage.launch(system_table) }.map_err(CrdyshimError::Launch)
+    unsafe { next_stage.launch() }.map_err(CrdyshimError::Launch)
 }
 
 /// Load, validate, and execute the next stage.
@@ -374,7 +374,7 @@ fn execute_relocated_next_stage(
 /// The relocated executable is then launched, and control transfers to
 /// that executable.
 fn load_and_execute_next_stage(
-    system_table: SystemTable<Boot>,
+    system_table: &SystemTable<Boot>,
     revocations: &RevocationSbat,
 ) -> Result<(), CrdyshimError> {
     // Base file name of the next stage. The actual file name will have
@@ -392,7 +392,7 @@ fn load_and_execute_next_stage(
     .map_err(CrdyshimError::Allocation)?;
 
     {
-        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name, &system_table)?;
+        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name, system_table)?;
         let pe = PeFileForCurrentArch::parse(&raw_exe_alloc).map_err(CrdyshimError::InvalidPe)?;
         sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)?;
         relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
@@ -410,7 +410,7 @@ fn load_and_execute_next_stage(
 ///
 /// This is separated out from `efi_main` so that it can return a
 /// `Result` and propagate errors with `?`.
-fn run(system_table: SystemTable<Boot>) -> Result<(), CrdyshimError> {
+fn run(system_table: &SystemTable<Boot>) -> Result<(), CrdyshimError> {
     let embedded_revocations = include_bytes!("../revocations.csv");
     let revocations = sbat_revocation::update_and_get_revocations(
         system_table.runtime_services(),
@@ -433,7 +433,7 @@ fn efi_main(image: Handle, system_table: SystemTable<Boot>) -> Status {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level();
 
-    match run(system_table) {
+    match run(&system_table) {
         Ok(()) => unreachable!("next stage did not take control"),
         Err(err) => {
             panic!("boot failed: {err}");

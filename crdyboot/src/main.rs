@@ -25,7 +25,7 @@ use linux::{load_and_execute_kernel, CrdybootError};
 use revocation::self_revocation_check;
 use uefi::prelude::*;
 
-fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
+fn run(st: &SystemTable<Boot>) -> Result<(), CrdybootError> {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level();
 
@@ -46,7 +46,7 @@ fn run(st: SystemTable<Boot>) -> Result<(), CrdybootError> {
 
 #[entry]
 fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
-    match run(st) {
+    match run(&st) {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
             panic!("boot failed: {err}");

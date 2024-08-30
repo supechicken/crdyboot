@@ -8,9 +8,7 @@ use core::fmt::{self, Display, Formatter};
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
-use uefi::table::boot::BootServices;
-use uefi::table::{self, Boot, SystemTable};
-use uefi::{Handle, Status};
+use uefi::{boot, table, Handle, Status};
 
 pub enum LaunchError {
     /// The system table is not set.
@@ -97,13 +95,8 @@ impl<'a> NextStage<'a> {
     /// The caller must ensure that that `self.image_data` and
     /// `self.load_options` remain valid for as long as the image is in
     /// use.
-    unsafe fn modify_loaded_image(
-        &self,
-        bt: &BootServices,
-        image_handle: Handle,
-    ) -> Result<(), LaunchError> {
-        let mut li = bt
-            .open_protocol_exclusive::<LoadedImage>(image_handle)
+    unsafe fn modify_loaded_image(&self, image_handle: Handle) -> Result<(), LaunchError> {
+        let mut li = boot::open_protocol_exclusive::<LoadedImage>(image_handle)
             .map_err(|err| LaunchError::OpenLoadedImageProtocolFailed(err.status()))?;
 
         // Set load options (aka command line).
@@ -131,12 +124,9 @@ impl<'a> NextStage<'a> {
     ///
     /// The caller must ensure that the image data and entry point
     /// provide a valid UEFI target to execute.
-    // TODO(nicholasbishop): the system_table param will be removed in
-    // the following commit.
-    #[allow(clippy::needless_pass_by_value)]
-    pub unsafe fn launch(self, system_table: SystemTable<Boot>) -> Result<(), LaunchError> {
-        let image_handle = system_table.boot_services().image_handle();
-        self.modify_loaded_image(system_table.boot_services(), image_handle)?;
+    pub unsafe fn launch(self) -> Result<(), LaunchError> {
+        let image_handle = boot::image_handle();
+        self.modify_loaded_image(image_handle)?;
 
         let entry_point = self.entry_point_from_offset()?;
 

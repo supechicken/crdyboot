@@ -129,7 +129,7 @@ fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootE
 fn execute_linux_kernel(
     kernel_data: &[u8],
     cmdline: &CStr16,
-    system_table: SystemTable<Boot>,
+    system_table: &SystemTable<Boot>,
 ) -> Result<(), CrdybootError> {
     let pe = PeFile64::parse(kernel_data).map_err(CrdybootError::InvalidPe)?;
 
@@ -148,12 +148,12 @@ fn execute_linux_kernel(
         load_options: cmdline.as_bytes(),
         entry_point_offset,
     };
-    unsafe { next_stage.launch(system_table) }.map_err(CrdybootError::Launch)
+    unsafe { next_stage.launch() }.map_err(CrdybootError::Launch)
 }
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel(system_table: SystemTable<Boot>) -> Result<(), CrdybootError> {
+pub fn load_and_execute_kernel(system_table: &SystemTable<Boot>) -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
