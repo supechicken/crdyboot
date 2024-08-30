@@ -185,7 +185,7 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
         .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
-    let updates = get_update_table(st, variables)?;
+    let updates = get_update_table(variables)?;
     info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(st.boot_services(), &updates)?;
@@ -196,7 +196,7 @@ fn update_firmware_impl(st: &SystemTable<Boot>) -> Result<(), FirmwareError> {
 
     let descriptors = get_capsule_block_descriptors(&capsule_refs);
 
-    set_update_statuses(st, &updates)?;
+    set_update_statuses(&updates)?;
 
     // If there are no capsules at this point then there's nothing left to do.
     if capsule_refs.is_empty() {

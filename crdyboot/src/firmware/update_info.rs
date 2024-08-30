@@ -12,10 +12,7 @@ use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
 use log::{error, info, warn};
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
-use uefi::table::runtime::{
-    RuntimeServices, Time, VariableAttributes, VariableKey, VariableVendor,
-};
-use uefi::table::{Boot, SystemTable};
+use uefi::runtime::{self, Time, VariableAttributes, VariableKey, VariableVendor};
 use uefi::{cstr16, guid, CStr16, CString16};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
@@ -79,9 +76,9 @@ impl UpdateInfo {
     ///
     /// If the current time cannot be retrieved, log an error and leave
     /// the `time_attempted` field unchanged.
-    fn update_time_attempted(&mut self, rt: &RuntimeServices) {
+    fn update_time_attempted(&mut self) {
         // Get the current time.
-        let time: Time = match rt.get_time() {
+        let time: Time = match runtime::get_time() {
             Ok(time) => time,
             Err(err) => {
                 warn!("failed to get current time: {err}");
@@ -168,10 +165,7 @@ fn time_to_bytes(time: &Time) -> &[u8] {
 /// If no updates are found, an empty vector is returned.
 ///
 /// Any UEFI error causes early termination and the error to be returned.
-pub fn get_update_table(
-    st: &SystemTable<Boot>,
-    variables: Vec<VariableKey>,
-) -> Result<Vec<UpdateInfo>, FirmwareError> {
+pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, FirmwareError> {
     let mut updates: Vec<UpdateInfo> = Vec::new();
     for var in variables {
         // Must be a fwupd state variable.
@@ -198,9 +192,7 @@ pub fn get_update_table(
 
         info!("found update {name}");
 
-        let (data, attrs) = st
-            .runtime_services()
-            .get_variable_boxed(&name, &FWUPDATE_VENDOR)
+        let (data, attrs) = runtime::get_variable_boxed(&name, &FWUPDATE_VENDOR)
             .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
 
         let mut info = match UpdateInfo::new(name.clone(), attrs, data) {
@@ -208,10 +200,7 @@ pub fn get_update_table(
             Err(err) => {
                 // Delete the malformed variable. If this fails, log the
                 // error but otherwise ignore it.
-                if let Err(err) = st
-                    .runtime_services()
-                    .delete_variable(&name, &FWUPDATE_VENDOR)
-                {
+                if let Err(err) = runtime::delete_variable(&name, &FWUPDATE_VENDOR) {
                     warn!(
                         "failed to delete variable {name}-{vendor}: {err}",
                         vendor = FWUPDATE_VENDOR.0
@@ -224,7 +213,7 @@ pub fn get_update_table(
         };
 
         if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
-            info.update_time_attempted(st.runtime_services());
+            info.update_time_attempted();
             info.set_status(FWUPDATE_ATTEMPTED);
             updates.push(info);
         }
@@ -233,20 +222,17 @@ pub fn get_update_table(
 }
 
 /// Mark all updates as [`FWUPDATE_ATTEMPTED`] and note the time of the attempt.
-pub fn set_update_statuses(
-    st: &SystemTable<Boot>,
-    updates: &[UpdateInfo],
-) -> Result<(), FirmwareError> {
+pub fn set_update_statuses(updates: &[UpdateInfo]) -> Result<(), FirmwareError> {
     for update in updates {
-        st.runtime_services()
-            .set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data)
-            .map_err(|err| {
+        runtime::set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data).map_err(
+            |err| {
                 warn!(
                     "could not update variable status for {0}: {err}",
                     update.name
                 );
                 FirmwareError::SetVariableFailed(err.status())
-            })?;
+            },
+        )?;
     }
     Ok(())
 }
