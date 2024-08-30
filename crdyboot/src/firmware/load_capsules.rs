@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4, Ext4Read, IoError, PathBuf};
 use log::info;
+use uefi::boot::ScopedProtocol;
 use uefi::proto::media::disk::DiskIo;
 
 /// Load a single update capsule from the stateful partition.
@@ -35,7 +36,7 @@ pub fn load_capsules_from_disk(updates: &[UpdateInfo]) -> Result<Vec<Vec<u8>>, F
 
     // Create a reader and load the stateful filesystem.
     let stateful_reader = Box::new(DiskReader {
-        disk_io: &*stateful_disk_io,
+        disk_io: stateful_disk_io,
         media_id,
     });
     let stateful_fs = Ext4::load(stateful_reader).map_err(FirmwareError::Ext4LoadFailed)?;
@@ -49,37 +50,17 @@ pub fn load_capsules_from_disk(updates: &[UpdateInfo]) -> Result<Vec<Vec<u8>>, F
         }
     }
 
-    // Explicit drops to make it clear that `stateful_disk_io` outlives
-    // `stateful_fs`. See safety comment `DiskReader::read` for why this
-    // is important.
-    drop(stateful_fs);
-    drop(stateful_disk_io);
-
     Ok(capsules)
 }
 
 struct DiskReader {
-    // Use a raw pointer to the protocol rather than `ScopedProtocol`
-    // because the latter requires a lifetime parameter, and a lifetime
-    // parameter on this struct would make it incompatible with the
-    // `Ext4` API,
-    //
-    // TODO(nicholasbishop): an upcoming release of uefi-rs will provide
-    // a lifetime-less `ScopedProtocol` API. Once that's available,
-    // switch to that and remove some `unsafe` code.
-    disk_io: *const DiskIo,
+    disk_io: ScopedProtocol<DiskIo>,
     media_id: u32,
 }
 
 impl Ext4Read for DiskReader {
     fn read(&mut self, start_byte: u64, dst: &mut [u8]) -> Result<(), Box<dyn IoError>> {
-        // SAFETY: this is a pointer to the protocol opened in
-        // update_firmware. The pointer will remain valid until the
-        // `ScopedProtocol` is dropped, which is done explicitly with a
-        // call to `drop`.
-        let disk_io = unsafe { &*self.disk_io };
-
-        disk_io
+        self.disk_io
             .read_disk(self.media_id, start_byte, dst)
             .map_err(|err| ReadError::boxed(start_byte, dst, err))
     }
