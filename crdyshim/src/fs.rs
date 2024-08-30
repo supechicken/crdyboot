@@ -4,10 +4,10 @@
 
 use core::fmt::{self, Display, Formatter};
 use log::info;
+use uefi::boot::{self, ScopedProtocol};
 use uefi::data_types::chars::NUL_16;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::table::boot::{BootServices, ScopedProtocol};
 use uefi::{cstr16, CStr16, CString16, Status};
 
 pub enum FsError {
@@ -65,11 +65,8 @@ impl Display for FsError {
 
 /// Open the file system protocol for the partition that the current
 /// executable was booted from.
-pub fn open_boot_file_system(
-    boot_services: &BootServices,
-) -> Result<ScopedProtocol<SimpleFileSystem>, FsError> {
-    boot_services
-        .get_image_file_system(boot_services.image_handle())
+pub fn open_boot_file_system() -> Result<ScopedProtocol<SimpleFileSystem>, FsError> {
+    boot::get_image_file_system(boot::image_handle())
         .map_err(|err| FsError::OpenBootFileSystemFailed(err.status()))
 }
 

@@ -28,11 +28,12 @@ use libcrdy::tpm::extend_pcr_and_log;
 use log::{error, info};
 use sbat::RevocationSbat;
 use sbat_revocation::RevocationError;
+use uefi::boot::ScopedProtocol;
 use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
-use uefi::table::boot::{AllocateType, BootServices, MemoryType, ScopedProtocol};
+use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::table::runtime::VariableVendor;
 use uefi::table::{Boot, SystemTable};
 use uefi::{cstr16, CStr16, CString16};
@@ -175,20 +176,16 @@ fn is_secure_boot_enabled(runtime_services: &RuntimeServices) -> bool {
 
 /// Provides methods to read the next-stage bootloader's executable and
 /// signature.
-struct NextStageFileLoader<'a> {
+struct NextStageFileLoader {
     // This field is used to keep the file system protocol open.
-    _file_system: ScopedProtocol<'a, SimpleFileSystem>,
+    _file_system: ScopedProtocol<SimpleFileSystem>,
     boot_dir: Directory,
     executable_name: CString16,
 }
 
-impl<'a> NextStageFileLoader<'a> {
+impl NextStageFileLoader {
     /// Create a new `NextStageFileLoader` for the given name and arch.
-    fn new(
-        boot_services: &'a BootServices,
-        name: &CStr16,
-        arch: Arch,
-    ) -> Result<Self, CrdyshimError> {
+    fn new(name: &CStr16, arch: Arch) -> Result<Self, CrdyshimError> {
         let mut executable_name = CString16::from(name);
         executable_name.push_str(match arch {
             Arch::Ia32 => cstr16!("ia32.efi"),
@@ -196,7 +193,7 @@ impl<'a> NextStageFileLoader<'a> {
         });
 
         let mut file_system =
-            fs::open_boot_file_system(boot_services).map_err(CrdyshimError::BootFileSystemError)?;
+            fs::open_boot_file_system().map_err(CrdyshimError::BootFileSystemError)?;
         let boot_dir = fs::open_efi_boot_directory(&mut file_system)
             .map_err(CrdyshimError::BootFileSystemError)?;
         Ok(Self {
@@ -284,11 +281,7 @@ fn load_and_validate_next_stage(
     .map_err(CrdyshimError::Allocation)?;
 
     // Read the next stage executable and signature.
-    let mut loader = NextStageFileLoader::new(
-        system_table.boot_services(),
-        next_stage_name,
-        Arch::get_current_exe_arch(),
-    )?;
+    let mut loader = NextStageFileLoader::new(next_stage_name, Arch::get_current_exe_arch())?;
     let raw_exe = loader.read_executable(&mut raw_exe_alloc)?;
     let raw_signature = match loader.read_signature() {
         Ok(raw_signature) => raw_signature,
