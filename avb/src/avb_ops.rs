@@ -217,10 +217,15 @@ unsafe extern "C" fn get_preloaded_partition(
     _ops: *mut AvbOps,
     _partition: *const c_char,
     _num_bytes: usize,
-    _out_pointer: *mut *mut u8,
+    out_pointer: *mut *mut u8,
     _out_num_bytes_preloaded: *mut usize,
 ) -> AvbIOResult {
-    todo!()
+    // TODO: Return NULL to indicate to libavb it isn't implemented
+    // and partitions aren't preloaded.
+    // TODO: Determine if preloaded partitions are relevant for
+    // this bootloader.
+    *out_pointer = ptr::null_mut();
+    AvbIOResult::AVB_IO_RESULT_OK
 }
 
 #[no_mangle]
