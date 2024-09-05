@@ -6,11 +6,13 @@ use crate::disk;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, AvbHashtreeErrorMode, AvbIOResult, AvbSlotVerifyData, AvbSlotVerifyFlags,
-    AvbSlotVerifyResult,
+    AvbSlotVerifyResult, AvbVBMetaData,
 };
-use core::{ptr, str};
+use core::ffi::CStr;
+use core::{ptr, slice, str};
 use libcrdy::page_alloc::ScopedPageAllocation;
 use libcrdy::uefi::UefiImpl;
+use log::{debug, log_enabled};
 use uefi::CString16;
 
 /// Allocated buffers from AVB to execute the kernel.
@@ -90,6 +92,19 @@ impl AvbDiskOps for AvbDiskOpsImpl {
     }
 }
 
+fn debug_print_avb_vbmeta_data(verify_data: *const AvbSlotVerifyData) {
+    let vbmeta = unsafe {
+        slice::from_raw_parts(
+            (*verify_data).vbmeta_images.cast::<AvbVBMetaData>(),
+            (*verify_data).num_vbmeta_images,
+        )
+    };
+    for part in vbmeta {
+        let name = unsafe { CStr::from_ptr(part.partition_name) }.to_string_lossy();
+        debug!("Loaded vbmeta image {name}: {part:?}");
+    }
+}
+
 /// Use AVB to verify the partitions and return buffers
 /// including the loaded data from the partitions
 /// necessary to boot the kernel.
@@ -131,6 +146,27 @@ pub fn do_avb_verify() -> LoadedBuffersAvb {
         !(res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK),
         "avb_slot_verify not OK with: {res:?}"
     );
+
+    if log_enabled!(log::Level::Debug) {
+        debug_print_avb_vbmeta_data(verify_data);
+    }
+
+    let verify_cmdline = unsafe { CStr::from_ptr((*verify_data).cmdline) };
+    debug!("verify cmdline: {}", verify_cmdline.to_string_lossy());
+
+    // Convert the loadead_partitions list to a slice of AvbPartitionData
+    let parts = unsafe {
+        slice::from_raw_parts(
+            (*verify_data).loaded_partitions,
+            (*verify_data).num_loaded_partitions,
+        )
+    };
+    debug!("Loaded partition count {}", parts.len());
+
+    for part in parts {
+        let name = unsafe { CStr::from_ptr(part.partition_name) };
+        debug!("Loaded partition {}: {part:?}", name.to_string_lossy());
+    }
 
     todo!("allocate, load and return buffers");
 }
