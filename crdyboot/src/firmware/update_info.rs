@@ -266,7 +266,8 @@ mod tests {
             FirmwareError::UpdateInfoTooShort
         ));
 
-        let mut info = UpdateInfo::new(name, attrs, data.to_vec().into_boxed_slice()).unwrap();
+        let mut info =
+            UpdateInfo::new(name.clone(), attrs, data.to_vec().into_boxed_slice()).unwrap();
 
         // Create the expected device path.
         let mut storage = Vec::new();
@@ -296,6 +297,8 @@ mod tests {
         // Check setting the status.
         info.set_status(123);
         assert_eq!(info.status(), 123);
+
+        assert_eq!(info.name(), name);
 
         assert_eq!(
             info.file_path().unwrap(),
