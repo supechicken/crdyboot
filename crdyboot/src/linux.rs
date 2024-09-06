@@ -207,7 +207,7 @@ fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), Crdy
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
+pub fn vboot_load_kernel() -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
@@ -294,6 +294,12 @@ fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocatio
     let pe = PeFile64::parse(data).map_err(CrdybootError::InvalidPe)?;
     relocate_pe_into(&pe, &mut kernel_reloc_buffer).map_err(CrdybootError::Relocation)?;
     Ok(kernel_reloc_buffer)
+}
+
+/// Load the kernel from the appropriate kernel partition then execute it.
+/// If successful, this function will never return.
+pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
+    vboot_load_kernel()
 }
 
 /// Load the flexor kernel.
