@@ -244,15 +244,15 @@ mod tests {
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::runtime::{Daylight, TimeParams};
 
-    #[test]
-    fn test_update_info() {
+    static VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
+
+    fn create_update_info() -> UpdateInfo {
         // This test file is a direct copy of an efivarfs file created
         // by `fwupd install`.
         let data = include_bytes!(
             "../../test_data/\
             fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
         );
-        let name = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0").to_owned();
         // Efivarfs stores the UEFI variable attributes in the first
         // four bytes.
         let attrs = VariableAttributes::from_bits_retain(u32::from_le_bytes(
@@ -260,14 +260,29 @@ mod tests {
         ));
         let data = &data[4..];
 
+        UpdateInfo::new(VAR_NAME.to_owned(), attrs, data.to_vec().into_boxed_slice()).unwrap()
+    }
+
+    #[test]
+    fn test_update_info_construction() {
+        // Successful construction.
+        create_update_info();
+
         // Error: not enough data.
         assert!(matches!(
-            UpdateInfo::new(name.clone(), attrs, vec![].into_boxed_slice()).unwrap_err(),
+            UpdateInfo::new(
+                VAR_NAME.to_owned(),
+                VariableAttributes::empty(),
+                vec![].into_boxed_slice()
+            )
+            .unwrap_err(),
             FirmwareError::UpdateInfoTooShort
         ));
+    }
 
-        let mut info =
-            UpdateInfo::new(name.clone(), attrs, data.to_vec().into_boxed_slice()).unwrap();
+    #[test]
+    fn test_update_info_device_path() {
+        let info = create_update_info();
 
         // Create the expected device path.
         let mut storage = Vec::new();
@@ -292,18 +307,32 @@ mod tests {
             .unwrap();
 
         assert_eq!(info.device_path(), expected_path);
-        assert_eq!(info.status(), FWUPDATE_ATTEMPT_UPDATE);
+    }
 
-        // Check setting the status.
-        info.set_status(123);
-        assert_eq!(info.status(), 123);
-
-        assert_eq!(info.name(), name);
+    #[test]
+    fn test_update_info_file_path() {
+        let info = create_update_info();
 
         assert_eq!(
             info.file_path().unwrap(),
             "EFI/chromeos/fw/fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"
         );
+    }
+
+    #[test]
+    fn test_update_info_status() {
+        let mut info = create_update_info();
+
+        assert_eq!(info.status(), FWUPDATE_ATTEMPT_UPDATE);
+
+        info.set_status(123);
+        assert_eq!(info.status(), 123);
+    }
+
+    #[test]
+    fn test_update_info_name() {
+        let info = create_update_info();
+        assert_eq!(info.name(), VAR_NAME);
     }
 
     #[test]
