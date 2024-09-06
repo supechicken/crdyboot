@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-android = ["dep:avb"]
+android = ["dep:avb", "dep:bootimg"]
 # Temporary feature flag to control whether firmware updates are allowed.
 firmware_update = []
 # Feature flag to gate flexor support.
@@ -15,6 +15,7 @@ flexor = []
 
 [dependencies]
 avb = { path = "../avb", optional = true }
+bootimg = { path = "../bootimg", optional = true }
 ext4-view = "0.4.2"
 libcrdy.workspace = true
 log.workspace = true

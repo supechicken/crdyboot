@@ -269,6 +269,7 @@ name = "crdyboot"
 version = "1.0.4"
 dependencies = [
  "avb",
+ "bootimg",
  "ext4-view",
  "libcrdy",
  "log",
