@@ -190,17 +190,17 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
 
     let cmdline = get_kernel_command_line(&kernel)?;
 
-    // Allocate a buffer to relocate the kernel into. As of R127 the
-    // minimum size is about 17MiB, so allocate 20MiB to provide some
-    // headroom.
+    // Allocate a buffer to relocate the kernel into.
     //
     // This buffer will never be freed, unless loading or executing the
     // kernel fails.
     let mut kernel_reloc_buffer = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
-        // 20 MiB.
-        20 * 1024 * 1024,
+        // As of R130 the required size is about 17.9MiB. Developer
+        // kernels with different config options may be slightly larger,
+        // so add some extra space, bringing the total to 24 MiB.
+        24 * 1024 * 1024,
     )
     .map_err(CrdybootError::Allocation)?;
 
