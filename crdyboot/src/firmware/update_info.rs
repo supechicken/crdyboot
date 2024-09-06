@@ -72,14 +72,9 @@ impl UpdateInfo {
         Ok(Self { name, attrs, data })
     }
 
-    /// Set the `time_attempted` field to the current time.
-    ///
-    /// If the current time cannot be retrieved, leave the
-    /// `time_attempted` field unchanged.
-    fn set_time_attempted(&mut self) {
-        if let Some(time) = current_time() {
-            self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
-        }
+    /// Set the `time_attempted` field to `time`.
+    fn set_time_attempted(&mut self, time: Time) {
+        self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
     }
 
     /// Get the UEFI variable name.
@@ -171,6 +166,8 @@ fn current_time() -> Option<Time> {
 ///
 /// Any UEFI error causes early termination and the error to be returned.
 pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, FirmwareError> {
+    let now = current_time();
+
     let mut updates: Vec<UpdateInfo> = Vec::new();
     for var in variables {
         // Must be a fwupd state variable.
@@ -218,7 +215,9 @@ pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, 
         };
 
         if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
-            info.set_time_attempted();
+            if let Some(now) = now {
+                info.set_time_attempted(now);
+            }
             info.set_status(FWUPDATE_ATTEMPTED);
             updates.push(info);
         }
