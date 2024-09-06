@@ -13,6 +13,7 @@ use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::tpm::extend_pcr_and_log;
+use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
 use uefi::proto::tcg::PcrIndex;
@@ -161,8 +162,7 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     let mut kernel_buffer = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
-        // 64 MiB.
-        64 * 1024 * 1024,
+        mib_to_bytes(64),
     )
     .map_err(CrdybootError::Allocation)?;
 
@@ -200,7 +200,7 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
         // As of R130 the required size is about 17.9MiB. Developer
         // kernels with different config options may be slightly larger,
         // so add some extra space, bringing the total to 24 MiB.
-        24 * 1024 * 1024,
+        mib_to_bytes(24),
     )
     .map_err(CrdybootError::Allocation)?;
 

@@ -34,3 +34,27 @@ macro_rules! embed_section {
         pub static $static_ident: [u8; include_bytes!($path).len()] = *include_bytes!($path);
     };
 }
+
+/// Convert from MiB to bytes.
+///
+/// # Panics
+///
+/// Panics on arithmetic overflow.
+#[must_use]
+pub const fn mib_to_bytes(mib: usize) -> usize {
+    if let Some(v) = mib.checked_mul(1024 * 1024) {
+        v
+    } else {
+        panic!("arithmetic overflow in mib_to_bytes");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mib_to_bytes() {
+        assert_eq!(mib_to_bytes(3), 3_145_728);
+    }
+}

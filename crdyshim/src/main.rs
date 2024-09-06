@@ -25,6 +25,7 @@ use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::set_log_level;
 use libcrdy::tpm::extend_pcr_and_log;
+use libcrdy::util::mib_to_bytes;
 use log::{error, info};
 use sbat::RevocationSbat;
 use sbat_revocation::RevocationError;
@@ -54,7 +55,7 @@ const PCR_INDEX: PcrIndex = PcrIndex(4);
 /// Choose 2 MiB, which is a small enough amount of memory that we
 /// don't need to worry about it, but still much larger than what our
 /// next stage actually needs.
-const NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES: usize = 2 * 1024 * 1024;
+const NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES: usize = mib_to_bytes(2);
 
 pub enum CrdyshimError {
     /// Failed to get the revocation data.
