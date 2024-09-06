@@ -74,19 +74,12 @@ impl UpdateInfo {
 
     /// Set the `time_attempted` field to the current time.
     ///
-    /// If the current time cannot be retrieved, log an error and leave
-    /// the `time_attempted` field unchanged.
+    /// If the current time cannot be retrieved, leave the
+    /// `time_attempted` field unchanged.
     fn set_time_attempted(&mut self) {
-        // Get the current time.
-        let time: Time = match runtime::get_time() {
-            Ok(time) => time,
-            Err(err) => {
-                warn!("failed to get current time: {err}");
-                return;
-            }
-        };
-
-        self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
+        if let Some(time) = current_time() {
+            self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
+        }
     }
 
     /// Get the UEFI variable name.
@@ -155,6 +148,18 @@ fn time_to_bytes(time: &Time) -> &[u8] {
     // SAFETY: `time` contains 16 bytes of valid data. It is correctly
     // aligned since u8 has an alignment of 1.
     unsafe { slice::from_raw_parts(byte_ptr, num_bytes) }
+}
+
+/// Get the current time via runtime services. If an error occurs, log
+/// the error and return `None`.
+fn current_time() -> Option<Time> {
+    match runtime::get_time() {
+        Ok(time) => Some(time),
+        Err(err) => {
+            warn!("failed to get current time: {err}");
+            None
+        }
+    }
 }
 
 /// Get a list of all available updates by iterating through all UEFI
