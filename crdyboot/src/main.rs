@@ -13,6 +13,8 @@ extern crate alloc;
 
 mod disk;
 mod firmware;
+#[cfg(feature = "android")]
+mod initramfs;
 mod linux;
 mod revocation;
 mod sbat;

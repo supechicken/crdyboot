@@ -19,6 +19,7 @@ libcrdy.workspace = true
 log.workspace = true
 object.workspace = true
 uefi.workspace = true
+uefi-raw.workspace = true
 vboot = { path = "../vboot" }
 sha2.workspace = true
 thiserror.workspace = true
