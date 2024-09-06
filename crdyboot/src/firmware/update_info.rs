@@ -260,6 +260,12 @@ mod tests {
         ));
         let data = &data[4..];
 
+        // Error: not enough data.
+        assert!(matches!(
+            UpdateInfo::new(name.clone(), attrs, vec![].into_boxed_slice()).unwrap_err(),
+            FirmwareError::UpdateInfoTooShort
+        ));
+
         let mut info = UpdateInfo::new(name, attrs, data.to_vec().into_boxed_slice()).unwrap();
 
         // Create the expected device path.
