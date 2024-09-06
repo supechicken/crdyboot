@@ -242,6 +242,7 @@ mod tests {
     use super::*;
     use uefi::proto::device_path::build::{self, DevicePathBuilder};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
+    use uefi::runtime::{Daylight, TimeParams};
 
     #[test]
     fn test_update_info() {
@@ -294,5 +295,25 @@ mod tests {
             info.file_path().unwrap(),
             "EFI/chromeos/fw/fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"
         );
+    }
+
+    #[test]
+    fn test_time_to_bytes() {
+        let time = Time::new(TimeParams {
+            year: 2024,
+            month: 9,
+            day: 6,
+            hour: 11,
+            minute: 13,
+            second: 45,
+            nanosecond: 123,
+            time_zone: Some(3),
+            daylight: Daylight::IN_DAYLIGHT,
+        })
+        .unwrap();
+
+        // Test round-trip conversion.
+        let bytes: &[u8] = time_to_bytes(&time);
+        assert_eq!(Time::try_from(bytes).unwrap(), time);
     }
 }
