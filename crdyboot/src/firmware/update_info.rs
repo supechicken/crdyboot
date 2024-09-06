@@ -339,9 +339,8 @@ mod tests {
         assert_eq!(info.name(), VAR_NAME);
     }
 
-    #[test]
-    fn test_time_to_bytes() {
-        let time = Time::new(TimeParams {
+    fn create_time() -> Time {
+        Time::new(TimeParams {
             year: 2024,
             month: 9,
             day: 6,
@@ -352,7 +351,24 @@ mod tests {
             time_zone: Some(3),
             daylight: Daylight::IN_DAYLIGHT,
         })
-        .unwrap();
+        .unwrap()
+    }
+
+    #[test]
+    fn test_update_info_time() {
+        let mut info = create_update_info();
+        let time = create_time();
+
+        info.set_time_attempted(time);
+        assert_eq!(
+            Time::try_from(&info.data[UpdateInfo::TIME_ATTEMPTED_RANGE]).unwrap(),
+            time
+        );
+    }
+
+    #[test]
+    fn test_time_to_bytes() {
+        let time = create_time();
 
         // Test round-trip conversion.
         let bytes: &[u8] = time_to_bytes(&time);
