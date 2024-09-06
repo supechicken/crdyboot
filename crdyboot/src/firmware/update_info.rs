@@ -76,7 +76,7 @@ impl UpdateInfo {
     ///
     /// If the current time cannot be retrieved, log an error and leave
     /// the `time_attempted` field unchanged.
-    fn update_time_attempted(&mut self) {
+    fn set_time_attempted(&mut self) {
         // Get the current time.
         let time: Time = match runtime::get_time() {
             Ok(time) => time,
@@ -213,7 +213,7 @@ pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, 
         };
 
         if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
-            info.update_time_attempted();
+            info.set_time_attempted();
             info.set_status(FWUPDATE_ATTEMPTED);
             updates.push(info);
         }
