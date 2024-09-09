@@ -5,8 +5,9 @@
 use crate::disk;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
-    avb_slot_verify, avb_slot_verify_result_to_string, AvbHashtreeErrorMode, AvbIOResult,
-    AvbPartitionData, AvbSlotVerifyData, AvbSlotVerifyFlags, AvbSlotVerifyResult, AvbVBMetaData,
+    avb_slot_verify, avb_slot_verify_data_free, avb_slot_verify_result_to_string,
+    AvbHashtreeErrorMode, AvbIOResult, AvbPartitionData, AvbSlotVerifyData, AvbSlotVerifyFlags,
+    AvbSlotVerifyResult, AvbVBMetaData,
 };
 use bootimg::{BootImage, VendorImageHeader};
 use core::ffi::{CStr, FromBytesUntilNulError};
@@ -14,9 +15,9 @@ use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::UefiImpl;
 use libcrdy::util::u32_to_usize;
-use log::{debug, log_enabled, warn};
+use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
-use uefi::CString16;
+use uefi::{CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
 pub struct LoadedBuffersAvb {
@@ -75,6 +76,10 @@ pub enum AvbError {
     /// Vendor command line is malformed.
     #[error("vendor command line is malformed")]
     VendorCommandlineMalformed,
+
+    /// Verified command line is malformed.
+    #[error("verified command line is malformed")]
+    VerifiedCommandlineMalformed,
 
     /// Combined initramfs is too large.
     #[error("initramfs is too large")]
@@ -608,7 +613,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     };
 
     // Load the kernel buffer from the boot partition header.
-    let _kernel_buffer = load_kernel(boot)?;
+    let kernel_buffer = load_kernel(boot)?;
 
     // Parse the "generic" `initramfs` from the "init_boot" partition.
     // The initramfs is the only part of this partition that is used.
@@ -619,7 +624,32 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     debug!("vendor bootconfig_size: {}", vendor_data.bootconfig.len());
     debug!("vendor cmdline: {}", vendor_data.cmdline);
 
-    let _initramfs_buffer = assemble_initramfs(&vendor_data, &init_data)?;
+    let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data)?;
 
-    todo!("allocate, load and return buffers");
+    // Convert the verified command line to UCS-2.
+    let mut cmdline = verify_cmdline
+        .to_str()
+        .ok()
+        .and_then(|x| CString16::try_from(x).ok())
+        .ok_or(AvbError::VerifiedCommandlineMalformed)?;
+
+    // Append the vendor command line after the avb verify
+    // command line.
+    // Safe unwrap: the ' ' will convert to Char16.
+    cmdline.push(Char16::try_from(' ').unwrap());
+    cmdline.push_str(vendor_data.cmdline.as_ref());
+    info!("combined command line: {cmdline}");
+
+    // At this point the cmdline, kernel and initramfs buffers
+    // are allocated locally to this function.
+    // The slot_verify_data can now be freed.
+    // TODO: move this to some owned scoped struct that can
+    // free this itself as well when out of scope.
+    unsafe { avb_slot_verify_data_free(verify_data) };
+
+    Ok(LoadedBuffersAvb {
+        kernel_buffer,
+        initramfs_buffer,
+        cmdline,
+    })
 }
