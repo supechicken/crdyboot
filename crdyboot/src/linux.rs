@@ -161,7 +161,10 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     // more than enough for the forseeable future.
     let mut kernel_buffer = ScopedPageAllocation::new(
         AllocateType::AnyPages,
-        MemoryType::LOADER_CODE,
+        // Use `LOADER_DATA` because this buffer will not be used
+        // for code execution. The executable will be relocated in a
+        // separate buffer.
+        MemoryType::LOADER_DATA,
         mib_to_bytes(64),
     )
     .map_err(CrdybootError::Allocation)?;
