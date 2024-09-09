@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use log::{error, info, warn};
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
 use uefi::runtime::{self, Time, VariableAttributes, VariableKey, VariableVendor};
@@ -147,8 +148,8 @@ fn time_to_bytes(time: &Time) -> &[u8] {
 
 /// Get the current time via runtime services. If an error occurs, log
 /// the error and return `None`.
-fn current_time() -> Option<Time> {
-    match runtime::get_time() {
+fn current_time(uefi: &dyn Uefi) -> Option<Time> {
+    match uefi.get_time() {
         Ok(time) => Some(time),
         Err(err) => {
             warn!("failed to get current time: {err}");
@@ -166,7 +167,7 @@ fn current_time() -> Option<Time> {
 ///
 /// Any UEFI error causes early termination and the error to be returned.
 pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, FirmwareError> {
-    let now = current_time();
+    let now = current_time(&UefiImpl);
 
     let mut updates: Vec<UpdateInfo> = Vec::new();
     for var in variables {
@@ -244,9 +245,11 @@ pub fn set_update_statuses(updates: &[UpdateInfo]) -> Result<(), FirmwareError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libcrdy::uefi::MockUefi;
     use uefi::proto::device_path::build::{self, DevicePathBuilder};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::runtime::{Daylight, TimeParams};
+    use uefi::Status;
 
     static VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
 
@@ -373,5 +376,22 @@ mod tests {
         // Test round-trip conversion.
         let bytes: &[u8] = time_to_bytes(&time);
         assert_eq!(Time::try_from(bytes).unwrap(), time);
+    }
+
+    /// Test that `current_time` returns `None` if an error occurs.
+    #[test]
+    fn test_current_time_error() {
+        let mut uefi = MockUefi::new();
+        uefi.expect_get_time()
+            .return_const(Err(Status::DEVICE_ERROR.into()));
+        assert_eq!(current_time(&uefi), None);
+    }
+
+    /// Test successful call to `current_time`.
+    #[test]
+    fn test_current_time_success() {
+        let mut uefi = MockUefi::new();
+        uefi.expect_get_time().return_const(Ok(create_time()));
+        assert_eq!(current_time(&uefi), Some(create_time()));
     }
 }
