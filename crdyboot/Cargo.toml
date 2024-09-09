@@ -9,6 +9,8 @@ repository.workspace = true
 [features]
 # Temporary feature flag to control whether firmware updates are allowed.
 firmware_update = []
+# Feature flag to gate flexor support.
+flexor = []
 
 [dependencies]
 ext4-view = "0.4.2"
