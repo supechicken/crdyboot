@@ -158,6 +158,18 @@ fn current_time(uefi: &dyn Uefi) -> Option<Time> {
     }
 }
 
+/// Delete a UEFI variable.
+///
+/// If deletion fails, log the error but otherwise ignore it.
+fn delete_variable_no_error(uefi: &dyn Uefi, name: &CStr16, vendor: &VariableVendor) {
+    if let Err(err) = uefi.delete_variable(name, vendor) {
+        warn!(
+            "failed to delete variable {name}-{vendor}: {err}",
+            vendor = vendor.0
+        );
+    }
+}
+
 /// Get a list of all available updates by iterating through all UEFI
 /// variables, searching for those with the [`FWUPDATE_VENDOR`]
 /// GUID. Any such variables will be parsed into an [`UpdateInfo`], from
@@ -201,14 +213,8 @@ pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, 
         let mut info = match UpdateInfo::new(name.clone(), attrs, data) {
             Ok(info) => info,
             Err(err) => {
-                // Delete the malformed variable. If this fails, log the
-                // error but otherwise ignore it.
-                if let Err(err) = runtime::delete_variable(&name, &FWUPDATE_VENDOR) {
-                    warn!(
-                        "failed to delete variable {name}-{vendor}: {err}",
-                        vendor = FWUPDATE_VENDOR.0
-                    );
-                }
+                // Delete the malformed variable.
+                delete_variable_no_error(&UefiImpl, &name, &FWUPDATE_VENDOR);
 
                 warn!("could not populate update info for {name}");
                 return Err(err);
@@ -393,5 +399,18 @@ mod tests {
         let mut uefi = MockUefi::new();
         uefi.expect_get_time().return_const(Ok(create_time()));
         assert_eq!(current_time(&uefi), Some(create_time()));
+    }
+
+    /// Test that `delete_variable_no_error` does not panic if an error
+    /// occurs.
+    #[test]
+    fn test_delete_variable_no_error() {
+        let mut uefi = MockUefi::new();
+        uefi.expect_delete_variable().returning(|name, vendor| {
+            assert_eq!(name, VAR_NAME);
+            assert_eq!(*vendor, FWUPDATE_VENDOR);
+            Err(Status::DEVICE_ERROR.into())
+        });
+        delete_variable_no_error(&uefi, VAR_NAME, &FWUPDATE_VENDOR);
     }
 }
