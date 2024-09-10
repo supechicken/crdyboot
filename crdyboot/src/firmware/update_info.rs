@@ -12,8 +12,9 @@ use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
 use libcrdy::uefi::{Uefi, UefiImpl};
 use log::{error, info, warn};
+use uefi::data_types::FromSliceWithNulError;
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
-use uefi::runtime::{self, Time, VariableAttributes, VariableKey, VariableVendor};
+use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16, CString16};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
@@ -170,6 +171,8 @@ fn delete_variable_no_error(uefi: &dyn Uefi, name: &CStr16, vendor: &VariableVen
     }
 }
 
+pub(super) type VarIterItem<'a> = (Result<&'a CStr16, FromSliceWithNulError>, VariableVendor);
+
 /// Get a list of all available updates by iterating through all UEFI
 /// variables, searching for those with the [`FWUPDATE_VENDOR`]
 /// GUID. Any such variables will be parsed into an [`UpdateInfo`], from
@@ -178,17 +181,25 @@ fn delete_variable_no_error(uefi: &dyn Uefi, name: &CStr16, vendor: &VariableVen
 /// If no updates are found, an empty vector is returned.
 ///
 /// Any UEFI error causes early termination and the error to be returned.
-pub fn get_update_table(variables: Vec<VariableKey>) -> Result<Vec<UpdateInfo>, FirmwareError> {
+pub fn get_update_table<'name>(
+    // An iterator is used here instead of `[VariableKey]` because
+    // uefi-rs does not currently provide a public method for
+    // constructing VariableKey, so unit tests can't create that type.
+    //
+    // TODO(b/365817661): improve the uefi-rs API so this workaround
+    // isn't needed.
+    variables: impl Iterator<Item = VarIterItem<'name>>,
+) -> Result<Vec<UpdateInfo>, FirmwareError> {
     let now = current_time(&UefiImpl);
 
     let mut updates: Vec<UpdateInfo> = Vec::new();
-    for var in variables {
+    for (name, vendor) in variables {
         // Must be a fwupd state variable.
-        if var.vendor != FWUPDATE_VENDOR {
+        if vendor != FWUPDATE_VENDOR {
             continue;
         }
 
-        let name: CString16 = match var.name() {
+        let name: CString16 = match name {
             Ok(n) => n.to_owned(),
             Err(err) => {
                 error!("could not get variable name: {err}");

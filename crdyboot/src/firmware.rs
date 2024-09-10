@@ -183,7 +183,7 @@ fn update_firmware_impl() -> Result<(), FirmwareError> {
         .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
-    let updates = get_update_table(variables)?;
+    let updates = get_update_table(variables.iter().map(|var| (var.name(), var.vendor)))?;
     info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(&updates)?;
