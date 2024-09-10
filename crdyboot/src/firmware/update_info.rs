@@ -406,6 +406,27 @@ mod tests {
         uefi
     }
 
+    fn create_mock_uefi_with_get_var() -> MockUefi {
+        let mut uefi = create_mock_uefi_with_time();
+
+        uefi.expect_get_variable_boxed().returning(|name, vendor| {
+            assert_eq!(*vendor, FWUPDATE_VENDOR);
+
+            let data = if name == VAR_NAME {
+                // Valid update info.
+                VAR_DATA[4..].to_vec()
+            } else {
+                panic!("unexpected name: {name}");
+            };
+
+            let attrs = VariableAttributes::NON_VOLATILE
+                | VariableAttributes::BOOTSERVICE_ACCESS
+                | VariableAttributes::RUNTIME_ACCESS;
+            Ok((data.into_boxed_slice(), attrs))
+        });
+        uefi
+    }
+
     /// Test that `current_time` returns `None` if an error occurs.
     #[test]
     fn test_current_time_error() {
@@ -481,5 +502,18 @@ mod tests {
             (Ok(FWUPDATE_DEBUG_LOG), FWUPDATE_VENDOR),
         ];
         assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), []);
+    }
+
+    /// Test successful call to `get_update_table`.
+    #[test]
+    fn test_get_update_table() {
+        let uefi = create_mock_uefi_with_get_var();
+
+        let mut info = create_update_info();
+        info.set_time_attempted(create_time());
+        info.set_status(FWUPDATE_ATTEMPTED);
+
+        let vars = [(Ok(VAR_NAME), FWUPDATE_VENDOR)];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), [info]);
     }
 }
