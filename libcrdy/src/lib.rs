@@ -19,6 +19,7 @@ pub mod nx;
 pub mod page_alloc;
 pub mod relocation;
 pub mod tpm;
+pub mod uefi;
 pub mod util;
 
 pub use logging::set_log_level;
