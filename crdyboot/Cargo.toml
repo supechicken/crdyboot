@@ -24,4 +24,5 @@ vboot = { path = "../vboot" }
 uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }
 
 [dev-dependencies]
+libcrdy = { workspace = true, features = ["test_util"] }
 object = { workspace = true, features = [ "write_core" ] }
