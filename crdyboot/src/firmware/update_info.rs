@@ -213,10 +213,6 @@ pub fn get_update_table<'name>(
             continue;
         }
 
-        if updates.len() > MAX_UPDATE_CAPSULES {
-            warn!("too many updates, ignoring {name}");
-        }
-
         info!("found update {name}");
 
         let (data, attrs) = uefi
@@ -235,6 +231,12 @@ pub fn get_update_table<'name>(
         };
 
         if (info.status() & FWUPDATE_ATTEMPT_UPDATE) != 0 {
+            // Cap the number of updates.
+            if updates.len() == MAX_UPDATE_CAPSULES {
+                warn!("too many updates, ignoring {name}");
+                break;
+            }
+
             if let Some(now) = now {
                 info.set_time_attempted(now);
             }
@@ -264,6 +266,7 @@ pub fn set_update_statuses(updates: &[UpdateInfo]) -> Result<(), FirmwareError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::array;
     use libcrdy::uefi::MockUefi;
     use uefi::proto::device_path::build::{self, DevicePathBuilder};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
@@ -540,5 +543,23 @@ mod tests {
             get_update_table(&uefi, vars.into_iter()),
             Err(FirmwareError::UpdateInfoTooShort)
         ));
+    }
+
+    /// Test that `get_update_table` ignores more than
+    /// `MAX_UPDATE_CAPSULES` updates.
+    #[cfg_attr(miri, ignore)] // This test is quite slow in miri.
+    #[test]
+    fn test_get_update_table_limit() {
+        let uefi = create_mock_uefi_with_get_var();
+
+        let expected: [UpdateInfo; MAX_UPDATE_CAPSULES] = array::from_fn(|_| {
+            let mut info = create_update_info();
+            info.set_time_attempted(create_time());
+            info.set_status(FWUPDATE_ATTEMPTED);
+            info
+        });
+
+        let vars = [(Ok(VAR_NAME), FWUPDATE_VENDOR); MAX_UPDATE_CAPSULES + 10];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), expected);
     }
 }
