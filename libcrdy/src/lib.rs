@@ -7,8 +7,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::module_name_repetitions)]
-// Turn off std, except when running tests.
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(target_os = "uefi", no_std)]
 
 pub mod arch;
 pub mod entry_point;
