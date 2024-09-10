@@ -271,6 +271,7 @@ mod tests {
     use uefi::Status;
 
     const VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
+    const BAD_VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-1");
 
     /// This test file is a direct copy of an efivarfs file created by
     /// `fwupd install`. The first four bytes are the variable
@@ -415,6 +416,9 @@ mod tests {
             let data = if name == VAR_NAME {
                 // Valid update info.
                 VAR_DATA[4..].to_vec()
+            } else if name == BAD_VAR_NAME {
+                // Invalid update info.
+                vec![1, 2, 3]
             } else {
                 panic!("unexpected name: {name}");
             };
@@ -515,5 +519,26 @@ mod tests {
 
         let vars = [(Ok(VAR_NAME), FWUPDATE_VENDOR)];
         assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), [info]);
+    }
+
+    /// Test that `get_update_table` deletes a variable with invalid
+    /// data and returns an error.
+    #[test]
+    fn test_get_update_table_invalid_data() {
+        let mut uefi = create_mock_uefi_with_get_var();
+        uefi.expect_delete_variable().returning(|name, vendor| {
+            assert_eq!(name, BAD_VAR_NAME);
+            assert_eq!(*vendor, FWUPDATE_VENDOR);
+            Ok(())
+        });
+
+        let vars = [
+            (Ok(VAR_NAME), FWUPDATE_VENDOR),
+            (Ok(BAD_VAR_NAME), FWUPDATE_VENDOR),
+        ];
+        assert!(matches!(
+            get_update_table(&uefi, vars.into_iter()),
+            Err(FirmwareError::UpdateInfoTooShort)
+        ));
     }
 }
