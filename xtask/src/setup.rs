@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 11;
+const SETUP_VERSION: u32 = 12;
 
 const VBOOT_REFERENCE_REPO: &str =
     "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";
@@ -50,14 +50,24 @@ fn init_repo(repo: RepoRev) -> Result<()> {
     Ok(())
 }
 
-fn init_vboot_reference(conf: &Config) -> Result<()> {
-    let repo = RepoRev {
-        repo: VBOOT_REFERENCE_REPO,
-        rev: VBOOT_REFERENCE_REV,
-        dir: conf.vboot_reference_path(),
-    };
+fn init_repos(conf: &Config) -> Result<()> {
+    let repos = [
+        RepoRev {
+            repo: VBOOT_REFERENCE_REPO,
+            rev: VBOOT_REFERENCE_REV,
+            dir: conf.vboot_reference_path(),
+        },
+        RepoRev {
+            repo: "https://android.googlesource.com/platform/system/tools/mkbootimg",
+            rev: "910c9b699c985d7bb4278b3a34c71e682ee5aeb6",
+            dir: conf.third_party_path().join("mkbootimg"),
+        },
+    ];
 
-    init_repo(repo)
+    for repo in repos {
+        init_repo(repo)?
+    }
+    Ok(())
 }
 
 fn download_and_unpack_test_data(conf: &Config) -> Result<()> {
@@ -285,7 +295,7 @@ fn run_prep_disk(conf: &Config) -> Result<()> {
 /// Run various setup operations. This must be run once before running
 /// any other xtask commands.
 pub(super) fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
-    init_vboot_reference(conf)?;
+    init_repos(conf)?;
 
     download_and_unpack_test_data(conf)?;
 
