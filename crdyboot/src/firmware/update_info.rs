@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
-use libcrdy::uefi::{Uefi, UefiImpl};
+use libcrdy::uefi::Uefi;
 use log::{error, info, warn};
 use uefi::data_types::FromSliceWithNulError;
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
@@ -182,6 +182,7 @@ pub(super) type VarIterItem<'a> = (Result<&'a CStr16, FromSliceWithNulError>, Va
 ///
 /// Any UEFI error causes early termination and the error to be returned.
 pub fn get_update_table<'name>(
+    uefi: &dyn Uefi,
     // An iterator is used here instead of `[VariableKey]` because
     // uefi-rs does not currently provide a public method for
     // constructing VariableKey, so unit tests can't create that type.
@@ -190,7 +191,7 @@ pub fn get_update_table<'name>(
     // isn't needed.
     variables: impl Iterator<Item = VarIterItem<'name>>,
 ) -> Result<Vec<UpdateInfo>, FirmwareError> {
-    let now = current_time(&UefiImpl);
+    let now = current_time(uefi);
 
     let mut updates: Vec<UpdateInfo> = Vec::new();
     for (name, vendor) in variables {
@@ -218,14 +219,15 @@ pub fn get_update_table<'name>(
 
         info!("found update {name}");
 
-        let (data, attrs) = runtime::get_variable_boxed(&name, &FWUPDATE_VENDOR)
+        let (data, attrs) = uefi
+            .get_variable_boxed(&name, &FWUPDATE_VENDOR)
             .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
 
         let mut info = match UpdateInfo::new(name.clone(), attrs, data) {
             Ok(info) => info,
             Err(err) => {
                 // Delete the malformed variable.
-                delete_variable_no_error(&UefiImpl, &name, &FWUPDATE_VENDOR);
+                delete_variable_no_error(uefi, &name, &FWUPDATE_VENDOR);
 
                 warn!("could not populate update info for {name}");
                 return Err(err);

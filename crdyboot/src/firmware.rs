@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use ext4_view::{Ext4Error, PathError};
+use libcrdy::uefi::UefiImpl;
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
@@ -183,7 +184,10 @@ fn update_firmware_impl() -> Result<(), FirmwareError> {
         .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
-    let updates = get_update_table(variables.iter().map(|var| (var.name(), var.vendor)))?;
+    let updates = get_update_table(
+        &UefiImpl,
+        variables.iter().map(|var| (var.name(), var.vendor)),
+    )?;
     info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(&updates)?;
