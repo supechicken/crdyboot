@@ -397,6 +397,12 @@ mod tests {
         assert_eq!(Time::try_from(bytes).unwrap(), time);
     }
 
+    fn create_mock_uefi_with_time() -> MockUefi {
+        let mut uefi = MockUefi::new();
+        uefi.expect_get_time().return_const(Ok(create_time()));
+        uefi
+    }
+
     /// Test that `current_time` returns `None` if an error occurs.
     #[test]
     fn test_current_time_error() {
@@ -409,8 +415,7 @@ mod tests {
     /// Test successful call to `current_time`.
     #[test]
     fn test_current_time_success() {
-        let mut uefi = MockUefi::new();
-        uefi.expect_get_time().return_const(Ok(create_time()));
+        let uefi = create_mock_uefi_with_time();
         assert_eq!(current_time(&uefi), Some(create_time()));
     }
 
@@ -425,5 +430,53 @@ mod tests {
             Err(Status::DEVICE_ERROR.into())
         });
         delete_variable_no_error(&uefi, VAR_NAME, &FWUPDATE_VENDOR);
+    }
+
+    /// Test that `get_update_table` returns no updates if there are no
+    /// variables.
+    #[test]
+    fn test_get_update_table_empty() {
+        let uefi = create_mock_uefi_with_time();
+
+        let vars = [];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), []);
+    }
+
+    /// Test that `get_update_table` skips variables with a vendor other
+    /// than `FWUPDATE_VENDOR`.
+    #[test]
+    fn test_get_update_table_other_vendor() {
+        let uefi = create_mock_uefi_with_time();
+
+        let vars = [(
+            Ok(VAR_NAME),
+            VariableVendor(guid!("dfedddc7-c8d3-4250-9e10-0d11d192421b")),
+        )];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), []);
+    }
+
+    /// Test that `get_update_table` skips variables with an invalid name.
+    #[test]
+    fn test_get_update_table_invalid_name() {
+        let uefi = create_mock_uefi_with_time();
+
+        let vars = [(
+            CStr16::from_u16_with_nul(&[0xf0, 0x9f, 0x98, 0x80]),
+            FWUPDATE_VENDOR,
+        )];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), []);
+    }
+
+    /// Test that `get_update_table` ignores `FWUPDATE_VERBOSE` and
+    /// `FWUPDATE_DEBUG_LOG`.
+    #[test]
+    fn test_get_update_table_ignore_vars() {
+        let uefi = create_mock_uefi_with_time();
+
+        let vars = [
+            (Ok(FWUPDATE_VERBOSE), FWUPDATE_VENDOR),
+            (Ok(FWUPDATE_DEBUG_LOG), FWUPDATE_VENDOR),
+        ];
+        assert_eq!(get_update_table(&uefi, vars.into_iter()).unwrap(), []);
     }
 }
