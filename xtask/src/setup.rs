@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 12;
+const SETUP_VERSION: u32 = 13;
 
 const VBOOT_REFERENCE_REPO: &str =
     "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";
@@ -61,6 +61,11 @@ fn init_repos(conf: &Config) -> Result<()> {
             repo: "https://android.googlesource.com/platform/system/tools/mkbootimg",
             rev: "910c9b699c985d7bb4278b3a34c71e682ee5aeb6",
             dir: conf.third_party_path().join("mkbootimg"),
+        },
+        RepoRev {
+            repo: "https://android.googlesource.com/platform/external/avb",
+            rev: "49f8d4549103f753549003804b0253677054f0b9",
+            dir: conf.third_party_path().join("avb"),
         },
     ];
 

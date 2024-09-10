@@ -1,4 +1,5 @@
 target/
+third_party/avb/
 third_party/mkbootimg/
 third_party/vboot_reference/
 workspace/
