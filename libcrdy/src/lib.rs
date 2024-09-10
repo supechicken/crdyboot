@@ -9,6 +9,8 @@
 #![allow(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
+extern crate alloc;
+
 pub mod arch;
 pub mod entry_point;
 pub mod launch;
