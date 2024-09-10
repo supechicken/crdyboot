@@ -270,21 +270,24 @@ mod tests {
     use uefi::runtime::{Daylight, TimeParams};
     use uefi::Status;
 
-    static VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
+    const VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
+
+    /// This test file is a direct copy of an efivarfs file created by
+    /// `fwupd install`. The first four bytes are the variable
+    /// attributes, the rest is the variable data which encodes update
+    /// info.
+    const VAR_DATA: &[u8] = include_bytes!(
+        "../../test_data/\
+            fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
+    );
 
     fn create_update_info() -> UpdateInfo {
-        // This test file is a direct copy of an efivarfs file created
-        // by `fwupd install`.
-        let data = include_bytes!(
-            "../../test_data/\
-            fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
-        );
         // Efivarfs stores the UEFI variable attributes in the first
         // four bytes.
         let attrs = VariableAttributes::from_bits_retain(u32::from_le_bytes(
-            data[0..4].try_into().unwrap(),
+            VAR_DATA[0..4].try_into().unwrap(),
         ));
-        let data = &data[4..];
+        let data = &VAR_DATA[4..];
 
         UpdateInfo::new(VAR_NAME.to_owned(), attrs, data.to_vec().into_boxed_slice()).unwrap()
     }
