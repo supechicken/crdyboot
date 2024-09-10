@@ -8,8 +8,12 @@ repository.workspace = true
 
 [dependencies]
 log.workspace = true
+mockall = { workspace = true, optional = true}
 object.workspace = true
 uefi.workspace = true
+
+[features]
+test_util = ["dep:mockall"]
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }
