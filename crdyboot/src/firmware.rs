@@ -16,6 +16,7 @@ use libcrdy::uefi::UefiImpl;
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
+use uefi::data_types::FromSliceWithNulError;
 use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
@@ -25,6 +26,7 @@ enum FirmwareError {
     GetVariableKeysFailed(Status),
     GetVariableFailed(Status),
     SetVariableFailed(Status),
+    InvalidVariableName(FromSliceWithNulError),
     UpdateInfoTooShort,
     UpdateInfoMalformedDevicePath,
     FilePathMissing,
@@ -46,6 +48,7 @@ impl Display for FirmwareError {
             }
             Self::GetVariableFailed(status) => write!(f, "failed to read variable: {status}"),
             Self::SetVariableFailed(status) => write!(f, "failed to write variable: {status}"),
+            Self::InvalidVariableName(err) => write!(f, "invalid variable name: {err}"),
             Self::UpdateInfoTooShort => write!(f, "invalid update variable: not enough data"),
             Self::UpdateInfoMalformedDevicePath => {
                 write!(f, "invalid update variable: malformed device path")
@@ -187,7 +190,7 @@ fn update_firmware_impl() -> Result<(), FirmwareError> {
     let updates = get_update_table(
         &UefiImpl,
         variables.iter().map(|var| (var.name(), var.vendor)),
-    )?;
+    );
     info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(&updates)?;
