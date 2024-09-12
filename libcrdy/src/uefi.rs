@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 use alloc::boxed::Box;
+use core::ops::Deref;
+use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
+use uefi::proto::device_path::DevicePath;
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
-use uefi::CStr16;
+use uefi::{CStr16, Handle};
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
 ///
@@ -21,6 +24,8 @@ pub trait Uefi {
     ) -> uefi::Result<(Box<[u8]>, VariableAttributes)>;
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
+
+    fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
 }
 
 pub struct UefiImpl;
@@ -40,5 +45,41 @@ impl Uefi for UefiImpl {
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result {
         runtime::delete_variable(name, vendor)
+    }
+
+    fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath> {
+        // Safety: this protocol cannot be opened in exclusive
+        // mode. This is OK here as device paths are immutable.
+        unsafe {
+            boot::open_protocol(
+                OpenProtocolParams {
+                    handle,
+                    agent: boot::image_handle(),
+                    controller: None,
+                },
+                OpenProtocolAttributes::GetProtocol,
+            )
+        }
+        .map(ScopedDevicePath::Protocol)
+    }
+}
+
+/// Wrapper around `ScopedProtocol<DevicePath>` that allows for mocking.
+#[derive(Debug)]
+pub enum ScopedDevicePath {
+    Protocol(ScopedProtocol<DevicePath>),
+    #[cfg(feature = "test_util")]
+    Boxed(Box<DevicePath>),
+}
+
+impl Deref for ScopedDevicePath {
+    type Target = DevicePath;
+
+    fn deref(&self) -> &DevicePath {
+        match self {
+            Self::Protocol(p) => p,
+            #[cfg(feature = "test_util")]
+            Self::Boxed(b) => b,
+        }
     }
 }
