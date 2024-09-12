@@ -2,6 +2,7 @@
 # This list is altered via sed when building with the ebuild, keep in
 # sync with `src_prepare` in `crdyboot-9999.ebuild`.
 members = [
+    "cmem",
     "crdyboot",
     "crdyshim",
     "libcrdy",
@@ -18,6 +19,7 @@ license = "BSD-3-Clause"
 repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
 
 [workspace.dependencies]
+cmem = { path = "cmem" }
 ed25519-compact = { version = "1.0.0", default-features = false }
 libcrdy = { path = "libcrdy" }
 log = { version = "0.4.0", default-features = false }

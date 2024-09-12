@@ -25,25 +25,10 @@ mod printf;
 mod return_codes;
 mod stubs;
 
-// The UEFI targets don't have the C library. This module provides
-// malloc/calloc/free wrappers that delegate to Rust's allocator.
-#[cfg(not(target_env = "gnu"))]
-mod malloc {
-    include!("../../third_party/malloc.rs");
-
-    #[no_mangle]
-    unsafe extern "C" fn calloc(elem_count: usize, elem_size: usize) -> *mut u8 {
-        if let Some(bytes) = elem_count.checked_mul(elem_size) {
-            let ptr = malloc(bytes);
-            if !ptr.is_null() {
-                ptr.write_bytes(0, bytes);
-            }
-            ptr
-        } else {
-            core::ptr::null_mut()
-        }
-    }
-}
+// The UEFI targets don't have the C library.
+// Include `cmem` for the malloc/calloc/free wrappers
+// for UEFI that delegate to Rust's allocator.
+extern crate cmem as _;
 
 /// Bindgen wrappers for parts of vboot_reference.
 #[allow(dead_code)]

@@ -1,0 +1,8 @@
+[package]
+name = "cmem"
+version = "0.1.0"
+description = "extern C dynamic memory functions implemented using the rust allocator"
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
