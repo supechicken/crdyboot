@@ -4,11 +4,11 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
-use libcrdy::uefi::{Uefi, UefiImpl};
+use libcrdy::uefi::{ScopedDevicePath, Uefi, UefiImpl};
 use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
-use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType};
+use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo as UefiDiskIo;
@@ -100,21 +100,12 @@ impl Display for GptDiskError {
 }
 
 /// Open `DevicePath` protocol for `handle`.
-fn device_path_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
-    // Safety: this protocol cannot be opened in exclusive mode. This
-    // should be fine here as device paths are immutable.
-    let device_path = unsafe {
-        boot::open_protocol::<DevicePath>(
-            OpenProtocolParams {
-                handle,
-                agent: boot::image_handle(),
-                controller: None,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
+fn device_path_for_handle(
+    uefi: &dyn Uefi,
+    handle: Handle,
+) -> Result<ScopedDevicePath, GptDiskError> {
+    uefi.device_path_for_handle(handle)
         .map_err(|err| GptDiskError::OpenDevicePathProtocolFailed(err.status()))
-    }?;
-    Ok(device_path)
 }
 
 /// True if `potential_parent` is the handle representing the disk that
@@ -124,13 +115,13 @@ fn device_path_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, 
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
 fn is_parent_disk(
-    _uefi: &dyn Uefi,
+    uefi: &dyn Uefi,
     potential_parent: Handle,
     partition: Handle,
 ) -> Result<bool, GptDiskError> {
-    let potential_parent_device_path = device_path_for_handle(potential_parent)?;
+    let potential_parent_device_path = device_path_for_handle(uefi, potential_parent)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
-    let partition_device_path = device_path_for_handle(partition)?;
+    let partition_device_path = device_path_for_handle(uefi, partition)?;
     let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
     for (parent_path, partition_path) in
@@ -223,10 +214,10 @@ fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
 ///
 /// Both handles are assumed to be partition handles. If they are not,
 /// the function may fail with an error or return `Ok(false)`.
-fn is_sibling_partition(_uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
+fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
     // Get the device path for both partitions.
-    let p1 = device_path_for_handle(p1)?;
-    let p2 = device_path_for_handle(p2)?;
+    let p1 = device_path_for_handle(uefi, p1)?;
+    let p2 = device_path_for_handle(uefi, p2)?;
 
     // Check that both paths have the same number of nodes.
     let count = p1.node_iter().count();
