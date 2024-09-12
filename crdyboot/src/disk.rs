@@ -424,3 +424,189 @@ impl DiskIo for GptDisk {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem;
+    use libcrdy::uefi::MockUefi;
+    use uefi::guid;
+    use uefi::proto::device_path::build::acpi::Acpi;
+    use uefi::proto::device_path::build::hardware::Pci;
+    use uefi::proto::device_path::build::media::{FilePath, HardDrive};
+    use uefi::proto::device_path::build::messaging::{MacAddress, Scsi};
+    use uefi::proto::device_path::build::{self, BuildError, BuildNode};
+    use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
+    use uefi::proto::device_path::DevicePath;
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum DeviceKind {
+        HardDrive = 0,
+        Partition1,
+        FilePath,
+        MacAddr,
+    }
+
+    impl DeviceKind {
+        fn all() -> &'static [Self] {
+            &[
+                Self::HardDrive,
+                Self::Partition1,
+                Self::FilePath,
+                Self::MacAddr,
+            ]
+        }
+
+        fn create_device_path(self) -> Result<ScopedDevicePath, BuildError> {
+            let mut nodes: Vec<&dyn BuildNode> = Vec::new();
+
+            let hd1 = [
+                &Acpi { hid: 1, uid: 2 } as &dyn BuildNode,
+                &Pci {
+                    function: 3,
+                    device: 4,
+                },
+                &Scsi {
+                    target_id: 5,
+                    logical_unit_number: 6,
+                },
+            ];
+            let partition1 = HardDrive {
+                partition_number: 12,
+                partition_start: 299008,
+                partition_size: 131072,
+                partition_signature: PartitionSignature::Guid(guid!(
+                    "99cc6f39-2fd1-4d85-b15a-543e7b023a1f"
+                )),
+                partition_format: PartitionFormat::GPT,
+            };
+            let path = FilePath {
+                path_name: cstr16!("abc"),
+            };
+
+            match self {
+                Self::HardDrive => nodes.extend(hd1),
+                Self::Partition1 => {
+                    nodes.extend(hd1);
+                    nodes.push(&partition1);
+                }
+                Self::FilePath => {
+                    nodes.extend(hd1);
+                    nodes.push(&path);
+                }
+                Self::MacAddr => nodes.push(&MacAddress {
+                    mac_address: [1; 32],
+                    interface_type: 2,
+                }),
+            };
+
+            let mut vec = Vec::new();
+            let mut builder = build::DevicePathBuilder::with_vec(&mut vec);
+            for node in nodes {
+                builder = builder.push(node)?;
+            }
+            let _ = builder.finalize()?;
+
+            let path: Box<[u8]> = vec.into_boxed_slice();
+            // TODO(b/366018844): add a way to construct Box<DevicePath>` to
+            // uefi-rs.
+            let path: Box<DevicePath> = unsafe { mem::transmute(path) };
+
+            Ok(ScopedDevicePath::Boxed(path))
+        }
+    }
+
+    /// Get a device handle. This will always return the same handle for
+    /// the given `kind`.
+    fn get_handle(kind: DeviceKind) -> Handle {
+        // A handle is basically a void pointer. We don't care what the
+        // particular value of that pointer is, it just needs to
+        // consistent for each `DeviceKind`.
+        //
+        // The easiest thing to do would be `kind as usize as *const
+        // c_void`, but miri doesn't like pointers being created out of
+        // thin air like that, so instead create a static array and
+        // create pointers to its elements. Since the elements have a
+        // non-zero size, each element is guaranteed to have a different
+        // address.
+        let index = kind as usize;
+        static H: [u8; 8] = [0; 8];
+        let ptr: *const u8 = &H[index];
+        let ptr: *mut _ = ptr.cast_mut().cast();
+        unsafe { Handle::from_ptr(ptr) }.unwrap()
+    }
+
+    fn handle_to_kind(handle: Handle) -> DeviceKind {
+        for kind in DeviceKind::all() {
+            let kind = *kind;
+            if handle == get_handle(kind) {
+                return kind;
+            }
+        }
+        panic!("invalid handle");
+    }
+
+    fn create_mock_uefi() -> MockUefi {
+        let mut uefi = MockUefi::new();
+        uefi.expect_device_path_for_handle().returning(|h| {
+            let kind = handle_to_kind(h);
+            Ok(kind.create_device_path().unwrap())
+        });
+        uefi
+    }
+
+    /// Test that `is_parent_disk` returns true for a valid child
+    /// partition.
+    #[test]
+    fn test_is_parent_disk_partition() {
+        let uefi = create_mock_uefi();
+
+        assert!(is_parent_disk(
+            &uefi,
+            get_handle(DeviceKind::HardDrive),
+            get_handle(DeviceKind::Partition1)
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_parent_disk` returns false if the parent has nodes
+    /// the child doesn't have.
+    #[test]
+    fn test_is_parent_disk_nonmatching() {
+        let uefi = create_mock_uefi();
+
+        assert!(!is_parent_disk(
+            &uefi,
+            get_handle(DeviceKind::MacAddr),
+            get_handle(DeviceKind::Partition1)
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_parent_disk` returns false if the child doesn't
+    /// end with a hard drive partition node.
+    #[test]
+    fn test_is_parent_disk_nonpartition() {
+        let uefi = create_mock_uefi();
+
+        assert!(!is_parent_disk(
+            &uefi,
+            get_handle(DeviceKind::HardDrive),
+            get_handle(DeviceKind::FilePath)
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_parent_disk` returns false for a parent == child.
+    #[test]
+    fn test_is_parent_disk_harddrive() {
+        let uefi = create_mock_uefi();
+
+        assert!(!is_parent_disk(
+            &uefi,
+            get_handle(DeviceKind::HardDrive),
+            get_handle(DeviceKind::HardDrive)
+        )
+        .unwrap());
+    }
+}
