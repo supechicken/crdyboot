@@ -420,7 +420,7 @@ mod tests {
     use super::*;
     use core::mem;
     use libcrdy::uefi::MockUefi;
-    use uefi::guid;
+    use uefi::data_types::chars::NUL_16;
     use uefi::proto::device_path::build::acpi::Acpi;
     use uefi::proto::device_path::build::hardware::Pci;
     use uefi::proto::device_path::build::media::{FilePath, HardDrive};
@@ -428,6 +428,10 @@ mod tests {
     use uefi::proto::device_path::build::{self, BuildError, BuildNode};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::proto::device_path::DevicePath;
+    use uefi::proto::media::partition::{
+        GptPartitionAttributes, GptPartitionEntry, GptPartitionType, MbrOsType, MbrPartitionRecord,
+    };
+    use uefi::{guid, CStr16};
 
     #[derive(Clone, Copy, PartialEq)]
     enum DeviceKind {
@@ -709,5 +713,64 @@ mod tests {
             get_handle(DeviceKind::FilePath),
         )
         .unwrap());
+    }
+
+    fn create_gpt_partition_info(name: &CStr16) -> PartitionInfo {
+        let mut partition_name = [NUL_16; 36];
+        let name = name.as_slice();
+        partition_name[..name.len()].copy_from_slice(name);
+
+        PartitionInfo::Gpt(GptPartitionEntry {
+            partition_type_guid: GptPartitionType(guid!("7ce8b0e4-20a9-4edd-9982-fe9c84e06e6f")),
+            unique_partition_guid: guid!("1fa90113-672a-4c30-89c6-1b87fe019adc"),
+            starting_lba: 0,
+            ending_lba: 10000,
+            attributes: GptPartitionAttributes::empty(),
+            partition_name,
+        })
+    }
+
+    fn create_mock_uefi_with_partition_info(info: PartitionInfo) -> MockUefi {
+        let mut uefi = MockUefi::new();
+        uefi.expect_partition_info_for_handle()
+            .return_const(Ok(info));
+        uefi
+    }
+
+    /// Test that `is_stateful_partition` returns true for a GPT
+    /// partition named "STATE".
+    #[test]
+    fn test_is_stateful_partition_true() {
+        let info = create_gpt_partition_info(cstr16!("STATE"));
+        let uefi = create_mock_uefi_with_partition_info(info);
+
+        assert!(is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
+    }
+
+    /// Test that `is_stateful_partition` returns false for a GPT
+    /// partition not named "STATE".
+    #[test]
+    fn test_is_stateful_partition_wrong_name() {
+        let info = create_gpt_partition_info(cstr16!("STATEJUSTKIDDING"));
+        let uefi = create_mock_uefi_with_partition_info(info);
+
+        assert!(!is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
+    }
+
+    /// Test that `is_stateful_partition` returns false for MBR
+    /// partitions.
+    #[test]
+    fn test_is_stateful_partition_mbr() {
+        let info = MbrPartitionRecord {
+            boot_indicator: 0,
+            starting_chs: [1, 2, 3],
+            os_type: MbrOsType(0),
+            ending_chs: [4, 5, 6],
+            starting_lba: 0,
+            size_in_lba: 10000,
+        };
+        let uefi = create_mock_uefi_with_partition_info(PartitionInfo::Mbr(info));
+
+        assert!(!is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
     }
 }
