@@ -443,6 +443,8 @@ mod tests {
     enum DeviceKind {
         HardDrive = 0,
         Partition1,
+        Partition2,
+        PartitionOnAnotherDrive,
         FilePath,
         MacAddr,
     }
@@ -452,6 +454,8 @@ mod tests {
             &[
                 Self::HardDrive,
                 Self::Partition1,
+                Self::Partition2,
+                Self::PartitionOnAnotherDrive,
                 Self::FilePath,
                 Self::MacAddr,
             ]
@@ -471,6 +475,17 @@ mod tests {
                     logical_unit_number: 6,
                 },
             ];
+            let hd2 = [
+                &Acpi { hid: 10, uid: 20 } as &dyn BuildNode,
+                &Pci {
+                    function: 30,
+                    device: 40,
+                },
+                &Scsi {
+                    target_id: 50,
+                    logical_unit_number: 60,
+                },
+            ];
             let partition1 = HardDrive {
                 partition_number: 12,
                 partition_start: 299008,
@@ -480,6 +495,10 @@ mod tests {
                 )),
                 partition_format: PartitionFormat::GPT,
             };
+            let partition2 = HardDrive {
+                partition_number: 13,
+                ..partition1
+            };
             let path = FilePath {
                 path_name: cstr16!("abc"),
             };
@@ -488,6 +507,16 @@ mod tests {
                 Self::HardDrive => nodes.extend(hd1),
                 Self::Partition1 => {
                     nodes.extend(hd1);
+                    nodes.push(&partition1);
+                }
+                Self::Partition2 => {
+                    nodes.extend(hd1);
+                    nodes.push(&partition2);
+                }
+                Self::PartitionOnAnotherDrive => {
+                    nodes.extend(hd2);
+                    // This partition is intentionally identical to the
+                    // one on hd1.
                     nodes.push(&partition1);
                 }
                 Self::FilePath => {
@@ -639,5 +668,56 @@ mod tests {
             find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)),
             Err(GptDiskError::ParentDiskNotFound)
         ));
+    }
+
+    /// Test that `is_sibling_partition` returns true for sibling partitions.
+    #[test]
+    fn test_is_sibling_partition_true() {
+        let uefi = create_mock_uefi();
+        assert!(is_sibling_partition(
+            &uefi,
+            get_handle(DeviceKind::Partition1),
+            get_handle(DeviceKind::Partition2),
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_sibling_partition` returns false for partitions on
+    /// different drives.
+    #[test]
+    fn test_is_sibling_partition_false() {
+        let uefi = create_mock_uefi();
+        assert!(!is_sibling_partition(
+            &uefi,
+            get_handle(DeviceKind::Partition1),
+            get_handle(DeviceKind::PartitionOnAnotherDrive),
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_sibling_partition` returns false for device paths
+    /// of different lengths.
+    #[test]
+    fn test_is_sibling_partition_different_lengths() {
+        let uefi = create_mock_uefi();
+        assert!(!is_sibling_partition(
+            &uefi,
+            get_handle(DeviceKind::Partition1),
+            get_handle(DeviceKind::HardDrive),
+        )
+        .unwrap());
+    }
+
+    /// Test that `is_sibling_partition` returns false for paths that
+    /// end with a non-partition node.
+    #[test]
+    fn test_is_sibling_partition_non_partition() {
+        let uefi = create_mock_uefi();
+        assert!(!is_sibling_partition(
+            &uefi,
+            get_handle(DeviceKind::Partition1),
+            get_handle(DeviceKind::FilePath),
+        )
+        .unwrap());
     }
 }
