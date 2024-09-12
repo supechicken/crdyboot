@@ -4,6 +4,7 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
@@ -122,7 +123,11 @@ fn device_path_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, 
 /// This is determined by looking at the Device Paths associated with each
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
-fn is_parent_disk(potential_parent: Handle, partition: Handle) -> Result<bool, GptDiskError> {
+fn is_parent_disk(
+    _uefi: &dyn Uefi,
+    potential_parent: Handle,
+    partition: Handle,
+) -> Result<bool, GptDiskError> {
     let potential_parent_device_path = device_path_for_handle(potential_parent)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
     let partition_device_path = device_path_for_handle(partition)?;
@@ -153,11 +158,12 @@ fn is_parent_disk(potential_parent: Handle, partition: Handle) -> Result<bool, G
 /// Search `block_io_handles` for the device that is a parent of
 /// `partition_handle`. See `is_parent_disk` for details.
 fn find_parent_disk(
+    uefi: &dyn Uefi,
     block_io_handles: &[Handle],
     partition_handle: Handle,
 ) -> Result<Handle, GptDiskError> {
     for handle in block_io_handles {
-        if is_parent_disk(*handle, partition_handle)? {
+        if is_parent_disk(uefi, *handle, partition_handle)? {
             return Ok(*handle);
         }
     }
@@ -179,6 +185,8 @@ fn find_esp_partition_handle() -> Result<Handle, GptDiskError> {
 }
 
 fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
+    let uefi = &UefiImpl;
+
     let partition_handle = find_esp_partition_handle()?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -187,7 +195,7 @@ fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
         .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle = find_parent_disk(&block_io_handles, partition_handle)?;
+    let disk_handle = find_parent_disk(uefi, &block_io_handles, partition_handle)?;
 
     // Open the protocol with `GetProtocol` instead of `Exclusive`. On
     // the X1Cg9, opening the protocol in exclusive mode takes over
@@ -215,7 +223,7 @@ fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
 ///
 /// Both handles are assumed to be partition handles. If they are not,
 /// the function may fail with an error or return `Ok(false)`.
-fn is_sibling_partition(p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
+fn is_sibling_partition(_uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
     // Get the device path for both partitions.
     let p1 = device_path_for_handle(p1)?;
     let p2 = device_path_for_handle(p2)?;
@@ -294,6 +302,8 @@ fn is_stateful_partition(partition_handle: Handle) -> Result<bool, GptDiskError>
 /// partitions from disks other than the one this executable is running
 /// from.
 fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
+    let uefi = &UefiImpl;
+
     let esp_partition_handle = find_esp_partition_handle()?;
 
     // Get all handles that support the partition info protocol.
@@ -310,7 +320,7 @@ fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
         // user is running from an installed system but also has an
         // installer USB plugged in, this ensures that we find the
         // partition on the internal disk.
-        if is_sibling_partition(esp_partition_handle, handle)? {
+        if is_sibling_partition(uefi, esp_partition_handle, handle)? {
             return Ok(handle);
         }
     }
