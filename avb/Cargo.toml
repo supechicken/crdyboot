@@ -8,6 +8,7 @@ license = "MIT AND BSD-3-Clause"
 repository.workspace = true
 
 [dependencies]
+cmem.workspace = true
 
 [build-dependencies]
 bindgen.workspace = true

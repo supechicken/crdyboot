@@ -29,3 +29,8 @@ mod avb_sysdeps;
 pub mod avb_sys {
     include!(concat!(env!("OUT_DIR"), "/avb_bindgen.rs"));
 }
+
+// The UEFI targets don't have the C library. Force the inclusion
+// of `cmem` which has malloc/calloc/free wrappers that
+// delegate to Rust's allocator.
+extern crate cmem as _;

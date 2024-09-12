@@ -50,14 +50,30 @@ unsafe extern "C" fn avb_abort() {
     panic!("abort called")
 }
 
-#[no_mangle]
-unsafe extern "C" fn avb_malloc_(_size: usize) -> *mut c_void {
-    todo!()
+// Declare the extern C functions that avb_malloc and avb_free
+// will delegate to.
+// These will need to be included elsewhere either via
+// the mallocalloc crate or available from the libc as
+// is provided when running tests.
+extern "C" {
+    fn malloc(size: usize) -> *mut c_void;
+    fn free(ptr: *mut c_void);
 }
 
 #[no_mangle]
-unsafe extern "C" fn avb_free(_ptr: *mut c_void) {
-    todo!()
+unsafe extern "C" fn avb_malloc_(size: usize) -> *mut c_void {
+    // Pass the call to the extern C function for malloc.
+    // This is either included with libc (on the host) or expected
+    // to be defined by `cmem` for the uefi target.
+    malloc(size)
+}
+
+#[no_mangle]
+unsafe extern "C" fn avb_free(ptr: *mut c_void) {
+    // Pass the call to the extern C function for free.
+    // This is either included with libc (on the host) or expected
+    // to be defined by `cmem` for the uefi target.
+    free(ptr);
 }
 
 #[no_mangle]
