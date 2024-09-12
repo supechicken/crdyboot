@@ -99,7 +99,7 @@ impl Display for GptDiskError {
 }
 
 /// Open `DevicePath` protocol for `handle`.
-fn device_paths_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
+fn device_path_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>, GptDiskError> {
     // Safety: this protocol cannot be opened in exclusive mode. This
     // should be fine here as device paths are immutable.
     let device_path = unsafe {
@@ -123,9 +123,9 @@ fn device_paths_for_handle(handle: Handle) -> Result<ScopedProtocol<DevicePath>,
 /// handle. The parent device should have exactly the same set of paths, except
 /// that the partition paths end with a Hard Drive Media Device Path.
 fn is_parent_disk(potential_parent: Handle, partition: Handle) -> Result<bool, GptDiskError> {
-    let potential_parent_device_path = device_paths_for_handle(potential_parent)?;
+    let potential_parent_device_path = device_path_for_handle(potential_parent)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
-    let partition_device_path = device_paths_for_handle(partition)?;
+    let partition_device_path = device_path_for_handle(partition)?;
     let mut partition_device_path_node_iter = partition_device_path.node_iter();
 
     for (parent_path, partition_path) in
@@ -217,8 +217,8 @@ fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
 /// the function may fail with an error or return `Ok(false)`.
 fn is_sibling_partition(p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
     // Get the device path for both partitions.
-    let p1 = device_paths_for_handle(p1)?;
-    let p2 = device_paths_for_handle(p2)?;
+    let p1 = device_path_for_handle(p1)?;
+    let p2 = device_path_for_handle(p2)?;
 
     // Check that both paths have the same number of nodes.
     let count = p1.node_iter().count();
