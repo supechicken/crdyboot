@@ -6,8 +6,9 @@ use alloc::boxed::Box;
 use core::ops::Deref;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::device_path::DevicePath;
+use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
-use uefi::{CStr16, Handle};
+use uefi::{CStr16, Handle, Status};
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
 ///
@@ -26,6 +27,8 @@ pub trait Uefi {
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
+
+    fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo>;
 }
 
 pub struct UefiImpl;
@@ -62,6 +65,34 @@ impl Uefi for UefiImpl {
         }
         .map(ScopedDevicePath::Protocol)
     }
+
+    fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo> {
+        // Use non-exclusive mode because opening disk handles in
+        // exclusive mode can be slow.
+        //
+        // Safety: the protocol is closed within this function, and
+        // there is no risk of it being mutated by other code during
+        // this function call.
+        let info = unsafe {
+            boot::open_protocol::<partition::PartitionInfo>(
+                OpenProtocolParams {
+                    handle,
+                    agent: boot::image_handle(),
+                    controller: None,
+                },
+                OpenProtocolAttributes::GetProtocol,
+            )
+        }?;
+
+        if let Some(gpt) = info.gpt_partition_entry() {
+            Ok(PartitionInfo::Gpt(*gpt))
+        } else if let Some(mbr) = info.mbr_partition_record() {
+            Ok(PartitionInfo::Mbr(*mbr))
+        } else {
+            // This should never happen in practice.
+            Err(Status::UNSUPPORTED.into())
+        }
+    }
 }
 
 /// Wrapper around `ScopedProtocol<DevicePath>` that allows for mocking.
@@ -82,4 +113,10 @@ impl Deref for ScopedDevicePath {
             Self::Boxed(b) => b,
         }
     }
+}
+
+#[derive(Clone)]
+pub enum PartitionInfo {
+    Mbr(MbrPartitionRecord),
+    Gpt(GptPartitionEntry),
 }
