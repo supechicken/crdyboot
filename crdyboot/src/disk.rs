@@ -609,4 +609,35 @@ mod tests {
         )
         .unwrap());
     }
+
+    /// Test that `find_parent_disk` identifies the correct handle.
+    #[test]
+    fn test_find_parent_disk_success() {
+        let uefi = create_mock_uefi();
+
+        let all_handles: Vec<_> = DeviceKind::all().iter().map(|k| get_handle(*k)).collect();
+
+        assert_eq!(
+            find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)).unwrap(),
+            get_handle(DeviceKind::HardDrive)
+        );
+    }
+
+    /// Test that `find_parent_disk` returns an error if the parent is
+    /// not found.
+    #[test]
+    fn test_find_parent_disk_not_found() {
+        let uefi = create_mock_uefi();
+
+        let all_handles: Vec<_> = DeviceKind::all()
+            .iter()
+            .filter(|k| **k != DeviceKind::HardDrive)
+            .map(|k| get_handle(*k))
+            .collect();
+
+        assert!(matches!(
+            find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)),
+            Err(GptDiskError::ParentDiskNotFound)
+        ));
+    }
 }
