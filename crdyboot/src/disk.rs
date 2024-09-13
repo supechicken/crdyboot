@@ -9,7 +9,6 @@ use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
-use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo as UefiDiskIo;
 use uefi::Char16;
@@ -163,15 +162,12 @@ fn find_parent_disk(
 
 /// Find the [`Handle`] corresponding to the ESP partition that this
 /// executable is running from.
-fn find_esp_partition_handle(_uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
-    // Get the LoadedImage protocol for the image handle. This provides
-    // a device handle which should correspond to the partition that the
-    // image was loaded from.
-    let loaded_image = boot::open_protocol_exclusive::<LoadedImage>(boot::image_handle())
-        .map_err(|err| GptDiskError::OpenLoadedImageProtocolFailed(err.status()))?;
-    loaded_image
-        .device()
-        .ok_or(GptDiskError::LoadedImageHasNoDevice)
+fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
+    match uefi.find_esp_partition_handle() {
+        Ok(Some(handle)) => Ok(handle),
+        Ok(None) => Err(GptDiskError::LoadedImageHasNoDevice),
+        Err(err) => Err(GptDiskError::OpenLoadedImageProtocolFailed(err.status())),
+    }
 }
 
 fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
