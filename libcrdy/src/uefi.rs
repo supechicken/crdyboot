@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::ops::Deref;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::device_path::DevicePath;
@@ -26,6 +27,8 @@ pub trait Uefi {
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
 
+    fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
+
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
 
     fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo>;
@@ -48,6 +51,10 @@ impl Uefi for UefiImpl {
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result {
         runtime::delete_variable(name, vendor)
+    }
+
+    fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<partition::PartitionInfo>()
     }
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath> {
