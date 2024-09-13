@@ -16,7 +16,7 @@ use uefi::proto::media::partition::PartitionInfo;
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum GptDiskError {
     /// The disk block size is zero.
     InvalidBlockSize,
@@ -664,10 +664,10 @@ mod tests {
             .map(|k| get_handle(*k))
             .collect();
 
-        assert!(matches!(
+        assert_eq!(
             find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)),
             Err(GptDiskError::ParentDiskNotFound)
-        ));
+        );
     }
 
     /// Test that `is_sibling_partition` returns true for sibling partitions.
