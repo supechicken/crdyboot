@@ -769,4 +769,61 @@ mod tests {
 
         assert!(!is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
     }
+
+    /// Test that `find_stateful_partition_handle` succeeds with a valid
+    /// sibling stateful partition.
+    #[test]
+    fn test_find_stateful_partition_handle_success() {
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+        uefi.expect_find_partition_info_handles()
+            .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
+        let info = create_gpt_partition_info(cstr16!("STATE"));
+        uefi.expect_partition_info_for_handle()
+            .return_const(Ok(info));
+
+        assert_eq!(
+            find_stateful_partition_handle(&uefi).unwrap(),
+            get_handle(DeviceKind::Partition2)
+        );
+    }
+
+    /// Test that `find_stateful_partition_handle` fails if there's no
+    /// stateful partition.
+    #[test]
+    fn test_find_stateful_partition_handle_no_stateful() {
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+        uefi.expect_find_partition_info_handles()
+            .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
+        let info = create_gpt_partition_info(cstr16!("STATEJUSTKIDDING"));
+        uefi.expect_partition_info_for_handle()
+            .return_const(Ok(info));
+
+        assert_eq!(
+            find_stateful_partition_handle(&uefi),
+            Err(GptDiskError::StatefulPartitionNotFound)
+        );
+    }
+
+    /// Test that `find_stateful_partition_handle` fails if the only
+    /// stateful partition is on a different drive.
+    #[test]
+    fn test_find_stateful_partition_handle_different_drive() {
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+        uefi.expect_find_partition_info_handles()
+            .returning(|| Ok(vec![get_handle(DeviceKind::PartitionOnAnotherDrive)]));
+        let info = create_gpt_partition_info(cstr16!("STATE"));
+        uefi.expect_partition_info_for_handle()
+            .return_const(Ok(info));
+
+        assert_eq!(
+            find_stateful_partition_handle(&uefi),
+            Err(GptDiskError::StatefulPartitionNotFound)
+        );
+    }
 }
