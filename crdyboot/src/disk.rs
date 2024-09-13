@@ -164,7 +164,7 @@ fn find_parent_disk(
 
 /// Find the [`Handle`] corresponding to the ESP partition that this
 /// executable is running from.
-fn find_esp_partition_handle() -> Result<Handle, GptDiskError> {
+fn find_esp_partition_handle(_uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     // Get the LoadedImage protocol for the image handle. This provides
     // a device handle which should correspond to the partition that the
     // image was loaded from.
@@ -178,7 +178,7 @@ fn find_esp_partition_handle() -> Result<Handle, GptDiskError> {
 fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
     let uefi = &UefiImpl;
 
-    let partition_handle = find_esp_partition_handle()?;
+    let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
@@ -253,7 +253,7 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
 /// corresponds to a ChromeOS stateful partition.
 ///
 /// This checks if the partition's name is "STATE".
-fn is_stateful_partition(partition_handle: Handle) -> Result<bool, GptDiskError> {
+fn is_stateful_partition(_uefi: &dyn Uefi, partition_handle: Handle) -> Result<bool, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &[Char16] = cstr16!("STATE").as_slice_with_nul();
 
@@ -292,10 +292,8 @@ fn is_stateful_partition(partition_handle: Handle) -> Result<bool, GptDiskError>
 /// This finds the stateful partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
-    let uefi = &UefiImpl;
-
-    let esp_partition_handle = find_esp_partition_handle()?;
+fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
+    let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
     let partition_info_handles = boot::find_handles::<PartitionInfo>()
@@ -303,7 +301,7 @@ fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
 
     for handle in partition_info_handles {
         // Ignore partitions with a name other than "STATE".
-        if !is_stateful_partition(handle)? {
+        if !is_stateful_partition(uefi, handle)? {
             continue;
         }
 
@@ -325,7 +323,9 @@ fn find_stateful_partition_handle() -> Result<Handle, GptDiskError> {
 /// Returns a tuple containing the protocol and a media ID of type
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
 pub fn open_stateful_partition() -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
-    let stateful_partition_handle = find_stateful_partition_handle()?;
+    let uefi = &UefiImpl;
+
+    let stateful_partition_handle = find_stateful_partition_handle(uefi)?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
