@@ -4,7 +4,7 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
-use libcrdy::uefi::{ScopedDevicePath, Uefi, UefiImpl};
+use libcrdy::uefi::{PartitionInfo, ScopedDevicePath, Uefi, UefiImpl};
 use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
@@ -12,7 +12,7 @@ use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo as UefiDiskIo;
-use uefi::proto::media::partition::PartitionInfo;
+use uefi::proto::media::partition;
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
@@ -253,26 +253,16 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
 /// corresponds to a ChromeOS stateful partition.
 ///
 /// This checks if the partition's name is "STATE".
-fn is_stateful_partition(_uefi: &dyn Uefi, partition_handle: Handle) -> Result<bool, GptDiskError> {
+fn is_stateful_partition(uefi: &dyn Uefi, partition_handle: Handle) -> Result<bool, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &[Char16] = cstr16!("STATE").as_slice_with_nul();
 
-    // See comment in `find_disk_block_io` for why the non-exclusive
-    // mode is used.
-    let partition_info = unsafe {
-        boot::open_protocol::<PartitionInfo>(
-            OpenProtocolParams {
-                handle: partition_handle,
-                agent: boot::image_handle(),
-                controller: None,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
-        .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))
-    }?;
+    let partition_info = uefi
+        .partition_info_for_handle(partition_handle)
+        .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))?;
 
     // Ignore non-GPT partitions.
-    let Some(partition_info) = partition_info.gpt_partition_entry() else {
+    let PartitionInfo::Gpt(partition_info) = partition_info else {
         return Ok(false);
     };
 
@@ -296,7 +286,7 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
     let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
-    let partition_info_handles = boot::find_handles::<PartitionInfo>()
+    let partition_info_handles = boot::find_handles::<partition::PartitionInfo>()
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
