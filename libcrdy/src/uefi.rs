@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use core::ops::Deref;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::device_path::DevicePath;
+use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
 use uefi::{CStr16, Handle, Status};
@@ -30,6 +31,10 @@ pub trait Uefi {
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
+
+    /// Find the [`Handle`] corresponding to the ESP partition that this
+    /// executable is running from.
+    fn find_esp_partition_handle(&self) -> uefi::Result<Option<Handle>>;
 
     fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo>;
 }
@@ -71,6 +76,14 @@ impl Uefi for UefiImpl {
             )
         }
         .map(ScopedDevicePath::Protocol)
+    }
+
+    fn find_esp_partition_handle(&self) -> uefi::Result<Option<Handle>> {
+        // Get the LoadedImage protocol for the image handle. This provides
+        // a device handle which should correspond to the partition that the
+        // image was loaded from.
+        let loaded_image = boot::open_protocol_exclusive::<LoadedImage>(boot::image_handle())?;
+        Ok(loaded_image.device())
     }
 
     fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo> {
