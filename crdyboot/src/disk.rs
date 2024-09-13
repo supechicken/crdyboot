@@ -12,7 +12,6 @@ use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo as UefiDiskIo;
-use uefi::proto::media::partition;
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
@@ -286,7 +285,8 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
     let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
-    let partition_info_handles = boot::find_handles::<partition::PartitionInfo>()
+    let partition_info_handles = uefi
+        .find_partition_info_handles()
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
