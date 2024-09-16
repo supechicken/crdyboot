@@ -13,6 +13,7 @@ use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::tpm::extend_pcr_and_log;
+use libcrdy::uefi::UefiImpl;
 use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
@@ -181,7 +182,7 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new().map_err(CrdybootError::GptDisk)?,
+        &mut GptDisk::new(&UefiImpl).map_err(CrdybootError::GptDisk)?,
     )
     .map_err(CrdybootError::LoadKernelFailed)?;
 

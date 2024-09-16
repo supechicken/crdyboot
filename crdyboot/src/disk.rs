@@ -170,9 +170,7 @@ fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     }
 }
 
-fn find_disk_block_io() -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
-    let uefi = &UefiImpl;
-
+fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
     let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -354,8 +352,8 @@ pub struct GptDisk {
 }
 
 impl GptDisk {
-    pub fn new() -> Result<GptDisk, GptDiskError> {
-        let block_io = find_disk_block_io()?;
+    pub fn new(uefi: &dyn Uefi) -> Result<GptDisk, GptDiskError> {
+        let block_io = find_disk_block_io(uefi)?;
 
         let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
             .ok_or(GptDiskError::InvalidBlockSize)?;
