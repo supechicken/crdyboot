@@ -175,7 +175,8 @@ fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedProtocol<BlockIO>, GptDis
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
-    let block_io_handles = boot::find_handles::<BlockIO>()
+    let block_io_handles = uefi
+        .find_block_io_handles()
         .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
