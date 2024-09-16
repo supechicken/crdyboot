@@ -912,4 +912,59 @@ mod tests {
         let uefi = create_mock_uefi_with_block_io();
         assert!(find_disk_block_io(&uefi).is_ok());
     }
+
+    /// Test that `GptDisk` accessor methods work.
+    #[test]
+    fn test_gpt_disk_accessors() {
+        let uefi = create_mock_uefi_with_block_io();
+        let disk = GptDisk::new(&uefi).unwrap();
+        assert_eq!(disk.bytes_per_lba().get(), 512);
+        assert_eq!(disk.lba_count(), 10_000);
+    }
+
+    /// Test that `GptDisk` can read via the Block IO protocol.
+    #[test]
+    fn test_gpt_disk_read() {
+        let uefi = create_mock_uefi_with_block_io();
+
+        let disk = GptDisk::new(&uefi).unwrap();
+
+        fn check_block(block: &[u8], block_num: u64) {
+            assert_eq!(block.len(), 512);
+            let mut expected = Vec::new();
+            for _ in 0..(512 / 8) {
+                expected.extend(block_num.to_le_bytes());
+            }
+            if block != expected {
+                panic!("block {block_num} doesn't match expected value");
+            }
+        }
+
+        // Valid reads.
+        let mut block = vec![0; 512];
+        assert_eq!(disk.read(0, &mut block), ReturnCode::VB2_SUCCESS);
+        check_block(&block, 0);
+        assert_eq!(disk.read(1, &mut block), ReturnCode::VB2_SUCCESS);
+        check_block(&block, 1);
+        assert_eq!(disk.read(9999, &mut block), ReturnCode::VB2_SUCCESS);
+        check_block(&block, 9999);
+
+        // Out of range starting block.
+        assert_eq!(disk.read(10_000, &mut block), ReturnCode::VB2_ERROR_UNKNOWN);
+    }
+
+    /// Test that `GptDisk` can write via the Block IO protocol.
+    #[test]
+    fn test_gpt_disk_write() {
+        let uefi = create_mock_uefi_with_block_io();
+
+        let mut disk = GptDisk::new(&uefi).unwrap();
+        let block = vec![0; 512];
+
+        // Valid write.
+        assert_eq!(disk.write(0, &block), ReturnCode::VB2_SUCCESS);
+
+        // Out of range starting block.
+        assert_eq!(disk.write(10_000, &block), ReturnCode::VB2_ERROR_UNKNOWN);
+    }
 }
