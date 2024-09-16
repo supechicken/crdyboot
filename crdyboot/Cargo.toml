@@ -26,3 +26,4 @@ uefi = { workspace = true, features = ["logger", "global_allocator", "panic_hand
 [dev-dependencies]
 libcrdy = { workspace = true, features = ["test_util"] }
 object = { workspace = true, features = [ "write_core" ] }
+uefi-raw.workspace = true

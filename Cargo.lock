@@ -243,6 +243,7 @@ dependencies = [
  "log",
  "object",
  "uefi",
+ "uefi-raw",
  "vboot",
 ]
 
