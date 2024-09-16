@@ -8,6 +8,7 @@ use core::ops::Deref;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
+use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
 use uefi::{CStr16, Handle, Status};
@@ -27,6 +28,8 @@ pub trait Uefi {
     ) -> uefi::Result<(Box<[u8]>, VariableAttributes)>;
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
+
+    fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
 
@@ -60,6 +63,10 @@ impl Uefi for UefiImpl {
 
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<partition::PartitionInfo>()
+    }
+
+    fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<BlockIO>()
     }
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath> {
