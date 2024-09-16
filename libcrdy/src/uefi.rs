@@ -4,7 +4,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
@@ -40,6 +40,15 @@ pub trait Uefi {
     fn find_esp_partition_handle(&self) -> uefi::Result<Option<Handle>>;
 
     fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo>;
+
+    /// Open the Block IO protocol for `handle`.
+    ///
+    /// # Safety
+    ///
+    /// This is `unsafe` because the protocol is opened in non-exclusive
+    /// mode. Opening disk handles in exclusive mode can be very slow --
+    /// on the x1cg9, it takes over 800ms.
+    unsafe fn open_block_io(&self, handle: Handle) -> uefi::Result<ScopedBlockIo>;
 }
 
 pub struct UefiImpl;
@@ -120,6 +129,18 @@ impl Uefi for UefiImpl {
             Err(Status::UNSUPPORTED.into())
         }
     }
+
+    unsafe fn open_block_io(&self, handle: Handle) -> uefi::Result<ScopedBlockIo> {
+        boot::open_protocol::<BlockIO>(
+            OpenProtocolParams {
+                handle,
+                agent: boot::image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
+        .map(ScopedBlockIo::Protocol)
+    }
 }
 
 /// Wrapper around `ScopedProtocol<DevicePath>` that allows for mocking.
@@ -138,6 +159,40 @@ impl Deref for ScopedDevicePath {
             Self::Protocol(p) => p,
             #[cfg(feature = "test_util")]
             Self::Boxed(b) => b,
+        }
+    }
+}
+
+/// Wrapper around `ScopedProtocol<BlockIO>` that allows for mocking.
+///
+/// uefi-rs is a little inconsistent about `IO` vs `Io` (e.g. `DiskIo`
+/// vs `BlockIO`). For this code, consistently use `Io` in the public
+/// interface.
+#[derive(Debug)]
+pub enum ScopedBlockIo {
+    Protocol(ScopedProtocol<BlockIO>),
+    #[cfg(feature = "test_util")]
+    ForTest(BlockIO),
+}
+
+impl Deref for ScopedBlockIo {
+    type Target = BlockIO;
+
+    fn deref(&self) -> &BlockIO {
+        match self {
+            Self::Protocol(p) => p,
+            #[cfg(feature = "test_util")]
+            Self::ForTest(b) => b,
+        }
+    }
+}
+
+impl DerefMut for ScopedBlockIo {
+    fn deref_mut(&mut self) -> &mut BlockIO {
+        match self {
+            Self::Protocol(p) => p,
+            #[cfg(feature = "test_util")]
+            Self::ForTest(b) => b,
         }
     }
 }
