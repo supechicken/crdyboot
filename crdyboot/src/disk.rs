@@ -406,6 +406,7 @@ impl DiskIo for GptDisk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::ffi::c_void;
     use core::mem;
     use libcrdy::uefi::MockUefi;
     use uefi::data_types::chars::NUL_16;
@@ -420,6 +421,7 @@ mod tests {
         GptPartitionAttributes, GptPartitionEntry, GptPartitionType, MbrOsType, MbrPartitionRecord,
     };
     use uefi::{guid, CStr16};
+    use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
 
     #[derive(Clone, Copy, PartialEq)]
     enum DeviceKind {
@@ -817,5 +819,84 @@ mod tests {
             find_stateful_partition_handle(&uefi),
             Err(GptDiskError::StatefulPartitionNotFound)
         );
+    }
+
+    /// BlockIoMedia used in `create_mock_uefi_with_block_io`.
+    static MEDIA: BlockIoMedia = BlockIoMedia {
+        media_id: 123,
+        removable_media: false,
+        media_present: true,
+        logical_partition: false,
+        read_only: false,
+        write_caching: false,
+        block_size: 512,
+        io_align: 0,
+        last_block: 9999,
+        lowest_aligned_lba: 0,
+        logical_blocks_per_physical_block: 1,
+        optimal_transfer_length_granularity: 1,
+    };
+
+    fn create_mock_uefi_with_block_io() -> MockUefi {
+        unsafe extern "efiapi" fn read_blocks(
+            _this: *const BlockIoProtocol,
+            _media_id: u32,
+            _lba: u64,
+            _buffer_size: usize,
+            _buffer: *mut c_void,
+        ) -> uefi_raw::Status {
+            unimplemented!();
+        }
+
+        unsafe extern "efiapi" fn write_blocks(
+            _this: *mut BlockIoProtocol,
+            _media_id: u32,
+            _lba: u64,
+            _buffer_size: usize,
+            _buffer: *const c_void,
+        ) -> uefi_raw::Status {
+            unimplemented!();
+        }
+
+        unsafe extern "efiapi" fn reset(_: *mut BlockIoProtocol, _: bool) -> uefi_raw::Status {
+            unimplemented!()
+        }
+
+        unsafe extern "efiapi" fn flush_blocks(_: *mut BlockIoProtocol) -> uefi_raw::Status {
+            unimplemented!()
+        }
+
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+        uefi.expect_find_block_io_handles().returning(|| {
+            Ok(vec![
+                get_handle(DeviceKind::HardDrive),
+                get_handle(DeviceKind::Partition1),
+                get_handle(DeviceKind::Partition2),
+                get_handle(DeviceKind::PartitionOnAnotherDrive),
+            ])
+        });
+        uefi.expect_open_block_io().returning(|handle| {
+            assert_eq!(handle, get_handle(DeviceKind::HardDrive));
+            let bio = BlockIoProtocol {
+                revision: 0,
+                media: &MEDIA,
+                reset,
+                read_blocks,
+                write_blocks,
+                flush_blocks,
+            };
+            let bio: BlockIO = unsafe { mem::transmute(bio) };
+            Ok(ScopedBlockIo::ForTest(bio))
+        });
+        uefi
+    }
+
+    /// Test that `find_block_io_handles` succeeds with valid inputs.
+    #[test]
+    fn test_find_disk_block_io_success() {
+        let uefi = create_mock_uefi_with_block_io();
+        assert!(find_disk_block_io(&uefi).is_ok());
     }
 }
