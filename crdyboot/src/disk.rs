@@ -407,7 +407,7 @@ impl DiskIo for GptDisk {
 mod tests {
     use super::*;
     use core::ffi::c_void;
-    use core::mem;
+    use core::{mem, slice};
     use libcrdy::uefi::MockUefi;
     use uefi::data_types::chars::NUL_16;
     use uefi::proto::device_path::build::acpi::Acpi;
@@ -839,23 +839,36 @@ mod tests {
 
     fn create_mock_uefi_with_block_io() -> MockUefi {
         unsafe extern "efiapi" fn read_blocks(
-            _this: *const BlockIoProtocol,
+            this: *const BlockIoProtocol,
             _media_id: u32,
-            _lba: u64,
-            _buffer_size: usize,
-            _buffer: *mut c_void,
+            lba: u64,
+            buffer_size: usize,
+            buffer: *mut c_void,
         ) -> uefi_raw::Status {
-            unimplemented!();
+            if lba > (*(*this).media).last_block {
+                return uefi_raw::Status::INVALID_PARAMETER;
+            }
+
+            let buffer: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
+            assert_eq!(buffer.len() % 8, 0);
+            for chunk in buffer.chunks_mut(8) {
+                chunk.copy_from_slice(&lba.to_le_bytes());
+            }
+            uefi_raw::Status::SUCCESS
         }
 
         unsafe extern "efiapi" fn write_blocks(
-            _this: *mut BlockIoProtocol,
+            this: *mut BlockIoProtocol,
             _media_id: u32,
-            _lba: u64,
+            lba: u64,
             _buffer_size: usize,
             _buffer: *const c_void,
         ) -> uefi_raw::Status {
-            unimplemented!();
+            if lba > (*(*this).media).last_block {
+                return uefi_raw::Status::INVALID_PARAMETER;
+            }
+
+            uefi_raw::Status::SUCCESS
         }
 
         unsafe extern "efiapi" fn reset(_: *mut BlockIoProtocol, _: bool) -> uefi_raw::Status {
