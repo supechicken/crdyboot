@@ -4,7 +4,7 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
-use libcrdy::uefi::{PartitionInfo, ScopedDevicePath, Uefi, UefiImpl};
+use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, Uefi, UefiImpl};
 use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
@@ -170,7 +170,7 @@ fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     }
 }
 
-fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedProtocol<BlockIO>, GptDiskError> {
+fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError> {
     let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -190,15 +190,8 @@ fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedProtocol<BlockIO>, GptDis
     // crdyboot is the only code that should be running other than the
     // firmware. Grub also opens the protocol in non-exclusive mode.
     unsafe {
-        boot::open_protocol::<BlockIO>(
-            OpenProtocolParams {
-                handle: disk_handle,
-                agent: boot::image_handle(),
-                controller: None,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
-        .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
+        uefi.open_block_io(disk_handle)
+            .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
     }
 }
 
@@ -347,7 +340,7 @@ pub fn open_stateful_partition() -> Result<(ScopedProtocol<UefiDiskIo>, u32), Gp
 }
 
 pub struct GptDisk {
-    block_io: ScopedProtocol<BlockIO>,
+    block_io: ScopedBlockIo,
     bytes_per_lba: NonZeroU64,
     lba_count: u64,
 }
