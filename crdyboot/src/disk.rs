@@ -906,6 +906,35 @@ mod tests {
         uefi
     }
 
+    /// Test that `find_esp_partition_handle` handles a loaded image
+    /// with no device by returning an error.
+    #[test]
+    fn test_find_esp_partition_handle_no_device() {
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(None));
+
+        assert_eq!(
+            find_esp_partition_handle(&uefi),
+            Err(GptDiskError::LoadedImageHasNoDevice)
+        );
+    }
+
+    /// Test that `find_esp_partition_handle` maps errors correctly.
+    #[test]
+    fn test_find_esp_partition_handle_error() {
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Err(Status::INVALID_PARAMETER.into()));
+
+        assert_eq!(
+            find_esp_partition_handle(&uefi),
+            Err(GptDiskError::OpenLoadedImageProtocolFailed(
+                Status::INVALID_PARAMETER
+            ))
+        );
+    }
+
     /// Test that `find_block_io_handles` succeeds with valid inputs.
     #[test]
     fn test_find_disk_block_io_success() {
