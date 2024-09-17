@@ -99,3 +99,19 @@ impl Display for ReadError {
 }
 
 impl IoError for ReadError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that `ReadError` formats correctly.
+    #[test]
+    fn test_read_error() {
+        let dst = [0; 7];
+        let err = ReadError::boxed(123, &dst, uefi::Status::INVALID_PARAMETER.into());
+        assert_eq!(
+            format!("{err}"),
+            "disk read of 7 bytes at 123 failed: UEFI Error INVALID_PARAMETER: ()"
+        )
+    }
+}
