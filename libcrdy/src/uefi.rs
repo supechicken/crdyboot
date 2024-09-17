@@ -9,6 +9,7 @@ use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtoco
 use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
+use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
 use uefi::{CStr16, Handle, Status};
@@ -49,6 +50,15 @@ pub trait Uefi {
     /// mode. Opening disk handles in exclusive mode can be very slow --
     /// on the x1cg9, it takes over 800ms.
     unsafe fn open_block_io(&self, handle: Handle) -> uefi::Result<ScopedBlockIo>;
+
+    /// Open the Disk IO protocol for `handle`.
+    ///
+    /// # Safety
+    ///
+    /// This is `unsafe` because the protocol is opened in non-exclusive
+    /// mode. Opening disk handles in exclusive mode can be very slow --
+    /// on the x1cg9, it takes over 800ms.
+    unsafe fn open_disk_io(&self, handle: Handle) -> uefi::Result<ScopedDiskIo>;
 }
 
 pub struct UefiImpl;
@@ -141,6 +151,18 @@ impl Uefi for UefiImpl {
         )
         .map(ScopedBlockIo::Protocol)
     }
+
+    unsafe fn open_disk_io(&self, handle: Handle) -> uefi::Result<ScopedDiskIo> {
+        boot::open_protocol::<DiskIo>(
+            OpenProtocolParams {
+                handle,
+                agent: boot::image_handle(),
+                controller: None,
+            },
+            OpenProtocolAttributes::GetProtocol,
+        )
+        .map(ScopedDiskIo::Protocol)
+    }
 }
 
 /// Wrapper around `ScopedProtocol<DevicePath>` that allows for mocking.
@@ -193,6 +215,26 @@ impl DerefMut for ScopedBlockIo {
             Self::Protocol(p) => p,
             #[cfg(feature = "test_util")]
             Self::ForTest(b) => b,
+        }
+    }
+}
+
+/// Wrapper around `ScopedProtocol<DiskIo>` that allows for mocking.
+#[derive(Debug)]
+pub enum ScopedDiskIo {
+    Protocol(ScopedProtocol<DiskIo>),
+    #[cfg(feature = "test_util")]
+    ForTest(DiskIo),
+}
+
+impl Deref for ScopedDiskIo {
+    type Target = DiskIo;
+
+    fn deref(&self) -> &DiskIo {
+        match self {
+            Self::Protocol(p) => p,
+            #[cfg(feature = "test_util")]
+            Self::ForTest(d) => d,
         }
     }
 }
