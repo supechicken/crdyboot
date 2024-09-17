@@ -8,10 +8,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4, Ext4Read, IoError, PathBuf};
-use libcrdy::uefi::UefiImpl;
+use libcrdy::uefi::{ScopedDiskIo, UefiImpl};
 use log::info;
-use uefi::boot::ScopedProtocol;
-use uefi::proto::media::disk::DiskIo;
 
 /// Load a single update capsule from the stateful partition.
 fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>, FirmwareError> {
@@ -57,7 +55,7 @@ pub fn load_capsules_from_disk(updates: &[UpdateInfo]) -> Result<Vec<Vec<u8>>, F
 }
 
 struct DiskReader {
-    disk_io: ScopedProtocol<DiskIo>,
+    disk_io: ScopedDiskIo,
     media_id: u32,
 }
 

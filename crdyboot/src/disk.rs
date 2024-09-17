@@ -4,13 +4,10 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
-use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, Uefi};
+use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use log::error;
-use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
-use uefi::proto::media::block::BlockIO;
-use uefi::proto::media::disk::DiskIo as UefiDiskIo;
 use uefi::Char16;
 use vboot::{DiskIo, ReturnCode};
 
@@ -300,9 +297,7 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
 ///
 /// Returns a tuple containing the protocol and a media ID of type
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_stateful_partition(
-    uefi: &dyn Uefi,
-) -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
+pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), GptDiskError> {
     let stateful_partition_handle = find_stateful_partition_handle(uefi)?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
@@ -311,29 +306,15 @@ pub fn open_stateful_partition(
     // Get the disk's media ID. This value is needed when calling disk
     // IO operations.
     let media_id = unsafe {
-        boot::open_protocol::<BlockIO>(
-            OpenProtocolParams {
-                handle: stateful_partition_handle,
-                agent: boot::image_handle(),
-                controller: None,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
-        .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
-        .media()
-        .media_id()
+        uefi.open_block_io(stateful_partition_handle)
+            .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
+            .media()
+            .media_id()
     };
 
     let disk_io = unsafe {
-        boot::open_protocol::<UefiDiskIo>(
-            OpenProtocolParams {
-                handle: stateful_partition_handle,
-                agent: boot::image_handle(),
-                controller: None,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
-        .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
+        uefi.open_disk_io(stateful_partition_handle)
+            .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
     }?;
 
     Ok((disk_io, media_id))
@@ -417,6 +398,7 @@ mod tests {
     use uefi::proto::device_path::build::{self, BuildError, BuildNode};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::proto::device_path::DevicePath;
+    use uefi::proto::media::block::BlockIO;
     use uefi::proto::media::partition::{
         GptPartitionAttributes, GptPartitionEntry, GptPartitionType, MbrOsType, MbrPartitionRecord,
     };
