@@ -4,7 +4,7 @@
 
 use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
-use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, Uefi, UefiImpl};
+use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, Uefi};
 use log::error;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::prelude::*;
@@ -300,9 +300,9 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
 ///
 /// Returns a tuple containing the protocol and a media ID of type
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_stateful_partition() -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
-    let uefi = &UefiImpl;
-
+pub fn open_stateful_partition(
+    uefi: &dyn Uefi,
+) -> Result<(ScopedProtocol<UefiDiskIo>, u32), GptDiskError> {
     let stateful_partition_handle = find_stateful_partition_handle(uefi)?;
 
     // See comment in `find_disk_block_io` for why the non-exclusive
