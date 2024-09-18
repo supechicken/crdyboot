@@ -479,6 +479,26 @@ mod tests {
     }
 
     impl DeviceKind {
+        /// Get the handle for this device. This will always return the
+        /// same handle for the given `kind`.
+        fn handle(self) -> Handle {
+            // A handle is basically a void pointer. We don't care what the
+            // particular value of that pointer is, it just needs to
+            // consistent for each `DeviceKind`.
+            //
+            // The easiest thing to do would be `kind as usize as *const
+            // c_void`, but miri doesn't like pointers being created out of
+            // thin air like that, so instead create a static array and
+            // create pointers to its elements. Since the elements have a
+            // non-zero size, each element is guaranteed to have a different
+            // address.
+            let index = self as usize;
+            static H: [u8; 8] = [0; 8];
+            let ptr: *const u8 = &H[index];
+            let ptr: *mut _ = ptr.cast_mut().cast();
+            unsafe { Handle::from_ptr(ptr) }.unwrap()
+        }
+
         fn all() -> &'static [Self] {
             &[
                 Self::HardDrive,
@@ -574,30 +594,10 @@ mod tests {
         }
     }
 
-    /// Get a device handle. This will always return the same handle for
-    /// the given `kind`.
-    fn get_handle(kind: DeviceKind) -> Handle {
-        // A handle is basically a void pointer. We don't care what the
-        // particular value of that pointer is, it just needs to
-        // consistent for each `DeviceKind`.
-        //
-        // The easiest thing to do would be `kind as usize as *const
-        // c_void`, but miri doesn't like pointers being created out of
-        // thin air like that, so instead create a static array and
-        // create pointers to its elements. Since the elements have a
-        // non-zero size, each element is guaranteed to have a different
-        // address.
-        let index = kind as usize;
-        static H: [u8; 8] = [0; 8];
-        let ptr: *const u8 = &H[index];
-        let ptr: *mut _ = ptr.cast_mut().cast();
-        unsafe { Handle::from_ptr(ptr) }.unwrap()
-    }
-
     fn handle_to_kind(handle: Handle) -> DeviceKind {
         for kind in DeviceKind::all() {
             let kind = *kind;
-            if handle == get_handle(kind) {
+            if handle == kind.handle() {
                 return kind;
             }
         }
@@ -621,8 +621,8 @@ mod tests {
 
         assert!(is_parent_disk(
             &uefi,
-            get_handle(DeviceKind::HardDrive),
-            get_handle(DeviceKind::Partition1)
+            DeviceKind::HardDrive.handle(),
+            DeviceKind::Partition1.handle()
         )
         .unwrap());
     }
@@ -635,8 +635,8 @@ mod tests {
 
         assert!(!is_parent_disk(
             &uefi,
-            get_handle(DeviceKind::MacAddr),
-            get_handle(DeviceKind::Partition1)
+            DeviceKind::MacAddr.handle(),
+            DeviceKind::Partition1.handle()
         )
         .unwrap());
     }
@@ -649,8 +649,8 @@ mod tests {
 
         assert!(!is_parent_disk(
             &uefi,
-            get_handle(DeviceKind::HardDrive),
-            get_handle(DeviceKind::FilePath)
+            DeviceKind::HardDrive.handle(),
+            DeviceKind::FilePath.handle()
         )
         .unwrap());
     }
@@ -662,8 +662,8 @@ mod tests {
 
         assert!(!is_parent_disk(
             &uefi,
-            get_handle(DeviceKind::HardDrive),
-            get_handle(DeviceKind::HardDrive)
+            DeviceKind::HardDrive.handle(),
+            DeviceKind::HardDrive.handle()
         )
         .unwrap());
     }
@@ -673,11 +673,11 @@ mod tests {
     fn test_find_parent_disk_success() {
         let uefi = create_mock_uefi();
 
-        let all_handles: Vec<_> = DeviceKind::all().iter().map(|k| get_handle(*k)).collect();
+        let all_handles: Vec<_> = DeviceKind::all().iter().map(|k| k.handle()).collect();
 
         assert_eq!(
-            find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)).unwrap(),
-            get_handle(DeviceKind::HardDrive)
+            find_parent_disk(&uefi, &all_handles, DeviceKind::Partition1.handle()).unwrap(),
+            DeviceKind::HardDrive.handle()
         );
     }
 
@@ -690,11 +690,11 @@ mod tests {
         let all_handles: Vec<_> = DeviceKind::all()
             .iter()
             .filter(|k| **k != DeviceKind::HardDrive)
-            .map(|k| get_handle(*k))
+            .map(|k| k.handle())
             .collect();
 
         assert_eq!(
-            find_parent_disk(&uefi, &all_handles, get_handle(DeviceKind::Partition1)),
+            find_parent_disk(&uefi, &all_handles, DeviceKind::Partition1.handle()),
             Err(GptDiskError::ParentDiskNotFound)
         );
     }
@@ -705,8 +705,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(is_sibling_partition(
             &uefi,
-            get_handle(DeviceKind::Partition1),
-            get_handle(DeviceKind::Partition2),
+            DeviceKind::Partition1.handle(),
+            DeviceKind::Partition2.handle(),
         )
         .unwrap());
     }
@@ -718,8 +718,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            get_handle(DeviceKind::Partition1),
-            get_handle(DeviceKind::PartitionOnAnotherDrive),
+            DeviceKind::Partition1.handle(),
+            DeviceKind::PartitionOnAnotherDrive.handle(),
         )
         .unwrap());
     }
@@ -731,8 +731,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            get_handle(DeviceKind::Partition1),
-            get_handle(DeviceKind::HardDrive),
+            DeviceKind::Partition1.handle(),
+            DeviceKind::HardDrive.handle(),
         )
         .unwrap());
     }
@@ -744,8 +744,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            get_handle(DeviceKind::Partition1),
-            get_handle(DeviceKind::FilePath),
+            DeviceKind::Partition1.handle(),
+            DeviceKind::FilePath.handle(),
         )
         .unwrap());
     }
@@ -800,9 +800,9 @@ mod tests {
     /// a partition with `name`.
     fn setup_find_partition_by_name(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
+            .returning(|| Ok(vec![DeviceKind::Partition2.handle()]));
         let info = create_gpt_partition_info(name);
         uefi.expect_partition_info_for_handle()
             .return_const(Ok(info));
@@ -817,7 +817,7 @@ mod tests {
         let uefi = setup_find_partition_by_name(cstr16!("STATE"), create_mock_uefi());
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap().0,
-            get_handle(DeviceKind::Partition2)
+            DeviceKind::Partition2.handle()
         );
     }
 
@@ -840,9 +840,9 @@ mod tests {
         let pname = cstr16!("STATE");
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![get_handle(DeviceKind::PartitionOnAnotherDrive)]));
+            .returning(|| Ok(vec![DeviceKind::PartitionOnAnotherDrive.handle()]));
         let info = create_gpt_partition_info(pname);
         uefi.expect_partition_info_for_handle()
             .return_const(Ok(info));
@@ -866,9 +866,9 @@ mod tests {
         });
         let mut uefi = create_mock_uefi_with_partition_info(info);
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
+            .returning(|| Ok(vec![DeviceKind::Partition2.handle()]));
 
         assert_eq!(
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
@@ -936,13 +936,13 @@ mod tests {
 
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
         uefi.expect_find_block_io_handles().returning(|| {
             Ok(vec![
-                get_handle(DeviceKind::HardDrive),
-                get_handle(DeviceKind::Partition1),
-                get_handle(DeviceKind::Partition2),
-                get_handle(DeviceKind::PartitionOnAnotherDrive),
+                DeviceKind::HardDrive.handle(),
+                DeviceKind::Partition1.handle(),
+                DeviceKind::Partition2.handle(),
+                DeviceKind::PartitionOnAnotherDrive.handle(),
             ])
         });
         uefi.expect_open_block_io().returning(|_| {
