@@ -499,6 +499,14 @@ mod tests {
             unsafe { Handle::from_ptr(ptr) }.unwrap()
         }
 
+        /// Get the device kind for a handle. Panics on unknown handles.
+        fn from_handle(handle: Handle) -> Self {
+            *DeviceKind::all()
+                .iter()
+                .find(|kind| handle == kind.handle())
+                .expect("invalid handle")
+        }
+
         fn all() -> &'static [Self] {
             &[
                 Self::HardDrive,
@@ -594,20 +602,10 @@ mod tests {
         }
     }
 
-    fn handle_to_kind(handle: Handle) -> DeviceKind {
-        for kind in DeviceKind::all() {
-            let kind = *kind;
-            if handle == kind.handle() {
-                return kind;
-            }
-        }
-        panic!("invalid handle");
-    }
-
     fn create_mock_uefi() -> MockUefi {
         let mut uefi = MockUefi::new();
         uefi.expect_device_path_for_handle().returning(|h| {
-            let kind = handle_to_kind(h);
+            let kind = DeviceKind::from_handle(h);
             Ok(kind.create_device_path().unwrap())
         });
         uefi
