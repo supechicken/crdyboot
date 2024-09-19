@@ -50,6 +50,10 @@ pub enum GptDiskError {
 
     /// Failed to find the handle for the named partition.
     PartitionNotFound,
+
+    /// The partition size is zero or cannot fit into [`u64`].
+    #[cfg(any(feature = "android", test))]
+    InvalidPartitionSize,
 }
 
 impl Display for GptDiskError {
@@ -90,6 +94,10 @@ impl Display for GptDiskError {
             }
             Self::PartitionNotFound => {
                 write!(f, "failed to find partition handle for a named partition")
+            }
+            #[cfg(any(feature = "android", test))]
+            Self::InvalidPartitionSize => {
+                write!(f, "partition size is zero or too large")
             }
         }
     }
@@ -253,6 +261,30 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
     };
 
     partition_name == name
+}
+
+/// Get the partition size in bytes for the GPT partition with `name`.
+///
+/// This finds the `name` partition by its label and excludes
+/// partitions from disks other than the one this executable is running
+/// from.
+#[cfg(any(feature = "android", test))]
+pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64, GptDiskError> {
+    let (partition_handle, partition_info) = find_partition_by_name(uefi, name)?;
+
+    let block_io = unsafe {
+        uefi.open_block_io(partition_handle)
+            .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
+    };
+
+    let bytes_per_block = NonZeroU64::new(block_io.media().block_size().into())
+        .ok_or(GptDiskError::InvalidBlockSize)?;
+
+    partition_info
+        .num_blocks()
+        .ok_or(GptDiskError::InvalidBlockSize)?
+        .checked_mul(bytes_per_block.get())
+        .ok_or(GptDiskError::InvalidPartitionSize)
 }
 
 /// Get the handle and `GptPartitionEntry` of the named GPT partition.
@@ -706,6 +738,19 @@ mod tests {
         .unwrap());
     }
 
+    /// Test that `get_partition_size_in_bytes` succeeds.
+    #[test]
+    fn test_get_partition_size_in_bytes() {
+        let pname = cstr16!("STATE");
+        let uefi = setup_find_partition_by_name(pname, create_mock_uefi_with_block_io());
+        // The size is the block size * the number of lba for the device
+        // as setup.
+        assert_eq!(
+            get_partition_size_in_bytes(&uefi, pname).unwrap(),
+            (10001 * 512)
+        );
+    }
+
     fn create_gpt_partition_entry(partition_name: [Char16; 36]) -> GptPartitionEntry {
         GptPartitionEntry {
             partition_type_guid: GptPartitionType(guid!("7ce8b0e4-20a9-4edd-9982-fe9c84e06e6f")),
@@ -877,8 +922,7 @@ mod tests {
                 get_handle(DeviceKind::PartitionOnAnotherDrive),
             ])
         });
-        uefi.expect_open_block_io().returning(|handle| {
-            assert_eq!(handle, get_handle(DeviceKind::HardDrive));
+        uefi.expect_open_block_io().returning(|_| {
             let bio = BlockIoProtocol {
                 revision: 0,
                 media: &MEDIA,
