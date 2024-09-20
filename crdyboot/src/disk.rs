@@ -834,6 +834,29 @@ mod tests {
         );
     }
 
+    /// Test that `find_partition_handle_by_name` fails for MBR disks.
+    #[test]
+    fn test_find_stateful_partition_handle_mbr_fail() {
+        let info = PartitionInfo::Mbr(MbrPartitionRecord {
+            boot_indicator: 0,
+            starting_chs: [1, 2, 3],
+            os_type: MbrOsType(0),
+            ending_chs: [4, 5, 6],
+            starting_lba: 0,
+            size_in_lba: 10000,
+        });
+        let mut uefi = create_mock_uefi_with_partition_info(info);
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
+        uefi.expect_find_partition_info_handles()
+            .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
+
+        assert_eq!(
+            find_partition_handle_by_name(&uefi, cstr16!("STATE")),
+            Err(GptDiskError::PartitionNotFound)
+        );
+    }
+
     /// BlockIoMedia used in `create_mock_uefi_with_block_io`.
     static MEDIA: BlockIoMedia = BlockIoMedia {
         media_id: 123,
