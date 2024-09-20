@@ -42,6 +42,15 @@ pub trait Uefi {
         vendor: &VariableVendor,
     ) -> uefi::Result<(Box<[u8]>, VariableAttributes)>;
 
+    /// Set a UEFI variable, or delete it if `data` is empty.
+    fn set_variable(
+        &self,
+        name: &CStr16,
+        vendor: &VariableVendor,
+        attributes: VariableAttributes,
+        data: &[u8],
+    ) -> uefi::Result;
+
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
@@ -101,6 +110,16 @@ impl Uefi for UefiImpl {
         vendor: &VariableVendor,
     ) -> uefi::Result<(Box<[u8]>, VariableAttributes)> {
         runtime::get_variable_boxed(name, vendor)
+    }
+
+    fn set_variable(
+        &self,
+        name: &CStr16,
+        vendor: &VariableVendor,
+        attributes: VariableAttributes,
+        data: &[u8],
+    ) -> uefi::Result {
+        runtime::set_variable(name, vendor, attributes, data)
     }
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result {
