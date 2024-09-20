@@ -256,13 +256,12 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
 }
 
 /// Use the `PartitionInfo` protocol to test if `partition_handle`
-/// corresponds to a ChromeOS stateful partition.
-///
-/// This checks if the partition's name is "STATE".
-fn is_stateful_partition(uefi: &dyn Uefi, partition_handle: Handle) -> Result<bool, GptDiskError> {
-    // Name of the stateful partition.
-    const STATE_NAME: &CStr16 = cstr16!("STATE");
-
+/// corresponds to a GPT partition with `name`.
+fn is_partition_named(
+    uefi: &dyn Uefi,
+    partition_handle: Handle,
+    name: &CStr16,
+) -> Result<bool, GptDiskError> {
     let partition_info = uefi
         .partition_info_for_handle(partition_handle)
         .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))?;
@@ -272,15 +271,17 @@ fn is_stateful_partition(uefi: &dyn Uefi, partition_handle: Handle) -> Result<bo
         return Ok(false);
     };
 
-    Ok(is_gpt_partition_entry_named(&partition_info, STATE_NAME))
+    Ok(is_gpt_partition_entry_named(&partition_info, name))
 }
 
-/// Get the handle of the stateful partition.
+/// Get the handle of the ChromeOS stateful partition.
 ///
 /// This finds the stateful partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
 fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
+    // Name of the stateful partition.
+    const STATE_NAME: &CStr16 = cstr16!("STATE");
     let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
@@ -289,8 +290,8 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
-        // Ignore partitions with a name other than "STATE".
-        if !is_stateful_partition(uefi, handle)? {
+        // Ignore non-GPT partitions with a name other than "STATE".
+        if !is_partition_named(uefi, handle, STATE_NAME)? {
             continue;
         }
 
@@ -723,30 +724,34 @@ mod tests {
         uefi
     }
 
-    /// Test that `is_stateful_partition` returns true for a GPT
+    /// Test that `is_partition_named` returns true for a GPT
     /// partition named "STATE".
     #[test]
-    fn test_is_stateful_partition_true() {
-        let info = create_gpt_partition_info(cstr16!("STATE"));
+    fn test_is_partition_named_true() {
+        let name = cstr16!("STATE");
+        let info = create_gpt_partition_info(name);
         let uefi = create_mock_uefi_with_partition_info(info);
 
-        assert!(is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
+        assert!(is_partition_named(&uefi, get_handle(DeviceKind::Partition1), name).unwrap());
     }
 
-    /// Test that `is_stateful_partition` returns false for a GPT
+    /// Test that `is_partition_named` returns false for a GPT
     /// partition not named "STATE".
     #[test]
-    fn test_is_stateful_partition_wrong_name() {
+    fn test_is_partition_named_wrong_name() {
+        let state_name = cstr16!("STATE");
         let info = create_gpt_partition_info(cstr16!("STATEJUSTKIDDING"));
         let uefi = create_mock_uefi_with_partition_info(info);
 
-        assert!(!is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
+        assert!(
+            !is_partition_named(&uefi, get_handle(DeviceKind::Partition1), state_name).unwrap()
+        );
     }
 
-    /// Test that `is_stateful_partition` returns false for MBR
+    /// Test that `is_partition_named` returns false for MBR
     /// partitions.
     #[test]
-    fn test_is_stateful_partition_mbr() {
+    fn test_is_partition_named_mbr() {
         let info = MbrPartitionRecord {
             boot_indicator: 0,
             starting_chs: [1, 2, 3],
@@ -757,7 +762,10 @@ mod tests {
         };
         let uefi = create_mock_uefi_with_partition_info(PartitionInfo::Mbr(info));
 
-        assert!(!is_stateful_partition(&uefi, get_handle(DeviceKind::Partition1)).unwrap());
+        assert!(
+            !is_partition_named(&uefi, get_handle(DeviceKind::Partition1), cstr16!("STATE"))
+                .unwrap()
+        );
     }
 
     /// Test that `find_stateful_partition_handle` succeeds with a valid
