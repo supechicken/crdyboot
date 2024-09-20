@@ -8,7 +8,8 @@ use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo
 use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
-use uefi::Char16;
+use uefi::proto::media::partition::GptPartitionEntry;
+use uefi::{CStr16, Char16};
 use vboot::{DiskIo, ReturnCode};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -231,6 +232,29 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
     Ok(true)
 }
 
+/// Test if the passed in `name` matches the `partition_name` in the
+/// `partition_info` struct.
+/// This compares `name` with `partition_name` only up to the
+/// length of `name` including the null terminator.
+/// Any trailing chars in `partition_name` array after the first null
+/// are ignored.
+fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr16) -> bool {
+    // `PartitionInfo` is `repr(packed)`, which limits operations on
+    // fields. Copy the `name` field to a local variable to work around
+    // this.
+    let partition_name: [Char16; 36] = partition_info.partition_name;
+    // Compare including the terminating nul.
+    let name = name.as_slice_with_nul();
+
+    // Get a slice the length of name to compare.
+    let Some(partition_name) = partition_name.get(..name.len()) else {
+        // Name is too long to match.
+        return false;
+    };
+
+    partition_name == name
+}
+
 // Turn off lint that incorrectly fires on "ChromeOS".
 #[allow(clippy::doc_markdown)]
 /// Use the `PartitionInfo` protocol to test if `partition_handle`
@@ -239,7 +263,7 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
 /// This checks if the partition's name is "STATE".
 fn is_stateful_partition(uefi: &dyn Uefi, partition_handle: Handle) -> Result<bool, GptDiskError> {
     // Name of the stateful partition.
-    const STATE_NAME: &[Char16] = cstr16!("STATE").as_slice_with_nul();
+    const STATE_NAME: &CStr16 = cstr16!("STATE");
 
     let partition_info = uefi
         .partition_info_for_handle(partition_handle)
@@ -250,15 +274,7 @@ fn is_stateful_partition(uefi: &dyn Uefi, partition_handle: Handle) -> Result<bo
         return Ok(false);
     };
 
-    // `PartitionInfo` is `repr(packed)`, which limits operations on
-    // fields. Copy the `name` field to a local variable to work around
-    // this.
-    let name: [Char16; 36] = partition_info.partition_name;
-
-    // Check the partition name. Indexing cannot fail since `name` is
-    // longer than `STATE_NAME`.
-    #[allow(clippy::indexing_slicing)]
-    Ok(name[..STATE_NAME.len()] == *STATE_NAME)
+    Ok(is_gpt_partition_entry_named(&partition_info, STATE_NAME))
 }
 
 /// Get the handle of the stateful partition.
@@ -687,19 +703,19 @@ mod tests {
         .unwrap());
     }
 
-    fn create_gpt_partition_info(name: &CStr16) -> PartitionInfo {
-        let mut partition_name = [NUL_16; 36];
-        let name = name.as_slice();
-        partition_name[..name.len()].copy_from_slice(name);
-
-        PartitionInfo::Gpt(GptPartitionEntry {
+    fn create_gpt_partition_entry(partition_name: [Char16; 36]) -> GptPartitionEntry {
+        GptPartitionEntry {
             partition_type_guid: GptPartitionType(guid!("7ce8b0e4-20a9-4edd-9982-fe9c84e06e6f")),
             unique_partition_guid: guid!("1fa90113-672a-4c30-89c6-1b87fe019adc"),
             starting_lba: 0,
             ending_lba: 10000,
             attributes: GptPartitionAttributes::empty(),
             partition_name,
-        })
+        }
+    }
+
+    fn create_gpt_partition_info(name: &CStr16) -> PartitionInfo {
+        PartitionInfo::Gpt(create_gpt_partition_entry(init_partition_name(name)))
     }
 
     fn create_mock_uefi_with_partition_info(info: PartitionInfo) -> MockUefi {
@@ -977,5 +993,81 @@ mod tests {
 
         // Out of range starting block.
         assert_eq!(disk.write(10_000, &block), ReturnCode::VB2_ERROR_UNKNOWN);
+    }
+
+    /// Initialize a type matching the `partition_name` field of
+    /// the `GptPartitionEntry` struct with `name`.
+    /// The trailing values in the array are initialized to `NUL_16`.
+    fn init_partition_name(name: &CStr16) -> [Char16; 36] {
+        let mut partition_name: [Char16; 36] = [NUL_16; 36];
+        let name = name.as_slice_with_nul();
+        partition_name[..name.len()].copy_from_slice(name);
+        partition_name
+    }
+
+    /// Test normal partition name matches.
+    #[test]
+    fn test_is_gpt_partition_entry_named_ok() {
+        let name = cstr16!("STATE");
+        let partition_info = create_gpt_partition_entry(init_partition_name(name));
+        assert!(is_gpt_partition_entry_named(&partition_info, &name));
+    }
+
+    /// Test that any NUL trailing chars in the `partition_name`
+    /// are ignored when comparing.
+    /// This exercises the behavior if the `partition_name` happens
+    /// to have this unexpected input.
+    #[test]
+    fn test_is_gpt_partition_entry_named_trailing_non_null() {
+        let name = cstr16!("nondescript");
+        let mut partition_name = init_partition_name(&name);
+        // Insert a char after the null terminator.
+        // If this is considered a CStr16 it would be invalid,
+        // however, the data structure is [Char16] so it could
+        // be possible.
+        partition_name[name.as_slice_with_nul().len() + 2] = Char16::try_from('f').unwrap();
+        let partition_info = create_gpt_partition_entry(partition_name);
+
+        assert!(is_gpt_partition_entry_named(&partition_info, &name));
+    }
+
+    /// Test that if the `partition_name` does not have a
+    /// null terminator the result is simply false.
+    #[test]
+    fn test_is_gpt_partition_entry_named_non_terminated() {
+        let name = cstr16!("fff");
+        // All 'f' without a null terminator.
+        let partition_name = [Char16::try_from('f').unwrap(); 36];
+        let partition_info = create_gpt_partition_entry(partition_name);
+        // Should simply not match if the partition_name is
+        // not null-terminated.
+        assert!(!is_gpt_partition_entry_named(&partition_info, &name));
+    }
+
+    /// Test that a CStr16 which is exactly the right length will
+    /// succeed the check.
+    #[test]
+    fn test_is_gpt_partition_entry_named_full_length() {
+        let name = cstr16!("Anything that is  36 in length okay");
+        // Self check the test name length is 36.
+        assert_eq!(name.as_slice_with_nul().len(), 36);
+        let partition_name = init_partition_name(&name);
+        let partition_info = create_gpt_partition_entry(partition_name);
+        assert!(is_gpt_partition_entry_named(&partition_info, &name));
+    }
+
+    /// Test that a CStr16 which is too long will simply return false
+    /// for the match.
+    #[test]
+    fn test_is_gpt_partition_entry_named_too_long() {
+        let name = cstr16!("abcdefghijklmnopqrstuvwxyz0123456789");
+        let partial_name = cstr16!("abcdefghijklmnopqrstuvwxyz012345678");
+        // Self check the lengths of the test strings.
+        assert_eq!(name.as_slice_with_nul().len(), 37);
+        assert_eq!(partial_name.as_slice_with_nul().len(), 36);
+        let partition_info = create_gpt_partition_entry(init_partition_name(partial_name));
+
+        // This should not match, the length of the requested name is too long.
+        assert!(!is_gpt_partition_entry_named(&partition_info, &name));
     }
 }
