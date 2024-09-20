@@ -21,6 +21,7 @@ license = "BSD-3-Clause"
 repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
 
 [workspace.dependencies]
+bindgen = "0.69.4"
 cmem = { path = "cmem" }
 ed25519-compact = { version = "1.0.0", default-features = false }
 libcrdy = { path = "libcrdy" }
