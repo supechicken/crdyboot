@@ -255,25 +255,6 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
     partition_name == name
 }
 
-/// Use the `PartitionInfo` protocol to test if `partition_handle`
-/// corresponds to a GPT partition with `name`.
-fn is_partition_named(
-    uefi: &dyn Uefi,
-    partition_handle: Handle,
-    name: &CStr16,
-) -> Result<bool, GptDiskError> {
-    let partition_info = uefi
-        .partition_info_for_handle(partition_handle)
-        .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))?;
-
-    // Ignore non-GPT partitions.
-    let PartitionInfo::Gpt(partition_info) = partition_info else {
-        return Ok(false);
-    };
-
-    Ok(is_gpt_partition_entry_named(&partition_info, name))
-}
-
 /// Get the handle of the named GPT partition.
 ///
 /// This finds the `name` partition by its label, and excludes
@@ -288,8 +269,17 @@ fn find_partition_handle_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<Handl
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
-        // Ignore non-GPT partitions with a name other than `name`.
-        if !is_partition_named(uefi, handle, name)? {
+        let partition_info = uefi
+            .partition_info_for_handle(handle)
+            .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))?;
+
+        // Ignore non-GPT partitions.
+        let PartitionInfo::Gpt(partition_info) = partition_info else {
+            continue;
+        };
+
+        // Ignore partitions with a name other than `name`.
+        if !is_gpt_partition_entry_named(&partition_info, name) {
             continue;
         }
 
@@ -733,50 +723,6 @@ mod tests {
         uefi.expect_partition_info_for_handle()
             .return_const(Ok(info));
         uefi
-    }
-
-    /// Test that `is_partition_named` returns true for a GPT
-    /// partition named "STATE".
-    #[test]
-    fn test_is_partition_named_true() {
-        let name = cstr16!("STATE");
-        let info = create_gpt_partition_info(name);
-        let uefi = create_mock_uefi_with_partition_info(info);
-
-        assert!(is_partition_named(&uefi, get_handle(DeviceKind::Partition1), name).unwrap());
-    }
-
-    /// Test that `is_partition_named` returns false for a GPT
-    /// partition not named "STATE".
-    #[test]
-    fn test_is_partition_named_wrong_name() {
-        let state_name = cstr16!("STATE");
-        let info = create_gpt_partition_info(cstr16!("STATEJUSTKIDDING"));
-        let uefi = create_mock_uefi_with_partition_info(info);
-
-        assert!(
-            !is_partition_named(&uefi, get_handle(DeviceKind::Partition1), state_name).unwrap()
-        );
-    }
-
-    /// Test that `is_partition_named` returns false for MBR
-    /// partitions.
-    #[test]
-    fn test_is_partition_named_mbr() {
-        let info = MbrPartitionRecord {
-            boot_indicator: 0,
-            starting_chs: [1, 2, 3],
-            os_type: MbrOsType(0),
-            ending_chs: [4, 5, 6],
-            starting_lba: 0,
-            size_in_lba: 10000,
-        };
-        let uefi = create_mock_uefi_with_partition_info(PartitionInfo::Mbr(info));
-
-        assert!(
-            !is_partition_named(&uefi, get_handle(DeviceKind::Partition1), cstr16!("STATE"))
-                .unwrap()
-        );
     }
 
     /// Setup a successful `find_partition_handle_by_name` case for
