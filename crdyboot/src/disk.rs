@@ -279,6 +279,7 @@ fn is_partition_named(
 /// This finds the stateful partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
+#[allow(dead_code)]
 fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &CStr16 = cstr16!("STATE");
@@ -316,32 +317,44 @@ fn find_partition_handle_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<Handl
     Err(GptDiskError::PartitionNotFound)
 }
 
-/// Open the Disk IO protocol for the stateful partition. This allows
+/// Open the Disk IO protocol for the partition. This allows
 /// byte-level access to partition data.
 ///
 /// Returns a tuple containing the protocol and a media ID of type
 /// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), GptDiskError> {
-    let stateful_partition_handle = find_stateful_partition_handle(uefi)?;
-
+pub fn open_partition_by_name(
+    uefi: &dyn Uefi,
+    name: &CStr16,
+) -> Result<(ScopedDiskIo, u32), GptDiskError> {
+    let partition_handle = find_partition_handle_by_name(uefi, name)?;
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
 
     // Get the disk's media ID. This value is needed when calling disk
     // IO operations.
     let media_id = unsafe {
-        uefi.open_block_io(stateful_partition_handle)
+        uefi.open_block_io(partition_handle)
             .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
             .media()
             .media_id()
     };
 
     let disk_io = unsafe {
-        uefi.open_disk_io(stateful_partition_handle)
+        uefi.open_disk_io(partition_handle)
             .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
     }?;
 
     Ok((disk_io, media_id))
+}
+
+/// Open the Disk IO protocol for the stateful partition. This allows
+/// byte-level access to partition data.
+///
+/// Returns a tuple containing the protocol and a media ID of type
+/// `u32`. The ID is passed in as a parameter of the protocol's methods.
+pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), GptDiskError> {
+    const STATE_NAME: &CStr16 = cstr16!("STATE");
+    open_partition_by_name(uefi, STATE_NAME)
 }
 
 pub struct GptDisk {
