@@ -48,8 +48,8 @@ pub enum GptDiskError {
     /// executable was booted from.
     ParentDiskNotFound,
 
-    /// Failed to find the handle for the stateful partition.
-    StatefulPartitionNotFound,
+    /// Failed to find the handle for the named partition.
+    PartitionNotFound,
 }
 
 impl Display for GptDiskError {
@@ -88,8 +88,8 @@ impl Display for GptDiskError {
             Self::ParentDiskNotFound => {
                 write!(f, "failed to get parent disk")
             }
-            Self::StatefulPartitionNotFound => {
-                write!(f, "failed to find stateful partition handle")
+            Self::PartitionNotFound => {
+                write!(f, "failed to find partition handle for a named partition")
             }
         }
     }
@@ -282,6 +282,15 @@ fn is_partition_named(
 fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &CStr16 = cstr16!("STATE");
+    find_partition_handle_by_name(uefi, STATE_NAME)
+}
+
+/// Get the handle of the named GPT partition.
+///
+/// This finds the `name` partition by its label, and excludes
+/// partitions from disks other than the one this executable is running
+/// from.
+fn find_partition_handle_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<Handle, GptDiskError> {
     let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
@@ -290,8 +299,8 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
         .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
 
     for handle in partition_info_handles {
-        // Ignore non-GPT partitions with a name other than "STATE".
-        if !is_partition_named(uefi, handle, STATE_NAME)? {
+        // Ignore non-GPT partitions with a name other than `name`.
+        if !is_partition_named(uefi, handle, name)? {
             continue;
         }
 
@@ -304,7 +313,7 @@ fn find_stateful_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskErro
         }
     }
 
-    Err(GptDiskError::StatefulPartitionNotFound)
+    Err(GptDiskError::PartitionNotFound)
 }
 
 /// Open the Disk IO protocol for the stateful partition. This allows
@@ -802,7 +811,7 @@ mod tests {
 
         assert_eq!(
             find_stateful_partition_handle(&uefi),
-            Err(GptDiskError::StatefulPartitionNotFound)
+            Err(GptDiskError::PartitionNotFound)
         );
     }
 
@@ -821,7 +830,7 @@ mod tests {
 
         assert_eq!(
             find_stateful_partition_handle(&uefi),
-            Err(GptDiskError::StatefulPartitionNotFound)
+            Err(GptDiskError::PartitionNotFound)
         );
     }
 
