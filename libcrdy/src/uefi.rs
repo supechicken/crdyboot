@@ -22,6 +22,20 @@ use uefi::{CStr16, Handle, Status};
 pub trait Uefi {
     fn get_time(&self) -> uefi::Result<Time>;
 
+    /// Read a UEFI variable into `buf`.
+    ///
+    /// If successful, returns the size of the variable and the variable
+    /// attributes.
+    ///
+    /// If the buffer is not large enough, the error value contains the
+    /// required size.
+    fn get_variable(
+        &self,
+        name: &CStr16,
+        vendor: &VariableVendor,
+        buf: &mut [u8],
+    ) -> uefi::Result<(usize, VariableAttributes), Option<usize>>;
+
     fn get_variable_boxed(
         &self,
         name: &CStr16,
@@ -66,6 +80,19 @@ pub struct UefiImpl;
 impl Uefi for UefiImpl {
     fn get_time(&self) -> uefi::Result<Time> {
         runtime::get_time()
+    }
+
+    fn get_variable(
+        &self,
+        name: &CStr16,
+        vendor: &VariableVendor,
+        buf: &mut [u8],
+    ) -> uefi::Result<(usize, VariableAttributes), Option<usize>> {
+        runtime::get_variable(name, vendor, buf)
+            // Map from buf to buf.len to avoid needing a buffer
+            // lifetime tying input to output; that wouldn't work with
+            // mockall.
+            .map(|(buf, attr)| (buf.len(), attr))
     }
 
     fn get_variable_boxed(
