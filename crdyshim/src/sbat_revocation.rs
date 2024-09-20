@@ -30,10 +30,11 @@
 use alloc::boxed::Box;
 use core::fmt::{self, Display, Formatter};
 use libcrdy::arch::PeFileForCurrentArch;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use log::info;
 use object::{Object, ObjectSection};
 use sbat::{ImageSbat, RevocationSbat, RevocationSbatOwned, ValidationResult};
-use uefi::runtime::{self, VariableAttributes, VariableVendor};
+use uefi::runtime::{VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16};
 
 const REVOCATION_VAR_ATTRS: VariableAttributes =
@@ -45,50 +46,6 @@ const REVOCATION_VAR_NAME: &CStr16 = cstr16!("SbatLevel");
 /// Shim GUID.
 const REVOCATION_VAR_VENDOR: VariableVendor =
     VariableVendor(guid!("605dab50-e046-4300-abb6-3dd810dd8b23"));
-
-/// Trait for reading and writing UEFI variables. The two methods are
-/// identical to the interface provided by `RuntimeServices`. This trait
-/// is used to allow mocking in unit tests.
-#[cfg_attr(test, mockall::automock)]
-trait UefiVarAccess {
-    /// Get the value and attributes of a UEFI variable.
-    fn get_variable_boxed(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-    ) -> uefi::Result<(Box<[u8]>, VariableAttributes)>;
-
-    /// Set a UEFI variable, or delete it if `data` is empty.
-    fn set_variable(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        attributes: VariableAttributes,
-        data: &[u8],
-    ) -> uefi::Result;
-}
-
-struct UefiVarAccessImpl;
-
-impl UefiVarAccess for UefiVarAccessImpl {
-    fn get_variable_boxed(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-    ) -> uefi::Result<(Box<[u8]>, VariableAttributes)> {
-        runtime::get_variable_boxed(name, vendor)
-    }
-
-    fn set_variable(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        attributes: VariableAttributes,
-        data: &[u8],
-    ) -> uefi::Result {
-        runtime::set_variable(name, vendor, attributes, data)
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RevocationError {
@@ -140,7 +97,7 @@ enum RevocationVariableError {
 }
 
 struct Revocation<'a> {
-    var_access: &'a dyn UefiVarAccess,
+    var_access: &'a dyn Uefi,
 
     /// Vendor GUID and name of the UEFI variable.
     var_vendor: &'a VariableVendor,
@@ -271,7 +228,7 @@ impl<'a> Revocation<'a> {
 pub fn update_and_get_revocations(
     embedded_revocations: &[u8],
 ) -> Result<RevocationSbatOwned, RevocationError> {
-    let var_access = UefiVarAccessImpl;
+    let var_access = UefiImpl;
     let revocation = Revocation {
         var_access: &var_access,
         var_vendor: &REVOCATION_VAR_VENDOR,
@@ -317,6 +274,7 @@ pub fn validate_pe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libcrdy::uefi::MockUefi;
     use mockall::predicate::*;
     use uefi::Status;
 
@@ -327,7 +285,7 @@ mod tests {
     fn call_read_revocations_from_uefi_variable(
         result: uefi::Result<(Box<[u8]>, VariableAttributes)>,
     ) -> Result<RevocationSbatOwned, RevocationVariableError> {
-        let mut var_access = MockUefiVarAccess::new();
+        let mut var_access = MockUefi::new();
 
         var_access
             .expect_get_variable_boxed()
@@ -388,7 +346,7 @@ mod tests {
         get_var_result: uefi::Result<(Box<[u8]>, VariableAttributes)>,
         set_var_data: &[&'static [u8]],
     ) -> Result<RevocationSbatOwned, RevocationError> {
-        let mut var_access = MockUefiVarAccess::new();
+        let mut var_access = MockUefi::new();
 
         var_access
             .expect_get_variable_boxed()
