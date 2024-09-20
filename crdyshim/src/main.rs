@@ -25,6 +25,7 @@ use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::set_log_level;
 use libcrdy::tpm::extend_pcr_and_log;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
 use log::{error, info};
 use sbat::RevocationSbat;
@@ -149,7 +150,7 @@ impl Display for CrdyshimError {
 /// If the variable cannot be read, or if the value is anything other
 /// than 0 or 1, log an error and treat it as secure boot being
 /// disabled.
-fn is_secure_boot_enabled() -> bool {
+fn is_secure_boot_enabled(_uefi: &dyn Uefi) -> bool {
     let mut buf: [u8; 1] = [0];
     match runtime::get_variable(
         cstr16!("SecureBoot"),
@@ -265,7 +266,9 @@ fn get_public_key() -> Result<ed25519_compact::PublicKey, CrdyshimError> {
 fn load_and_validate_next_stage(
     next_stage_name: &CStr16,
 ) -> Result<ScopedPageAllocation, CrdyshimError> {
-    let is_secure_boot_enabled = is_secure_boot_enabled();
+    let uefi = &UefiImpl;
+
+    let is_secure_boot_enabled = is_secure_boot_enabled(uefi);
     info!("secure boot enabled? {}", is_secure_boot_enabled);
 
     // Allocate space for the raw next stage executable.
