@@ -35,7 +35,7 @@ use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
-use uefi::runtime::{self, VariableVendor};
+use uefi::runtime::VariableVendor;
 use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::{cstr16, CStr16, CString16};
 
@@ -150,21 +150,31 @@ impl Display for CrdyshimError {
 /// If the variable cannot be read, or if the value is anything other
 /// than 0 or 1, log an error and treat it as secure boot being
 /// disabled.
-fn is_secure_boot_enabled(_uefi: &dyn Uefi) -> bool {
+fn is_secure_boot_enabled(uefi: &dyn Uefi) -> bool {
     let mut buf: [u8; 1] = [0];
-    match runtime::get_variable(
+    match uefi.get_variable(
         cstr16!("SecureBoot"),
         &VariableVendor::GLOBAL_VARIABLE,
         &mut buf,
     ) {
-        Ok(([0], _)) => false,
-        Ok(([1], _)) => true,
-        Ok((val, _)) => {
-            // Only the values 0 and 1 are valid per the spec. If the
-            // variable contains some other number, treat it as secure
-            // boot being disabled.
-            info!("unexpected SecureBoot value: {val:x?}");
-            false
+        Ok((len, _)) => {
+            if len == 1 {
+                match buf[0] {
+                    0 => false,
+                    1 => true,
+                    val => {
+                        // Only the values 0 and 1 are valid per the
+                        // spec. If the variable contains some other
+                        // number, treat it as secure boot being
+                        // disabled.
+                        info!("unexpected SecureBoot value: {val:x?}");
+                        false
+                    }
+                }
+            } else {
+                info!("unexpected SecureBoot length: {len}");
+                false
+            }
         }
         Err(err) => {
             // If the variable cannot be read, treat it as secure boot
@@ -431,3 +441,77 @@ fn efi_main() -> Status {
 // See https://github.com/rhboot/shim/blob/main/SBAT.md for details of what
 // this section is used for.
 embed_section!(SBAT, ".sbat", "../sbat.csv");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libcrdy::uefi::MockUefi;
+    use uefi::runtime::VariableAttributes;
+    use uefi::Error;
+
+    fn create_mock_for_secure_boot(val: Option<Vec<u8>>) -> MockUefi {
+        let mut uefi = MockUefi::new();
+        uefi.expect_get_variable()
+            .returning(move |name, vendor, buf| {
+                assert_eq!(name, cstr16!("SecureBoot"));
+                assert_eq!(*vendor, VariableVendor::GLOBAL_VARIABLE);
+                assert_eq!(buf.len(), 1);
+
+                let attrs =
+                    VariableAttributes::BOOTSERVICE_ACCESS | VariableAttributes::RUNTIME_ACCESS;
+
+                if let Some(val) = &val {
+                    if val.is_empty() {
+                        Ok((0, attrs))
+                    } else if val.len() == 1 {
+                        buf[0] = val[0];
+                        Ok((1, attrs))
+                    } else {
+                        Err(Error::new(Status::BUFFER_TOO_SMALL.into(), Some(val.len())))
+                    }
+                } else {
+                    Err(Error::new(Status::NOT_FOUND, None))
+                }
+            });
+        uefi
+    }
+
+    /// Test that `is_secure_boot_enabled` returns true if secure boot
+    /// is enabled.
+    #[test]
+    fn test_is_secure_boot_enabled_true() {
+        let uefi = create_mock_for_secure_boot(Some(vec![1]));
+        assert_eq!(is_secure_boot_enabled(&uefi), true);
+    }
+
+    /// Test that `is_secure_boot_enabled` returns false if secure boot
+    /// is disabled.
+    #[test]
+    fn test_is_secure_boot_enabled_false() {
+        let uefi = create_mock_for_secure_boot(Some(vec![0]));
+        assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+
+    /// Test that `is_secure_boot_enabled` returns false for an invalid
+    /// value.
+    #[test]
+    fn test_is_secure_boot_enabled_invalid_val() {
+        let uefi = create_mock_for_secure_boot(Some(vec![2]));
+        assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+
+    /// Test that `is_secure_boot_enabled` returns false for empty data.
+    #[test]
+    fn test_is_secure_boot_enabled_empty() {
+        let uefi = create_mock_for_secure_boot(Some(vec![]));
+        assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+
+    /// Test that `is_secure_boot_enabled` returns false if the secure
+    /// boot variable is missing.
+    #[test]
+    fn test_is_secure_boot_enabled_not_set() {
+        let uefi = create_mock_for_secure_boot(None);
+        assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+}
