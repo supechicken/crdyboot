@@ -13,6 +13,7 @@ extern crate alloc;
 
 pub mod arch;
 pub mod entry_point;
+pub mod fs;
 pub mod launch;
 mod logging;
 pub mod nx;

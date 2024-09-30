@@ -5,9 +5,12 @@
 use crate::disk::{GptDisk, GptDiskError};
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
+use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
+use libcrdy::fs::{get_file_size, read_regular_file, FsError};
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
@@ -17,9 +20,13 @@ use libcrdy::uefi::UefiImpl;
 use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
+use uefi::boot::{self, SearchType};
+use uefi::data_types::Identify;
+use uefi::proto::media::file::{File, FileAttribute, FileMode};
+use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::table::boot::{AllocateType, MemoryType};
-use uefi::{CStr16, CString16};
+use uefi::{cstr16, CStr16, CString16, Status};
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 
 /// TPM PCR to measure into.
@@ -32,6 +39,9 @@ use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 /// See also the Linux TPM PCR Registry:
 /// <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
 const PCR_INDEX: PcrIndex = PcrIndex(8);
+
+// Max size (32 MiB) for the flexor kernel image, for safety reasons.
+const FLEXOR_KERNEL_MAX_SIZE: usize = 33_554_432;
 
 pub enum CrdybootError {
     /// Failed to allocate memory.
@@ -71,6 +81,30 @@ pub enum CrdybootError {
 
     /// Failed to launch the kernel.
     Launch(LaunchError),
+
+    /// Failed to get file handles for a protocol.
+    GetFileSystemHandlesFailed(Status),
+
+    /// Failed to open the `SimpleFileSystem` protocol.
+    OpenSimpleFileSystemProtocolFailed(Status),
+
+    /// Failed to open a Volume.
+    OpenVolumeFailed(Status),
+
+    /// Failed to convert to a regular file.
+    RegularFileConversionFailed,
+
+    /// Failed to get the size of a file.
+    GetFileSizeFailed(FsError),
+
+    /// Flexor kernel image size is too big.
+    FlexorKernelSizeTooBig(usize),
+
+    /// Failed to read file.
+    ReadFileFailed(FsError),
+
+    /// Failed to load the flexor kernel.
+    LoadFlexorKernelFailed,
 }
 
 impl Display for CrdybootError {
@@ -94,6 +128,20 @@ impl Display for CrdybootError {
             }
             Self::MemoryProtection(err) => write!(f, "failed to set up memory protection: {err}"),
             Self::Launch(err) => write!(f, "failed to launch next stage: {err}"),
+            Self::GetFileSystemHandlesFailed(status) => {
+                write!(f, "failed to get handles for the protocol: {status}")
+            }
+            Self::OpenSimpleFileSystemProtocolFailed(status) => {
+                write!(f, "failed to open protocol: {status}")
+            }
+            Self::OpenVolumeFailed(status) => write!(f, "failed to open volume: {status}"),
+            Self::RegularFileConversionFailed => write!(f, "failed to convert to a regular file"),
+            Self::GetFileSizeFailed(err) => write!(f, "failed to get the file size: {err}"),
+            Self::FlexorKernelSizeTooBig(file_size) => {
+                write!(f, "flexor kernel image size is too big: {file_size}")
+            }
+            Self::ReadFileFailed(err) => write!(f, "Failed to read file: {err}"),
+            Self::LoadFlexorKernelFailed => write!(f, "Failed to load the flexor kernel"),
         }
     }
 }
@@ -206,6 +254,12 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     // Drop the original kernel buffer, not needed anymore.
     drop(kernel_buffer);
 
+    if cfg!(feature = "flexor") {
+        // Temporarily calling load_flexor_kernel here,
+        // it will be properly implemented in b/361836044.
+        let _ = load_flexor_kernel();
+    }
+
     execute_linux_kernel(&kernel_reloc_buffer, &cmdline)
 }
 
@@ -230,4 +284,52 @@ fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocatio
     let pe = PeFile64::parse(data).map_err(CrdybootError::InvalidPe)?;
     relocate_pe_into(&pe, &mut kernel_reloc_buffer).map_err(CrdybootError::Relocation)?;
     Ok(kernel_reloc_buffer)
+}
+
+/// Load the flexor kernel.
+///
+/// Iterate over all the file system handles that support the simple file system
+/// protocol, look for a `flexor_vmlinuz` file and return its raw data.
+/// An error is returned if:
+///  * File system could not be opened or accessed.
+///  * `flexor_vmlinuz` file is not found.
+///  * Any error occurs when reading the file data.
+fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
+    const FILE_NAME: &CStr16 = cstr16!("flexor_vmlinuz1");
+    let handles_buffer =
+        boot::locate_handle_buffer(SearchType::ByProtocol(&SimpleFileSystem::GUID))
+            .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
+
+    // Iterate over all the file system handles.
+    for handle in &*handles_buffer {
+        // Open SimpleFileSystemProtocol for each handle.
+        let mut scoped_proto = boot::open_protocol_exclusive::<SimpleFileSystem>(*handle)
+            .map_err(|err| CrdybootError::OpenSimpleFileSystemProtocolFailed(err.status()))?;
+
+        let mut root = scoped_proto
+            .open_volume()
+            .map_err(|err| CrdybootError::OpenVolumeFailed(err.status()))?;
+
+        // Read from the filesystem to check if it contains flexor_vmlinuz.
+        let Ok(file_handle) = root.open(FILE_NAME, FileMode::Read, FileAttribute::empty()) else {
+            // Continue and look in the next handle if the file is not found.
+            continue;
+        };
+
+        let mut file = file_handle
+            .into_regular_file()
+            .ok_or(CrdybootError::RegularFileConversionFailed)?;
+        let file_size = get_file_size(&mut file).map_err(CrdybootError::GetFileSizeFailed)?;
+        // Check to make sure the flexor kernel image size is not too big.
+        if file_size > FLEXOR_KERNEL_MAX_SIZE {
+            return Err(CrdybootError::FlexorKernelSizeTooBig(file_size));
+        }
+        let mut buffer: Vec<u8> = vec![0; file_size];
+
+        // Read file contents into a buffer.
+        read_regular_file(&mut file, file_size, &mut buffer)
+            .map_err(CrdybootError::ReadFileFailed)?;
+        return Ok(buffer);
+    }
+    Err(CrdybootError::LoadFlexorKernelFailed)
 }
