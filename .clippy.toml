@@ -1,0 +1,4 @@
+# Tell clippy that backticks are not needed for these words in
+# docstrings. The ".." entry means that the new words are appended to
+# the default list rather than overriding it.
+doc-valid-idents = ["ChromeOS", "SecureBoot", ".."]

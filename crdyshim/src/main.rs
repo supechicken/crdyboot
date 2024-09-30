@@ -139,7 +139,6 @@ impl Display for CrdyshimError {
     }
 }
 
-#[allow(clippy::doc_markdown)]
 /// Check whether secure boot is enabled or not.
 ///
 /// The firmware communicates secure boot status with a global

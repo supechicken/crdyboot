@@ -255,8 +255,6 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
     partition_name == name
 }
 
-// Turn off lint that incorrectly fires on "ChromeOS".
-#[allow(clippy::doc_markdown)]
 /// Use the `PartitionInfo` protocol to test if `partition_handle`
 /// corresponds to a ChromeOS stateful partition.
 ///
