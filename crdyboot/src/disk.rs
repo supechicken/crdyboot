@@ -255,12 +255,15 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
     partition_name == name
 }
 
-/// Get the handle of the named GPT partition.
+/// Get the handle and `GptPartitionEntry` of the named GPT partition.
 ///
 /// This finds the `name` partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-fn find_partition_handle_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<Handle, GptDiskError> {
+fn find_partition_by_name(
+    uefi: &dyn Uefi,
+    name: &CStr16,
+) -> Result<(Handle, GptPartitionEntry), GptDiskError> {
     let esp_partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support the partition info protocol.
@@ -288,7 +291,7 @@ fn find_partition_handle_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<Handl
         // installer USB plugged in, this ensures that we find the
         // partition on the internal disk.
         if is_sibling_partition(uefi, esp_partition_handle, handle)? {
-            return Ok(handle);
+            return Ok((handle, partition_info));
         }
     }
 
@@ -304,7 +307,7 @@ pub fn open_partition_by_name(
     uefi: &dyn Uefi,
     name: &CStr16,
 ) -> Result<(ScopedDiskIo, u32), GptDiskError> {
-    let partition_handle = find_partition_handle_by_name(uefi, name)?;
+    let partition_handle = find_partition_by_name(uefi, name)?.0;
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
 
@@ -725,9 +728,9 @@ mod tests {
         uefi
     }
 
-    /// Setup a successful `find_partition_handle_by_name` case for
+    /// Setup a successful `find_partition_by_name` case for
     /// a partition with `name`.
-    fn setup_find_named_partition_handle(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
+    fn setup_find_partition_by_name(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
         uefi.expect_find_esp_partition_handle()
             .returning(|| Ok(Some(get_handle(DeviceKind::Partition1))));
         uefi.expect_find_partition_info_handles()
@@ -738,35 +741,34 @@ mod tests {
         uefi
     }
 
-    /// Test that `find_partition_handle_by_name` succeeds with a valid
+    /// Test that `find_partition_by_name` succeeds with a valid
     /// sibling stateful partition.
     #[test]
-    fn test_find_stateful_partition_handle_success() {
+    fn test_find_partition_by_name_success() {
         let pname = cstr16!("STATE");
-        let uefi = setup_find_named_partition_handle(cstr16!("STATE"), create_mock_uefi());
+        let uefi = setup_find_partition_by_name(cstr16!("STATE"), create_mock_uefi());
         assert_eq!(
-            find_partition_handle_by_name(&uefi, pname).unwrap(),
+            find_partition_by_name(&uefi, pname).unwrap().0,
             get_handle(DeviceKind::Partition2)
         );
     }
 
-    /// Test that `find_partition_handle_by_name` fails if there's no
+    /// Test that `find_partition_by_name` fails if there's no
     /// stateful partition.
     #[test]
     fn test_find_partition_handle_by_name() {
         let pname = cstr16!("STATE");
-        let uefi =
-            setup_find_named_partition_handle(cstr16!("STATEJUSTKIDDING"), create_mock_uefi());
+        let uefi = setup_find_partition_by_name(cstr16!("STATEJUSTKIDDING"), create_mock_uefi());
         assert_eq!(
-            find_partition_handle_by_name(&uefi, pname),
-            Err(GptDiskError::PartitionNotFound)
+            find_partition_by_name(&uefi, pname).unwrap_err(),
+            GptDiskError::PartitionNotFound
         );
     }
 
-    /// Test that `find_partition_handle_by_name` fails if the only
+    /// Test that `find_partition_by_name` fails if the only
     /// stateful partition is on a different drive.
     #[test]
-    fn test_find_stateful_partition_handle_different_drive() {
+    fn test_find_partition_by_name_different_drive() {
         let pname = cstr16!("STATE");
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
@@ -778,14 +780,14 @@ mod tests {
             .return_const(Ok(info));
 
         assert_eq!(
-            find_partition_handle_by_name(&uefi, pname),
-            Err(GptDiskError::PartitionNotFound)
+            find_partition_by_name(&uefi, pname).unwrap_err(),
+            GptDiskError::PartitionNotFound
         );
     }
 
-    /// Test that `find_partition_handle_by_name` fails for MBR disks.
+    /// Test that `find_partition_by_name` fails for MBR disks.
     #[test]
-    fn test_find_stateful_partition_handle_mbr_fail() {
+    fn test_find_partition_by_name_mbr_fail() {
         let info = PartitionInfo::Mbr(MbrPartitionRecord {
             boot_indicator: 0,
             starting_chs: [1, 2, 3],
@@ -801,8 +803,8 @@ mod tests {
             .returning(|| Ok(vec![get_handle(DeviceKind::Partition2)]));
 
         assert_eq!(
-            find_partition_handle_by_name(&uefi, cstr16!("STATE")),
-            Err(GptDiskError::PartitionNotFound)
+            find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
+            GptDiskError::PartitionNotFound
         );
     }
 
