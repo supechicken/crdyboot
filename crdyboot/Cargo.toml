@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+android = []
 # Temporary feature flag to control whether firmware updates are allowed.
 firmware_update = []
 # Feature flag to gate flexor support.
