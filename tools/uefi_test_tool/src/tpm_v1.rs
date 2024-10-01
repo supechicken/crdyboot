@@ -4,15 +4,15 @@
 
 use crate::operation::Operation;
 use core::sync::atomic::{AtomicU32, Ordering};
+use uefi::boot;
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::tcg::v1;
-use uefi::table::boot::BootServices;
 use uefi::{Identify, Status};
 
 /// Install a TPM v1 protocol. This isn't a real TPM, just enough to
 /// test some error cases (e.g. the behavior of crdyshim if the TPM is
 /// deactivated).
-pub fn create_tpm1(boot_services: &BootServices) {
+pub fn create_tpm1() {
     static TPM_V1: TpmV1 = TpmV1 {
         status_check,
         hash_log_extend_event,
@@ -27,8 +27,7 @@ pub fn create_tpm1(boot_services: &BootServices) {
 
     // SAFETY: The layout of `TPM_V1` matches the spec, and the GUID is
     // correct.
-    unsafe { boot_services.install_protocol_interface(None, &v1::Tcg::GUID, interface.cast()) }
-        .unwrap();
+    unsafe { boot::install_protocol_interface(None, &v1::Tcg::GUID, interface.cast()) }.unwrap();
 }
 
 /// Get TPM status. Depending on the operation, the TPM may be deactivated.

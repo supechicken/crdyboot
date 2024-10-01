@@ -5,11 +5,11 @@
 use alloc::vec::Vec;
 use log::info;
 use uefi::boot::{self, LoadImageSource};
+use uefi::cstr16;
 use uefi::proto::device_path::build::{self, DevicePathBuilder};
 use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
 use uefi::proto::device_path::{DevicePath, DeviceSubType, DeviceType, LoadedImageDevicePath};
 use uefi::proto::BootPolicy;
-use uefi::{cstr16, table};
 
 /// Get the device path of crdyshim. This is the same as the
 /// currently-loaded image's device path, but with the file path part
@@ -41,11 +41,7 @@ pub fn launch_crdyshim() {
     info!(
         "loading {}",
         crdyshim_path
-            .to_string(
-                table::system_table_boot().unwrap().boot_services(),
-                DisplayOnly(true),
-                AllowShortcuts(true)
-            )
+            .to_string(DisplayOnly(true), AllowShortcuts(true))
             .unwrap(),
     );
     let crdyshim_image_handle = boot::load_image(

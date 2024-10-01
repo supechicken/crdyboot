@@ -15,9 +15,8 @@ use core::mem;
 use core::sync::atomic::{AtomicU32, Ordering};
 use log::info;
 use operation::Operation;
-use uefi::table::boot::BootServices;
-use uefi::table::{Boot, SystemTable};
-use uefi::{cstr16, entry, fs, Handle, Status};
+use uefi::boot;
+use uefi::{cstr16, entry, fs, Status};
 
 static OPERATION: AtomicU32 = AtomicU32::new(Operation::Unset as u32);
 
@@ -28,9 +27,8 @@ impl Operation {
     /// invalid.
     ///
     /// The operation is stored in the global `OPERATION`.
-    fn init(boot_services: &BootServices) {
-        let sfs = boot_services
-            .get_image_file_system(boot_services.image_handle())
+    fn init() {
+        let sfs = boot::get_image_file_system(boot::image_handle())
             .expect("failed to open SimpleFileSystem");
         let mut fs = fs::FileSystem::new(sfs);
 
@@ -61,16 +59,13 @@ impl Operation {
 }
 
 #[entry]
-fn efi_main(image: Handle, st: SystemTable<Boot>) -> Status {
+fn efi_main() -> Status {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
 
-    Operation::init(st.boot_services());
-
+    Operation::init();
     match Operation::get() {
         Operation::Unset => unreachable!(),
-        Operation::Tpm1Deactivated | Operation::Tpm1ExtendFail => {
-            tpm_v1::create_tpm1(st.boot_services())
-        }
+        Operation::Tpm1Deactivated | Operation::Tpm1ExtendFail => tpm_v1::create_tpm1(),
     }
 
     launch::launch_crdyshim();
