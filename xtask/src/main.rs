@@ -33,6 +33,9 @@ use std::{env, process};
 use swtpm::TpmVersion;
 use tempfile::TempDir;
 
+/// Whether or not to build with android enabled.
+pub struct BuildAndroid(pub bool);
+
 /// Tools for crdyboot.
 #[derive(Parser)]
 pub struct Opt {
@@ -63,11 +66,19 @@ struct BuildAction {
     /// only log warnings and errors
     #[arg(long)]
     disable_verbose_logs: bool,
+
+    /// build with android enabled
+    #[arg(long)]
+    android: bool,
 }
 
 impl BuildAction {
     fn verbose(&self) -> VerboseRuntimeLogs {
         VerboseRuntimeLogs(!self.disable_verbose_logs)
+    }
+
+    fn is_android(&self) -> BuildAndroid {
+        BuildAndroid(self.android)
     }
 }
 
@@ -244,7 +255,10 @@ fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
             vm_tests: action.vm_tests,
         },
     )?;
-    run_bootloader_build(conf, action.verbose())?;
+    // Build android first to check those paths but leave the final
+    // binary as the normal version by building w/o android second.
+    run_bootloader_build(conf, BuildAndroid(true), action.verbose())?;
+    run_bootloader_build(conf, BuildAndroid(false), action.verbose())?;
 
     Ok(())
 }
@@ -272,9 +286,17 @@ fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn run_bootloader_build(conf: &Config, verbose: VerboseRuntimeLogs) -> Result<()> {
+fn run_bootloader_build(
+    conf: &Config,
+    android: BuildAndroid,
+    verbose: VerboseRuntimeLogs,
+) -> Result<()> {
     run_uefi_build(Package::Crdyshim, vec!["use_dev_pubkey"])?;
-    run_uefi_build(Package::Crdyboot, vec!["firmware_update", "flexor"])?;
+    let mut crdyboot_features = vec!["firmware_update", "flexor"];
+    if android.0 {
+        crdyboot_features.push("android")
+    }
+    run_uefi_build(Package::Crdyboot, crdyboot_features)?;
     run_uefi_build(Package::UefiTestTool, vec![])?;
 
     // Check various properties of the bootloader binaries.
@@ -484,7 +506,7 @@ fn main() -> Result<()> {
     setup::rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
-        Action::Build(action) => run_bootloader_build(&conf, action.verbose()),
+        Action::Build(action) => run_bootloader_build(&conf, action.is_android(), action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(action) => run_check(&conf, action),
         Action::Format(action) => run_rustfmt(action),

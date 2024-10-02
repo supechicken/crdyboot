@@ -18,7 +18,7 @@ use crate::gen_disk::{
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
 use crate::swtpm::TpmVersion;
-use crate::{copy_file, run_bootloader_build};
+use crate::{copy_file, run_bootloader_build, BuildAndroid};
 use anyhow::{bail, Result};
 use command_run::Command;
 use fs_err as fs;
@@ -400,7 +400,7 @@ fn test_tpm1_extend_error_success(conf: &Config) -> Result<()> {
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
-    run_bootloader_build(conf, VerboseRuntimeLogs(true))?;
+    run_bootloader_build(conf, BuildAndroid(false), VerboseRuntimeLogs(true))?;
     download_test_key(conf)?;
 
     create_test_disk(conf)?;
