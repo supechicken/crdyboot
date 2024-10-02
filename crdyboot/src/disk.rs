@@ -468,7 +468,6 @@ mod tests {
     use uefi::{guid, CStr16};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
 
-    #[allow(dead_code)] // TODO(nicholasbishop): removed in a later commit
     enum BootDrive {
         Hd1,
         Hd2,
@@ -676,16 +675,7 @@ mod tests {
         }
     }
 
-    fn create_mock_uefi() -> MockUefi {
-        let mut uefi = MockUefi::new();
-        uefi.expect_device_path_for_handle().returning(|h| {
-            let kind = DeviceKind::from_handle(h);
-            Ok(kind.create_device_path().unwrap())
-        });
-        uefi
-    }
-
-    fn create_mock_uefi_with_block_io(boot_drive: BootDrive) -> MockUefi {
+    fn create_mock_uefi(boot_drive: BootDrive) -> MockUefi {
         static MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 123,
             removable_media: false,
@@ -742,7 +732,11 @@ mod tests {
             unimplemented!()
         }
 
-        let mut uefi = create_mock_uefi();
+        let mut uefi = MockUefi::new();
+        uefi.expect_device_path_for_handle().returning(|h| {
+            let kind = DeviceKind::from_handle(h);
+            Ok(kind.create_device_path().unwrap())
+        });
         uefi.expect_find_esp_partition_handle()
             .returning(move || match boot_drive {
                 BootDrive::Hd1 => Ok(Some(DeviceKind::Hd1Esp.handle())),
@@ -787,7 +781,7 @@ mod tests {
     /// partition.
     #[test]
     fn test_is_parent_disk_partition() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         assert!(
             is_parent_disk(&uefi, DeviceKind::Hd1.handle(), DeviceKind::Hd1Esp.handle()).unwrap()
@@ -798,7 +792,7 @@ mod tests {
     /// the child doesn't have.
     #[test]
     fn test_is_parent_disk_nonmatching() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         assert!(!is_parent_disk(
             &uefi,
@@ -812,7 +806,7 @@ mod tests {
     /// end with a hard drive partition node.
     #[test]
     fn test_is_parent_disk_nonpartition() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         assert!(!is_parent_disk(
             &uefi,
@@ -825,7 +819,7 @@ mod tests {
     /// Test that `is_parent_disk` returns false for a parent == child.
     #[test]
     fn test_is_parent_disk_harddrive() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         assert!(
             !is_parent_disk(&uefi, DeviceKind::Hd1.handle(), DeviceKind::Hd1.handle()).unwrap()
@@ -835,7 +829,7 @@ mod tests {
     /// Test that `find_parent_disk` identifies the correct handle.
     #[test]
     fn test_find_parent_disk_success() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         let all_handles: Vec<_> = DeviceKind::all().iter().map(|k| k.handle()).collect();
 
@@ -849,7 +843,7 @@ mod tests {
     /// not found.
     #[test]
     fn test_find_parent_disk_not_found() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         let all_handles: Vec<_> = DeviceKind::all()
             .iter()
@@ -866,7 +860,7 @@ mod tests {
     /// Test that `is_sibling_partition` returns true for sibling partitions.
     #[test]
     fn test_is_sibling_partition_true() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(is_sibling_partition(
             &uefi,
             DeviceKind::Hd1Esp.handle(),
@@ -879,7 +873,7 @@ mod tests {
     /// different drives.
     #[test]
     fn test_is_sibling_partition_false() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(!is_sibling_partition(
             &uefi,
             DeviceKind::Hd1Esp.handle(),
@@ -892,7 +886,7 @@ mod tests {
     /// of different lengths.
     #[test]
     fn test_is_sibling_partition_different_lengths() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(!is_sibling_partition(
             &uefi,
             DeviceKind::Hd1Esp.handle(),
@@ -905,7 +899,7 @@ mod tests {
     /// end with a non-partition node.
     #[test]
     fn test_is_sibling_partition_non_partition() {
-        let uefi = create_mock_uefi();
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(!is_sibling_partition(
             &uefi,
             DeviceKind::Hd1Esp.handle(),
@@ -918,7 +912,7 @@ mod tests {
     #[test]
     fn test_get_partition_size_in_bytes() {
         let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         // The size is the block size * the number of lba for the device
         // as setup.
         assert_eq!(
@@ -931,7 +925,7 @@ mod tests {
     #[test]
     fn test_get_partition_unique_guid_success() {
         let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert_eq!(
             get_partition_unique_guid(&uefi, pname).unwrap(),
             guid!("1fa90113-672a-4c30-89c6-1b87fe019adc")
@@ -954,7 +948,7 @@ mod tests {
     #[test]
     fn test_find_partition_by_name_success() {
         let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap().0,
             DeviceKind::Hd1State.handle()
@@ -966,7 +960,7 @@ mod tests {
     #[test]
     fn test_find_partition_by_name_error() {
         let pname = cstr16!("does not exist");
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap_err(),
             GptDiskError::PartitionNotFound
@@ -978,7 +972,7 @@ mod tests {
     #[test]
     fn test_find_partition_by_name_different_drive() {
         let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd2);
+        let uefi = create_mock_uefi(BootDrive::Hd2);
 
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap_err(),
@@ -989,7 +983,7 @@ mod tests {
     /// Test that `find_partition_by_name` fails for MBR disks.
     #[test]
     fn test_find_partition_by_name_mbr_fail() {
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd3Mbr);
+        let uefi = create_mock_uefi(BootDrive::Hd3Mbr);
 
         assert_eq!(
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
@@ -1001,7 +995,7 @@ mod tests {
     /// with no device by returning an error.
     #[test]
     fn test_find_esp_partition_handle_no_device() {
-        let mut uefi = create_mock_uefi();
+        let mut uefi = create_mock_uefi(BootDrive::HdWithNoEspDeviceHandle);
         uefi.expect_find_esp_partition_handle()
             .returning(|| Ok(None));
 
@@ -1014,7 +1008,7 @@ mod tests {
     /// Test that `find_esp_partition_handle` maps errors correctly.
     #[test]
     fn test_find_esp_partition_handle_error() {
-        let mut uefi = create_mock_uefi();
+        let mut uefi = create_mock_uefi(BootDrive::Invalid);
         uefi.expect_find_esp_partition_handle()
             .returning(|| Err(Status::INVALID_PARAMETER.into()));
 
@@ -1029,14 +1023,14 @@ mod tests {
     /// Test that `find_block_io_handles` succeeds with valid inputs.
     #[test]
     fn test_find_disk_block_io_success() {
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(find_disk_block_io(&uefi).is_ok());
     }
 
     /// Test that `GptDisk` accessor methods work.
     #[test]
     fn test_gpt_disk_accessors() {
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
         let disk = GptDisk::new(&uefi).unwrap();
         assert_eq!(disk.bytes_per_lba().get(), 512);
         assert_eq!(disk.lba_count(), 10_000);
@@ -1045,7 +1039,7 @@ mod tests {
     /// Test that `GptDisk` can read via the Block IO protocol.
     #[test]
     fn test_gpt_disk_read() {
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         let disk = GptDisk::new(&uefi).unwrap();
 
@@ -1074,7 +1068,7 @@ mod tests {
     /// Test that `GptDisk` can write via the Block IO protocol.
     #[test]
     fn test_gpt_disk_write() {
-        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd1);
 
         let mut disk = GptDisk::new(&uefi).unwrap();
         let block = vec![0; 512];
