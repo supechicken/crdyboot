@@ -194,19 +194,26 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
 
     let cmdline = get_kernel_command_line(&kernel)?;
 
-    // Allocate a buffer to relocate the kernel into.
-    //
+    // Relocate the kernel into an allocated buffer.
     // This buffer will never be freed, unless loading or executing the
     // kernel fails.
-    let mut kernel_reloc_buffer = ScopedPageAllocation::new(
-        AllocateType::AnyPages,
-        MemoryType::LOADER_CODE,
-        // As of R130 the required size is about 17.9MiB. Developer
-        // kernels with different config options may be slightly larger,
-        // so add some extra space, bringing the total to 24 MiB.
-        mib_to_bytes(24),
-    )
-    .map_err(CrdybootError::Allocation)?;
+    //
+    // As of R130 the required size is about 17.9MiB. Developer
+    // kernels with different config options may be slightly larger,
+    // so add some extra space, bringing the total to 24 MiB.
+    let kernel_reloc_buffer = relocate_kernel(kernel.data(), mib_to_bytes(24))?;
+
+    // Drop the original kernel buffer, not needed anymore.
+    drop(kernel_buffer);
+
+    execute_linux_kernel(&kernel_reloc_buffer, &cmdline)
+}
+
+fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocation, CrdybootError> {
+    // Allocate a buffer to relocate the kernel into.
+    let mut kernel_reloc_buffer =
+        ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, reloc_size)
+            .map_err(CrdybootError::Allocation)?;
 
     // Relocate the kernel into the new buffer. Even though the kernel
     // doesn't have a `.reloc` section, it still needs to be relocated
@@ -220,13 +227,7 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     //
     // See this discussion thread:
     // https://lore.kernel.org/linux-efi/CAAzv750HTnposziTOPDjnUQM0K2JVrE3-1HCxiPkp+QtWi=jEw@mail.gmail.com/T/#u
-    {
-        let pe = PeFile64::parse(kernel.data()).map_err(CrdybootError::InvalidPe)?;
-        relocate_pe_into(&pe, &mut kernel_reloc_buffer).map_err(CrdybootError::Relocation)?;
-    }
-
-    // Drop the original kernel buffer, not needed anymore.
-    drop(kernel_buffer);
-
-    execute_linux_kernel(&kernel_reloc_buffer, &cmdline)
+    let pe = PeFile64::parse(data).map_err(CrdybootError::InvalidPe)?;
+    relocate_pe_into(&pe, &mut kernel_reloc_buffer).map_err(CrdybootError::Relocation)?;
+    Ok(kernel_reloc_buffer)
 }
