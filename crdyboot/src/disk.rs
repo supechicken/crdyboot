@@ -474,6 +474,7 @@ mod tests {
         Hd1Esp,
         Hd1State,
         Hd2Esp,
+        Hd3MbrPartition,
         FilePath,
         MacAddr,
     }
@@ -513,6 +514,7 @@ mod tests {
                 Self::Hd1Esp,
                 Self::Hd1State,
                 Self::Hd2Esp,
+                Self::Hd3MbrPartition,
                 Self::FilePath,
                 Self::MacAddr,
             ]
@@ -543,6 +545,17 @@ mod tests {
                     logical_unit_number: 60,
                 },
             ];
+            let hd3 = [
+                &Acpi { hid: 11, uid: 22 } as &dyn BuildNode,
+                &Pci {
+                    function: 33,
+                    device: 44,
+                },
+                &Scsi {
+                    target_id: 55,
+                    logical_unit_number: 66,
+                },
+            ];
             let partition1 = HardDrive {
                 partition_number: 12,
                 partition_start: 299008,
@@ -554,6 +567,12 @@ mod tests {
             };
             let partition2 = HardDrive {
                 partition_number: 13,
+                ..partition1
+            };
+            let partition3 = HardDrive {
+                partition_number: 1,
+                partition_signature: PartitionSignature::Mbr([3; 4]),
+                partition_format: PartitionFormat::MBR,
                 ..partition1
             };
             let path = FilePath {
@@ -575,6 +594,10 @@ mod tests {
                     // This partition is intentionally identical to the
                     // one on hd1.
                     nodes.push(&partition1);
+                }
+                Self::Hd3MbrPartition => {
+                    nodes.extend(hd3);
+                    nodes.push(&partition3);
                 }
                 Self::FilePath => {
                     nodes.extend(hd1);
