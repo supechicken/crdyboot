@@ -9,7 +9,7 @@ use log::error;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::media::partition::GptPartitionEntry;
-#[cfg(any(feature = "android", test))]
+#[cfg(feature = "android")]
 use uefi::Guid;
 use uefi::{CStr16, Char16};
 use vboot::{DiskIo, ReturnCode};
@@ -54,7 +54,7 @@ pub enum GptDiskError {
     PartitionNotFound,
 
     /// The partition size is zero or cannot fit into [`u64`].
-    #[cfg(any(feature = "android", test))]
+    #[cfg(feature = "android")]
     InvalidPartitionSize,
 }
 
@@ -97,7 +97,7 @@ impl Display for GptDiskError {
             Self::PartitionNotFound => {
                 write!(f, "failed to find partition handle for a named partition")
             }
-            #[cfg(any(feature = "android", test))]
+            #[cfg(feature = "android")]
             Self::InvalidPartitionSize => {
                 write!(f, "partition size is zero or too large")
             }
@@ -270,7 +270,7 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
 /// This finds the `name` partition by its label and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-#[cfg(any(feature = "android", test))]
+#[cfg(feature = "android")]
 pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64, GptDiskError> {
     let (partition_handle, partition_info) = find_partition_by_name(uefi, name)?;
 
@@ -294,7 +294,7 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
 /// This finds the `name` partition by its label and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-#[cfg(any(feature = "android", test))]
+#[cfg(feature = "android")]
 pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid, GptDiskError> {
     Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)
 }
@@ -940,6 +940,7 @@ mod tests {
     }
 
     /// Test that `get_partition_size_in_bytes` succeeds.
+    #[cfg(feature = "android")]
     #[test]
     fn test_get_partition_size_in_bytes() {
         let pname = cstr16!("STATE");
@@ -953,6 +954,7 @@ mod tests {
     }
 
     /// Test that `get_partition_unique_guid` succeeds.
+    #[cfg(feature = "android")]
     #[test]
     fn test_get_partition_unique_guid_success() {
         let pname = cstr16!("STATE");
