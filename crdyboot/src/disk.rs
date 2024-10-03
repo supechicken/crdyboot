@@ -819,10 +819,10 @@ mod tests {
         );
     }
 
-    /// Test that `find_partition_by_name` fails if there's no
-    /// stateful partition.
+    /// Test that `find_partition_by_name` fails with the name of a
+    /// partition that does not exist.
     #[test]
-    fn test_find_partition_handle_by_name() {
+    fn test_find_partition_by_name_error() {
         let pname = cstr16!("STATE");
         let uefi = setup_find_partition_by_name(cstr16!("STATEJUSTKIDDING"), create_mock_uefi());
         assert_eq!(
