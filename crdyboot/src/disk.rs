@@ -520,6 +520,66 @@ mod tests {
             ]
         }
 
+        fn partition_info(self) -> Option<PartitionInfo> {
+            match self {
+                Self::Hd1Esp | Self::Hd2Esp => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                    partition_type_guid: GptPartitionType::EFI_SYSTEM_PARTITION,
+                    unique_partition_guid: guid!("b1f85a2c-a582-1148-a677-73b11035c739"),
+                    starting_lba: 300_000,
+                    ending_lba: 400_000,
+                    attributes: GptPartitionAttributes::empty(),
+                    partition_name: init_partition_name(cstr16!("EFI-SYSTEM")),
+                })),
+                Self::Hd1State => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                    partition_type_guid: GptPartitionType(guid!(
+                        "0fc63daf-8483-4772-8e79-3d69d8477de4"
+                    )),
+                    unique_partition_guid: guid!("1fa90113-672a-4c30-89c6-1b87fe019adc"),
+                    starting_lba: 6_000_000,
+                    ending_lba: 16_000_000,
+                    attributes: GptPartitionAttributes::empty(),
+                    partition_name: init_partition_name(cstr16!("STATE")),
+                })),
+                Self::Hd3MbrPartition => Some(PartitionInfo::Mbr(MbrPartitionRecord {
+                    boot_indicator: 0,
+                    starting_chs: [1, 2, 3],
+                    os_type: MbrOsType(0),
+                    ending_chs: [4, 5, 6],
+                    starting_lba: 0,
+                    size_in_lba: 10000,
+                })),
+                _ => None,
+            }
+        }
+
+        fn partition_number(self) -> Option<u32> {
+            match self {
+                Self::Hd1Esp | Self::Hd2Esp => Some(12),
+                Self::Hd1State => Some(1),
+                Self::Hd3MbrPartition => Some(1),
+                _ => None,
+            }
+        }
+
+        fn partition_device_path_node(self) -> Option<HardDrive> {
+            match self.partition_info()? {
+                PartitionInfo::Gpt(gpt) => Some(HardDrive {
+                    partition_number: self.partition_number().unwrap(),
+                    partition_start: gpt.starting_lba,
+                    partition_size: gpt.num_blocks().unwrap(),
+                    partition_signature: PartitionSignature::Guid(gpt.unique_partition_guid),
+                    partition_format: PartitionFormat::GPT,
+                }),
+                PartitionInfo::Mbr(mbr) => Some(HardDrive {
+                    partition_number: self.partition_number().unwrap(),
+                    partition_start: mbr.starting_lba.into(),
+                    partition_size: mbr.size_in_lba.into(),
+                    partition_signature: PartitionSignature::Mbr([3; 4]),
+                    partition_format: PartitionFormat::MBR,
+                }),
+            }
+        }
+
         fn create_device_path(self) -> Result<ScopedDevicePath, BuildError> {
             let mut nodes: Vec<&dyn BuildNode> = Vec::new();
 
@@ -556,48 +616,30 @@ mod tests {
                     logical_unit_number: 66,
                 },
             ];
-            let partition1 = HardDrive {
-                partition_number: 12,
-                partition_start: 299008,
-                partition_size: 131072,
-                partition_signature: PartitionSignature::Guid(guid!(
-                    "99cc6f39-2fd1-4d85-b15a-543e7b023a1f"
-                )),
-                partition_format: PartitionFormat::GPT,
-            };
-            let partition2 = HardDrive {
-                partition_number: 13,
-                ..partition1
-            };
-            let partition3 = HardDrive {
-                partition_number: 1,
-                partition_signature: PartitionSignature::Mbr([3; 4]),
-                partition_format: PartitionFormat::MBR,
-                ..partition1
-            };
             let path = FilePath {
                 path_name: cstr16!("abc"),
             };
+
+            let partition = self.partition_device_path_node();
+            let partition = partition.as_ref();
 
             match self {
                 Self::Hd1 => nodes.extend(hd1),
                 Self::Hd1Esp => {
                     nodes.extend(hd1);
-                    nodes.push(&partition1);
+                    nodes.push(partition.unwrap());
                 }
                 Self::Hd1State => {
                     nodes.extend(hd1);
-                    nodes.push(&partition2);
+                    nodes.push(partition.unwrap());
                 }
                 Self::Hd2Esp => {
                     nodes.extend(hd2);
-                    // This partition is intentionally identical to the
-                    // one on hd1.
-                    nodes.push(&partition1);
+                    nodes.push(partition.unwrap());
                 }
                 Self::Hd3MbrPartition => {
                     nodes.extend(hd3);
-                    nodes.push(&partition3);
+                    nodes.push(partition.unwrap());
                 }
                 Self::FilePath => {
                     nodes.extend(hd1);
@@ -607,7 +649,7 @@ mod tests {
                     mac_address: [1; 32],
                     interface_type: 2,
                 }),
-            };
+            }
 
             let mut vec = Vec::new();
             let mut builder = build::DevicePathBuilder::with_vec(&mut vec);
