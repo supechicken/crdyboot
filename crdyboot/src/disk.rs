@@ -676,6 +676,89 @@ mod tests {
         uefi
     }
 
+    fn create_mock_uefi_with_block_io() -> MockUefi {
+        static MEDIA: BlockIoMedia = BlockIoMedia {
+            media_id: 123,
+            removable_media: false,
+            media_present: true,
+            logical_partition: false,
+            read_only: false,
+            write_caching: false,
+            block_size: 512,
+            io_align: 0,
+            last_block: 9999,
+            lowest_aligned_lba: 0,
+            logical_blocks_per_physical_block: 1,
+            optimal_transfer_length_granularity: 1,
+        };
+
+        unsafe extern "efiapi" fn read_blocks(
+            this: *const BlockIoProtocol,
+            _media_id: u32,
+            lba: u64,
+            buffer_size: usize,
+            buffer: *mut c_void,
+        ) -> uefi_raw::Status {
+            if lba > (*(*this).media).last_block {
+                return uefi_raw::Status::INVALID_PARAMETER;
+            }
+
+            let buffer: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
+            assert_eq!(buffer.len() % 8, 0);
+            for chunk in buffer.chunks_mut(8) {
+                chunk.copy_from_slice(&lba.to_le_bytes());
+            }
+            uefi_raw::Status::SUCCESS
+        }
+
+        unsafe extern "efiapi" fn write_blocks(
+            this: *mut BlockIoProtocol,
+            _media_id: u32,
+            lba: u64,
+            _buffer_size: usize,
+            _buffer: *const c_void,
+        ) -> uefi_raw::Status {
+            if lba > (*(*this).media).last_block {
+                return uefi_raw::Status::INVALID_PARAMETER;
+            }
+
+            uefi_raw::Status::SUCCESS
+        }
+
+        unsafe extern "efiapi" fn reset(_: *mut BlockIoProtocol, _: bool) -> uefi_raw::Status {
+            unimplemented!()
+        }
+
+        unsafe extern "efiapi" fn flush_blocks(_: *mut BlockIoProtocol) -> uefi_raw::Status {
+            unimplemented!()
+        }
+
+        let mut uefi = create_mock_uefi();
+        uefi.expect_find_esp_partition_handle()
+            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
+        uefi.expect_find_block_io_handles().returning(|| {
+            Ok(vec![
+                DeviceKind::Hd1.handle(),
+                DeviceKind::Hd1Esp.handle(),
+                DeviceKind::Hd1State.handle(),
+                DeviceKind::Hd2Esp.handle(),
+            ])
+        });
+        uefi.expect_open_block_io().returning(|_| {
+            let bio = BlockIoProtocol {
+                revision: 0,
+                media: &MEDIA,
+                reset,
+                read_blocks,
+                write_blocks,
+                flush_blocks,
+            };
+            let bio: BlockIO = unsafe { mem::transmute(bio) };
+            Ok(ScopedBlockIo::ForTest(bio))
+        });
+        uefi
+    }
+
     /// Test that `is_parent_disk` returns true for a valid child
     /// partition.
     #[test]
@@ -931,90 +1014,6 @@ mod tests {
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
             GptDiskError::PartitionNotFound
         );
-    }
-
-    /// BlockIoMedia used in `create_mock_uefi_with_block_io`.
-    static MEDIA: BlockIoMedia = BlockIoMedia {
-        media_id: 123,
-        removable_media: false,
-        media_present: true,
-        logical_partition: false,
-        read_only: false,
-        write_caching: false,
-        block_size: 512,
-        io_align: 0,
-        last_block: 9999,
-        lowest_aligned_lba: 0,
-        logical_blocks_per_physical_block: 1,
-        optimal_transfer_length_granularity: 1,
-    };
-
-    fn create_mock_uefi_with_block_io() -> MockUefi {
-        unsafe extern "efiapi" fn read_blocks(
-            this: *const BlockIoProtocol,
-            _media_id: u32,
-            lba: u64,
-            buffer_size: usize,
-            buffer: *mut c_void,
-        ) -> uefi_raw::Status {
-            if lba > (*(*this).media).last_block {
-                return uefi_raw::Status::INVALID_PARAMETER;
-            }
-
-            let buffer: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
-            assert_eq!(buffer.len() % 8, 0);
-            for chunk in buffer.chunks_mut(8) {
-                chunk.copy_from_slice(&lba.to_le_bytes());
-            }
-            uefi_raw::Status::SUCCESS
-        }
-
-        unsafe extern "efiapi" fn write_blocks(
-            this: *mut BlockIoProtocol,
-            _media_id: u32,
-            lba: u64,
-            _buffer_size: usize,
-            _buffer: *const c_void,
-        ) -> uefi_raw::Status {
-            if lba > (*(*this).media).last_block {
-                return uefi_raw::Status::INVALID_PARAMETER;
-            }
-
-            uefi_raw::Status::SUCCESS
-        }
-
-        unsafe extern "efiapi" fn reset(_: *mut BlockIoProtocol, _: bool) -> uefi_raw::Status {
-            unimplemented!()
-        }
-
-        unsafe extern "efiapi" fn flush_blocks(_: *mut BlockIoProtocol) -> uefi_raw::Status {
-            unimplemented!()
-        }
-
-        let mut uefi = create_mock_uefi();
-        uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
-        uefi.expect_find_block_io_handles().returning(|| {
-            Ok(vec![
-                DeviceKind::Hd1.handle(),
-                DeviceKind::Hd1Esp.handle(),
-                DeviceKind::Hd1State.handle(),
-                DeviceKind::Hd2Esp.handle(),
-            ])
-        });
-        uefi.expect_open_block_io().returning(|_| {
-            let bio = BlockIoProtocol {
-                revision: 0,
-                media: &MEDIA,
-                reset,
-                read_blocks,
-                write_blocks,
-                flush_blocks,
-            };
-            let bio: BlockIO = unsafe { mem::transmute(bio) };
-            Ok(ScopedBlockIo::ForTest(bio))
-        });
-        uefi
     }
 
     /// Test that `find_esp_partition_handle` handles a loaded image
