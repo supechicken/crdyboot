@@ -954,13 +954,6 @@ mod tests {
         PartitionInfo::Gpt(create_gpt_partition_entry(init_partition_name(name)))
     }
 
-    fn create_mock_uefi_with_partition_info(info: PartitionInfo) -> MockUefi {
-        let mut uefi = MockUefi::new();
-        uefi.expect_partition_info_for_handle()
-            .return_const(Ok(info));
-        uefi
-    }
-
     /// Setup a successful `find_partition_by_name` case for
     /// a partition with `name`.
     fn setup_find_partition_by_name(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
@@ -1021,19 +1014,7 @@ mod tests {
     /// Test that `find_partition_by_name` fails for MBR disks.
     #[test]
     fn test_find_partition_by_name_mbr_fail() {
-        let info = PartitionInfo::Mbr(MbrPartitionRecord {
-            boot_indicator: 0,
-            starting_chs: [1, 2, 3],
-            os_type: MbrOsType(0),
-            ending_chs: [4, 5, 6],
-            starting_lba: 0,
-            size_in_lba: 10000,
-        });
-        let mut uefi = create_mock_uefi_with_partition_info(info);
-        uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
-        uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::Hd1State.handle()]));
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd3Mbr);
 
         assert_eq!(
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
