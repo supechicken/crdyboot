@@ -270,6 +270,7 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
 /// This finds the `name` partition by its label and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
+#[allow(unused)]
 #[cfg(feature = "android")]
 pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64, GptDiskError> {
     let (partition_handle, partition_info) = find_partition_by_name(uefi, name)?;
@@ -294,6 +295,7 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
 /// This finds the `name` partition by its label and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
+#[allow(unused)]
 #[cfg(feature = "android")]
 pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid, GptDiskError> {
     Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)

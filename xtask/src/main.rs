@@ -200,6 +200,11 @@ struct GenTestDataTarballAction {}
 #[derive(Parser)]
 struct GenVbootReturnCodeStringsAction {}
 
+/// Optional features that are selected when doing unit tests
+/// and lint checks.
+/// They are not built into the target executables by default.
+const CHECK_FEATURES: [&str; 3] = ["android", "firmware_update", "flexor"];
+
 fn run_cargo_deny() -> Result<()> {
     // Check if cargo-deny is installed, and install it if not.
     if Command::with_args("cargo", ["deny", "--version"])
@@ -326,6 +331,8 @@ fn run_clippy() -> Result<()> {
             // Arbitrarily choose the 64-bit UEFI target.
             "--target",
             Arch::X64.uefi_target(),
+            "--features",
+            &CHECK_FEATURES.join(","),
             "--",
             // Treat warnings as errors.
             "-Dwarnings",
@@ -351,7 +358,11 @@ fn run_clippy() -> Result<()> {
 }
 
 fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
-    Command::new("cargo").add_arg("test").run()?;
+    Command::new("cargo")
+        .add_arg("test")
+        .add_arg("--features")
+        .add_arg(&CHECK_FEATURES.join(","))
+        .run()?;
 
     if !action.no_miri {
         Command::new("cargo").add_args(["miri", "test"]).run()?;
