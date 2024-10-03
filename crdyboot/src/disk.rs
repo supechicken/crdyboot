@@ -972,7 +972,7 @@ mod tests {
     #[test]
     fn test_find_partition_by_name_success() {
         let pname = cstr16!("STATE");
-        let uefi = setup_find_partition_by_name(cstr16!("STATE"), create_mock_uefi());
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap().0,
             DeviceKind::Hd1State.handle()
@@ -983,8 +983,8 @@ mod tests {
     /// partition that does not exist.
     #[test]
     fn test_find_partition_by_name_error() {
-        let pname = cstr16!("STATE");
-        let uefi = setup_find_partition_by_name(cstr16!("STATEJUSTKIDDING"), create_mock_uefi());
+        let pname = cstr16!("does not exist");
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap_err(),
             GptDiskError::PartitionNotFound
@@ -996,14 +996,7 @@ mod tests {
     #[test]
     fn test_find_partition_by_name_different_drive() {
         let pname = cstr16!("STATE");
-        let mut uefi = create_mock_uefi();
-        uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
-        uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::Hd2Esp.handle()]));
-        let info = create_gpt_partition_info(pname);
-        uefi.expect_partition_info_for_handle()
-            .return_const(Ok(info));
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd2);
 
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap_err(),
