@@ -736,6 +736,13 @@ mod tests {
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
             .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
+        uefi.expect_find_partition_info_handles().returning(|| {
+            Ok(DeviceKind::all()
+                .iter()
+                .filter(|kind| kind.partition_info().is_some())
+                .map(|kind| kind.handle())
+                .collect())
+        });
         uefi.expect_find_block_io_handles().returning(|| {
             Ok(vec![
                 DeviceKind::Hd1.handle(),
