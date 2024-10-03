@@ -468,6 +468,15 @@ mod tests {
     use uefi::{guid, CStr16};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
 
+    #[allow(dead_code)] // TODO(nicholasbishop): removed in a later commit
+    enum BootDrive {
+        Hd1,
+        Hd2,
+        Hd3Mbr,
+        HdWithNoEspDeviceHandle,
+        Invalid,
+    }
+
     #[derive(Clone, Copy, PartialEq)]
     enum DeviceKind {
         Hd1 = 0,
@@ -676,7 +685,7 @@ mod tests {
         uefi
     }
 
-    fn create_mock_uefi_with_block_io() -> MockUefi {
+    fn create_mock_uefi_with_block_io(boot_drive: BootDrive) -> MockUefi {
         static MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 123,
             removable_media: false,
@@ -735,7 +744,13 @@ mod tests {
 
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
+            .returning(move || match boot_drive {
+                BootDrive::Hd1 => Ok(Some(DeviceKind::Hd1Esp.handle())),
+                BootDrive::Hd2 => Ok(Some(DeviceKind::Hd2Esp.handle())),
+                BootDrive::Hd3Mbr => Ok(Some(DeviceKind::Hd3MbrPartition.handle())),
+                BootDrive::HdWithNoEspDeviceHandle => Ok(None),
+                BootDrive::Invalid => Err(Status::INVALID_PARAMETER.into()),
+            });
         uefi.expect_find_partition_info_handles().returning(|| {
             Ok(DeviceKind::all()
                 .iter()
@@ -901,7 +916,8 @@ mod tests {
     #[test]
     fn test_get_partition_size_in_bytes() {
         let pname = cstr16!("STATE");
-        let uefi = setup_find_partition_by_name(pname, create_mock_uefi_with_block_io());
+        let uefi =
+            setup_find_partition_by_name(pname, create_mock_uefi_with_block_io(BootDrive::Hd1));
         // The size is the block size * the number of lba for the device
         // as setup.
         assert_eq!(
@@ -1055,14 +1071,14 @@ mod tests {
     /// Test that `find_block_io_handles` succeeds with valid inputs.
     #[test]
     fn test_find_disk_block_io_success() {
-        let uefi = create_mock_uefi_with_block_io();
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         assert!(find_disk_block_io(&uefi).is_ok());
     }
 
     /// Test that `GptDisk` accessor methods work.
     #[test]
     fn test_gpt_disk_accessors() {
-        let uefi = create_mock_uefi_with_block_io();
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         let disk = GptDisk::new(&uefi).unwrap();
         assert_eq!(disk.bytes_per_lba().get(), 512);
         assert_eq!(disk.lba_count(), 10_000);
@@ -1071,7 +1087,7 @@ mod tests {
     /// Test that `GptDisk` can read via the Block IO protocol.
     #[test]
     fn test_gpt_disk_read() {
-        let uefi = create_mock_uefi_with_block_io();
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
 
         let disk = GptDisk::new(&uefi).unwrap();
 
@@ -1100,7 +1116,7 @@ mod tests {
     /// Test that `GptDisk` can write via the Block IO protocol.
     #[test]
     fn test_gpt_disk_write() {
-        let uefi = create_mock_uefi_with_block_io();
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
 
         let mut disk = GptDisk::new(&uefi).unwrap();
         let block = vec![0; 512];
