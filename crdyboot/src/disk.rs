@@ -918,8 +918,7 @@ mod tests {
     #[test]
     fn test_get_partition_size_in_bytes() {
         let pname = cstr16!("STATE");
-        let uefi =
-            setup_find_partition_by_name(pname, create_mock_uefi_with_block_io(BootDrive::Hd1));
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         // The size is the block size * the number of lba for the device
         // as setup.
         assert_eq!(
@@ -932,7 +931,7 @@ mod tests {
     #[test]
     fn test_get_partition_unique_guid_success() {
         let pname = cstr16!("STATE");
-        let uefi = setup_find_partition_by_name(pname, create_mock_uefi());
+        let uefi = create_mock_uefi_with_block_io(BootDrive::Hd1);
         assert_eq!(
             get_partition_unique_guid(&uefi, pname).unwrap(),
             guid!("1fa90113-672a-4c30-89c6-1b87fe019adc")
@@ -948,23 +947,6 @@ mod tests {
             attributes: GptPartitionAttributes::empty(),
             partition_name,
         }
-    }
-
-    fn create_gpt_partition_info(name: &CStr16) -> PartitionInfo {
-        PartitionInfo::Gpt(create_gpt_partition_entry(init_partition_name(name)))
-    }
-
-    /// Setup a successful `find_partition_by_name` case for
-    /// a partition with `name`.
-    fn setup_find_partition_by_name(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
-        uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
-        uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::Hd1State.handle()]));
-        let info = create_gpt_partition_info(name);
-        uefi.expect_partition_info_for_handle()
-            .return_const(Ok(info));
-        uefi
     }
 
     /// Test that `find_partition_by_name` succeeds with a valid
