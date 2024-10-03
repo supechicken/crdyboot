@@ -283,7 +283,7 @@ pub fn set_update_statuses(updates: &[UpdateInfo]) -> Result<(), FirmwareError> 
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use core::array;
     use libcrdy::uefi::MockUefi;
@@ -304,7 +304,8 @@ mod tests {
             fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0-0abba7dc-e516-4167-bbf5-4d9d1c739416"
     );
 
-    fn create_update_info() -> UpdateInfo {
+    /// Create a valid `UpdateInfo` for testing.
+    pub(crate) fn create_update_info() -> UpdateInfo {
         // Efivarfs stores the UEFI variable attributes in the first
         // four bytes.
         let attrs = VariableAttributes::from_bits_retain(u32::from_le_bytes(
@@ -313,6 +314,19 @@ mod tests {
         let data = &VAR_DATA[4..];
 
         UpdateInfo::new(VAR_NAME.to_owned(), attrs, data.to_vec().into_boxed_slice()).unwrap()
+    }
+
+    /// Same as `create_update_info`, but the device path is modified so
+    /// that the file extension is `.cax` instead of `.cap`. This is
+    /// used to test handling of a capsule that does not exist on disk.
+    pub(crate) fn create_update_info_with_modified_path() -> UpdateInfo {
+        let mut info = create_update_info();
+        info.data[info.data.len() - 8] = b'x';
+        assert_eq!(
+            info.file_path().unwrap(),
+            "EFI/chromeos/fw/fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cax"
+        );
+        info
     }
 
     #[test]

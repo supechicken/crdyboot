@@ -105,6 +105,30 @@ impl IoError for ReadError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::disk::tests::{create_mock_uefi, BootDrive};
+    use crate::firmware::update_info::tests::{
+        create_update_info, create_update_info_with_modified_path,
+    };
+
+    /// Test that `load_capsules_from_disk` successfully loads an update
+    /// capsule, and correctly ignores a capsule that cannot be loaded.
+    #[test]
+    fn test_load_capsules_from_disk() {
+        log::set_max_level(log::LevelFilter::Info);
+
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+
+        let updates = [
+            // This update has an invalid path and will be silently skipped.
+            create_update_info_with_modified_path(),
+            // This update is valid and will be loaded.
+            create_update_info(),
+        ];
+        assert_eq!(
+            load_capsules_from_disk(&uefi, &updates).unwrap(),
+            [b"test capsule data"]
+        );
+    }
 
     /// Test that `ReadError` formats correctly.
     #[test]

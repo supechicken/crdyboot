@@ -450,7 +450,7 @@ impl DiskIo for GptDisk {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use core::ffi::c_void;
     use core::{mem, slice};
@@ -471,7 +471,7 @@ mod tests {
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
-    enum BootDrive {
+    pub(crate) enum BootDrive {
         Hd1,
         Hd2,
         Hd3Mbr,
@@ -678,7 +678,7 @@ mod tests {
         }
     }
 
-    fn create_mock_uefi(boot_drive: BootDrive) -> MockUefi {
+    pub(crate) fn create_mock_uefi(boot_drive: BootDrive) -> MockUefi {
         static MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 123,
             removable_media: false,
@@ -738,11 +738,21 @@ mod tests {
         unsafe extern "efiapi" fn read_disk(
             _: *const DiskIoProtocol,
             _media_id: u32,
-            _offset: u64,
-            _buffer_size: usize,
-            _buffer: *mut c_void,
+            offset: u64,
+            buffer_size: usize,
+            buffer: *mut c_void,
         ) -> uefi_raw::Status {
-            unreachable!();
+            static DATA: &[u8] =
+                include_bytes!("../../workspace/crdyboot_test_data/stateful_test_partition.bin");
+
+            let offset = usize::try_from(offset).unwrap();
+            let Some(src) = DATA.get(offset..offset + buffer_size) else {
+                return Status::INVALID_PARAMETER;
+            };
+
+            buffer.cast::<u8>().copy_from(src.as_ptr(), buffer_size);
+
+            return Status::SUCCESS;
         }
 
         unsafe extern "efiapi" fn write_disk(
