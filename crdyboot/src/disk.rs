@@ -470,10 +470,10 @@ mod tests {
 
     #[derive(Clone, Copy, PartialEq)]
     enum DeviceKind {
-        HardDrive = 0,
-        Partition1,
-        Partition2,
-        PartitionOnAnotherDrive,
+        Hd1 = 0,
+        Hd1Esp,
+        Hd1State,
+        Hd2Esp,
         FilePath,
         MacAddr,
     }
@@ -509,10 +509,10 @@ mod tests {
 
         fn all() -> &'static [Self] {
             &[
-                Self::HardDrive,
-                Self::Partition1,
-                Self::Partition2,
-                Self::PartitionOnAnotherDrive,
+                Self::Hd1,
+                Self::Hd1Esp,
+                Self::Hd1State,
+                Self::Hd2Esp,
                 Self::FilePath,
                 Self::MacAddr,
             ]
@@ -561,16 +561,16 @@ mod tests {
             };
 
             match self {
-                Self::HardDrive => nodes.extend(hd1),
-                Self::Partition1 => {
+                Self::Hd1 => nodes.extend(hd1),
+                Self::Hd1Esp => {
                     nodes.extend(hd1);
                     nodes.push(&partition1);
                 }
-                Self::Partition2 => {
+                Self::Hd1State => {
                     nodes.extend(hd1);
                     nodes.push(&partition2);
                 }
-                Self::PartitionOnAnotherDrive => {
+                Self::Hd2Esp => {
                     nodes.extend(hd2);
                     // This partition is intentionally identical to the
                     // one on hd1.
@@ -617,12 +617,9 @@ mod tests {
     fn test_is_parent_disk_partition() {
         let uefi = create_mock_uefi();
 
-        assert!(is_parent_disk(
-            &uefi,
-            DeviceKind::HardDrive.handle(),
-            DeviceKind::Partition1.handle()
-        )
-        .unwrap());
+        assert!(
+            is_parent_disk(&uefi, DeviceKind::Hd1.handle(), DeviceKind::Hd1Esp.handle()).unwrap()
+        );
     }
 
     /// Test that `is_parent_disk` returns false if the parent has nodes
@@ -634,7 +631,7 @@ mod tests {
         assert!(!is_parent_disk(
             &uefi,
             DeviceKind::MacAddr.handle(),
-            DeviceKind::Partition1.handle()
+            DeviceKind::Hd1Esp.handle()
         )
         .unwrap());
     }
@@ -647,7 +644,7 @@ mod tests {
 
         assert!(!is_parent_disk(
             &uefi,
-            DeviceKind::HardDrive.handle(),
+            DeviceKind::Hd1.handle(),
             DeviceKind::FilePath.handle()
         )
         .unwrap());
@@ -658,12 +655,9 @@ mod tests {
     fn test_is_parent_disk_harddrive() {
         let uefi = create_mock_uefi();
 
-        assert!(!is_parent_disk(
-            &uefi,
-            DeviceKind::HardDrive.handle(),
-            DeviceKind::HardDrive.handle()
-        )
-        .unwrap());
+        assert!(
+            !is_parent_disk(&uefi, DeviceKind::Hd1.handle(), DeviceKind::Hd1.handle()).unwrap()
+        );
     }
 
     /// Test that `find_parent_disk` identifies the correct handle.
@@ -674,8 +668,8 @@ mod tests {
         let all_handles: Vec<_> = DeviceKind::all().iter().map(|k| k.handle()).collect();
 
         assert_eq!(
-            find_parent_disk(&uefi, &all_handles, DeviceKind::Partition1.handle()).unwrap(),
-            DeviceKind::HardDrive.handle()
+            find_parent_disk(&uefi, &all_handles, DeviceKind::Hd1Esp.handle()).unwrap(),
+            DeviceKind::Hd1.handle()
         );
     }
 
@@ -687,12 +681,12 @@ mod tests {
 
         let all_handles: Vec<_> = DeviceKind::all()
             .iter()
-            .filter(|k| **k != DeviceKind::HardDrive)
+            .filter(|k| **k != DeviceKind::Hd1)
             .map(|k| k.handle())
             .collect();
 
         assert_eq!(
-            find_parent_disk(&uefi, &all_handles, DeviceKind::Partition1.handle()),
+            find_parent_disk(&uefi, &all_handles, DeviceKind::Hd1Esp.handle()),
             Err(GptDiskError::ParentDiskNotFound)
         );
     }
@@ -703,8 +697,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(is_sibling_partition(
             &uefi,
-            DeviceKind::Partition1.handle(),
-            DeviceKind::Partition2.handle(),
+            DeviceKind::Hd1Esp.handle(),
+            DeviceKind::Hd1State.handle(),
         )
         .unwrap());
     }
@@ -716,8 +710,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            DeviceKind::Partition1.handle(),
-            DeviceKind::PartitionOnAnotherDrive.handle(),
+            DeviceKind::Hd1Esp.handle(),
+            DeviceKind::Hd2Esp.handle(),
         )
         .unwrap());
     }
@@ -729,8 +723,8 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            DeviceKind::Partition1.handle(),
-            DeviceKind::HardDrive.handle(),
+            DeviceKind::Hd1Esp.handle(),
+            DeviceKind::Hd1.handle(),
         )
         .unwrap());
     }
@@ -742,7 +736,7 @@ mod tests {
         let uefi = create_mock_uefi();
         assert!(!is_sibling_partition(
             &uefi,
-            DeviceKind::Partition1.handle(),
+            DeviceKind::Hd1Esp.handle(),
             DeviceKind::FilePath.handle(),
         )
         .unwrap());
@@ -798,9 +792,9 @@ mod tests {
     /// a partition with `name`.
     fn setup_find_partition_by_name(name: &CStr16, mut uefi: MockUefi) -> MockUefi {
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
+            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::Partition2.handle()]));
+            .returning(|| Ok(vec![DeviceKind::Hd1State.handle()]));
         let info = create_gpt_partition_info(name);
         uefi.expect_partition_info_for_handle()
             .return_const(Ok(info));
@@ -815,7 +809,7 @@ mod tests {
         let uefi = setup_find_partition_by_name(cstr16!("STATE"), create_mock_uefi());
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap().0,
-            DeviceKind::Partition2.handle()
+            DeviceKind::Hd1State.handle()
         );
     }
 
@@ -838,9 +832,9 @@ mod tests {
         let pname = cstr16!("STATE");
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
+            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::PartitionOnAnotherDrive.handle()]));
+            .returning(|| Ok(vec![DeviceKind::Hd2Esp.handle()]));
         let info = create_gpt_partition_info(pname);
         uefi.expect_partition_info_for_handle()
             .return_const(Ok(info));
@@ -864,9 +858,9 @@ mod tests {
         });
         let mut uefi = create_mock_uefi_with_partition_info(info);
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
+            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
         uefi.expect_find_partition_info_handles()
-            .returning(|| Ok(vec![DeviceKind::Partition2.handle()]));
+            .returning(|| Ok(vec![DeviceKind::Hd1State.handle()]));
 
         assert_eq!(
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
@@ -934,13 +928,13 @@ mod tests {
 
         let mut uefi = create_mock_uefi();
         uefi.expect_find_esp_partition_handle()
-            .returning(|| Ok(Some(DeviceKind::Partition1.handle())));
+            .returning(|| Ok(Some(DeviceKind::Hd1Esp.handle())));
         uefi.expect_find_block_io_handles().returning(|| {
             Ok(vec![
-                DeviceKind::HardDrive.handle(),
-                DeviceKind::Partition1.handle(),
-                DeviceKind::Partition2.handle(),
-                DeviceKind::PartitionOnAnotherDrive.handle(),
+                DeviceKind::Hd1.handle(),
+                DeviceKind::Hd1Esp.handle(),
+                DeviceKind::Hd1State.handle(),
+                DeviceKind::Hd2Esp.handle(),
             ])
         });
         uefi.expect_open_block_io().returning(|_| {
