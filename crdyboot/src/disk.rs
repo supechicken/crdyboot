@@ -1016,9 +1016,7 @@ mod tests {
             for _ in 0..(512 / 8) {
                 expected.extend(block_num.to_le_bytes());
             }
-            if block != expected {
-                panic!("block {block_num} doesn't match expected value");
-            }
+            assert_eq!(block, expected, "bad block: {block_num}");
         }
 
         // Valid reads.
