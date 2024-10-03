@@ -467,6 +467,7 @@ mod tests {
     };
     use uefi::{guid, CStr16};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
+    use uefi_raw::protocol::disk::DiskIoProtocol;
 
     enum BootDrive {
         Hd1,
@@ -732,6 +733,26 @@ mod tests {
             unimplemented!()
         }
 
+        unsafe extern "efiapi" fn read_disk(
+            _: *const DiskIoProtocol,
+            _media_id: u32,
+            _offset: u64,
+            _buffer_size: usize,
+            _buffer: *mut c_void,
+        ) -> uefi_raw::Status {
+            unreachable!();
+        }
+
+        unsafe extern "efiapi" fn write_disk(
+            _: *mut DiskIoProtocol,
+            _media_id: u32,
+            _offset: u64,
+            _buffer_size: usize,
+            _buffer: *const c_void,
+        ) -> uefi_raw::Status {
+            unreachable!();
+        }
+
         let mut uefi = MockUefi::new();
         uefi.expect_device_path_for_handle().returning(|h| {
             let kind = DeviceKind::from_handle(h);
@@ -773,6 +794,16 @@ mod tests {
             };
             let bio: BlockIO = unsafe { mem::transmute(bio) };
             Ok(ScopedBlockIo::ForTest(bio))
+        });
+        uefi.expect_open_disk_io().returning(|handle| {
+            assert_eq!(handle, DeviceKind::Hd1State.handle());
+            let dio = DiskIoProtocol {
+                revision: DiskIoProtocol::REVISION,
+                read_disk,
+                write_disk,
+            };
+            let dio: uefi::proto::media::disk::DiskIo = unsafe { mem::transmute(dio) };
+            Ok(ScopedDiskIo::ForTest(dio))
         });
         uefi
     }
@@ -1025,6 +1056,13 @@ mod tests {
     fn test_find_disk_block_io_success() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
         assert!(find_disk_block_io(&uefi).is_ok());
+    }
+
+    /// Test that `open_stateful_partition` succeeds on a valid disk.
+    #[test]
+    fn test_open_stateful_partition() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        open_stateful_partition(&uefi).unwrap();
     }
 
     /// Test that `GptDisk` accessor methods work.
