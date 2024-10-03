@@ -766,6 +766,8 @@ mod tests {
                 DeviceKind::Hd2Esp.handle(),
             ])
         });
+        uefi.expect_partition_info_for_handle()
+            .returning(|handle| Ok(DeviceKind::from_handle(handle).partition_info().unwrap()));
         uefi.expect_open_block_io().returning(|_| {
             let bio = BlockIoProtocol {
                 revision: 0,
@@ -922,7 +924,7 @@ mod tests {
         // as setup.
         assert_eq!(
             get_partition_size_in_bytes(&uefi, pname).unwrap(),
-            (10001 * 512)
+            (10_000_001 * 512)
         );
     }
 
