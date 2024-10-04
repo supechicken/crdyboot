@@ -216,15 +216,19 @@ pub fn copy_partition_from_disk_to_disk(
 pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
     let kern_a = read_real_kernel_partition(conf)?;
 
+    let kernel_partition_size_in_mib = 64;
+
     let disk = DiskSettings {
         path: &conf.vboot_test_disk_path(),
-        // 16MiB kernel partition, plus extra space for GPT headers.
-        size: "18MiB",
+        // Kernel partition size plus extra space for GPT headers.
+        size: &format!("{}MiB", kernel_partition_size_in_mib + 2),
         // Arbitrary GUID.
         guid: guid!("d24199e7-33f0-4409-b677-1c04683552c5"),
         partitions: &[PartitionSettings {
             label: "KERN-A",
-            data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(17)),
+            data_range: PartitionDataRange::from_byte_range(
+                mib_to_byte(1)..mib_to_byte(kernel_partition_size_in_mib + 1),
+            ),
             type_guid: GptPartitionType::CHROME_OS_KERNEL,
             // Arbitrary, but must match the partition GUID in the vboot
             // test `test_load_kernel`.
