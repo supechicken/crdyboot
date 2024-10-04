@@ -1,7 +1,6 @@
 // Copyright 2024 The ChromiumOS Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-#![expect(dead_code)] // TODO(jefferymiller) Temporary for linting until it is in use.
 
 //! Provides an implementation of the kernel's UEFI initrd loading
 //! protocol required for providing an initramfs buffer to the kernel.

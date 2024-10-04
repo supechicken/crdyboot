@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#[cfg(feature = "android")]
+use crate::avb::do_avb_verify;
 use crate::disk::{GptDisk, GptDiskError};
+#[cfg(feature = "android")]
+use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use alloc::vec::Vec;
@@ -183,6 +187,29 @@ fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), Crdy
     unsafe { next_stage.launch() }.map_err(CrdybootError::Launch)
 }
 
+#[cfg(feature = "android")]
+fn avb_load_kernel() -> Result<(), CrdybootError> {
+    // TODO: handle errors!
+    let buffers = do_avb_verify();
+
+    // Measure the kernel into the TPM.
+    // TODO: make sure this data buffer length trimmed to not include
+    // the page size padding as relocate will measure the empty space...
+    extend_pcr_and_log(PCR_INDEX, &buffers.kernel_buffer);
+
+    // TODO: it is known what the size of the kernel is from avb_load, it
+    // can be used instead.
+    let relocate_size = mib_to_bytes(24);
+    let kernel_reloc_buffer = relocate_kernel(&buffers.kernel_buffer, relocate_size)?;
+
+    // Initialize the linux uefi initramfs loader protocol
+    // when an initramfs is present.
+    // This must stay in scope until after the kernel is loaded.
+    let _lf2 = set_up_loadfile_protocol(buffers.initramfs_buffer);
+
+    execute_linux_kernel(&kernel_reloc_buffer, &buffers.cmdline)
+}
+
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
 pub fn vboot_load_kernel() -> Result<(), CrdybootError> {
@@ -277,6 +304,8 @@ fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocatio
 /// Load the kernel from the appropriate kernel partition then execute it.
 /// If successful, this function will never return.
 pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
+    #[cfg(feature = "android")]
+    avb_load_kernel()?;
     vboot_load_kernel()
 }
 
