@@ -63,12 +63,12 @@ impl UpdateInfo {
         data: Box<[u8]>,
     ) -> Result<Self, FirmwareError> {
         // Return an error if there's not enough data.
-        if data.len() < UpdateInfo::HEADER_SIZE_IN_BYTES {
-            return Err(FirmwareError::UpdateInfoTooShort);
-        }
+        let device_path_data = data
+            .get(Self::HEADER_SIZE_IN_BYTES..)
+            .ok_or(FirmwareError::UpdateInfoTooShort)?;
 
         // Return an error if the device path is not valid.
-        <&DevicePath>::try_from(&data[Self::HEADER_SIZE_IN_BYTES..])
+        <&DevicePath>::try_from(device_path_data)
             .map_err(|_| FirmwareError::UpdateInfoMalformedDevicePath)?;
 
         Ok(Self { name, attrs, data })
@@ -76,6 +76,8 @@ impl UpdateInfo {
 
     /// Set the `time_attempted` field to `time`.
     fn set_time_attempted(&mut self, time: Time) {
+        // Length checked in `UpdateInfo::new`.
+        #[expect(clippy::indexing_slicing)]
         self.data[Self::TIME_ATTEMPTED_RANGE].copy_from_slice(time_to_bytes(&time));
     }
 
@@ -85,14 +87,20 @@ impl UpdateInfo {
     }
 
     fn status(&self) -> u32 {
+        // Length checked in `UpdateInfo::new`.
+        #[expect(clippy::indexing_slicing)]
         u32::from_le_bytes(self.data[Self::STATUS_RANGE].try_into().unwrap())
     }
 
     fn set_status(&mut self, status: u32) {
+        // Length checked in `UpdateInfo::new`.
+        #[expect(clippy::indexing_slicing)]
         self.data[Self::STATUS_RANGE].copy_from_slice(&status.to_le_bytes());
     }
 
     fn device_path(&self) -> &DevicePath {
+        // Length checked in `UpdateInfo::new`.
+        #[expect(clippy::indexing_slicing)]
         let path = <&DevicePath>::try_from(&self.data[Self::HEADER_SIZE_IN_BYTES..]);
         // OK to unwrap: the validity of the device path was checked in
         // `UpdateInfo::new`.
