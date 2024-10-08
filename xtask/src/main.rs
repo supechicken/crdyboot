@@ -8,6 +8,7 @@ mod arch;
 mod bin_checks;
 mod config;
 mod gen_disk;
+mod mount;
 mod network;
 mod package;
 mod qemu;
@@ -409,6 +410,7 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
 /// https://chromium.googlesource.com/chromiumos/docs/+/HEAD/archive_mirrors.md
 fn gen_test_data_tarball(conf: &Config) -> Result<()> {
     gen_disk::gen_vboot_test_disk(conf)?;
+    gen_disk::gen_stateful_test_partition(conf)?;
 
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
@@ -421,10 +423,12 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
 
     // Create and fill the directory that will be in the tarball.
     fs::create_dir(&data_dir)?;
-    fs::copy(
+    for src in &[
         conf.vboot_test_disk_path(),
-        data_dir.join("vboot_test_disk.bin"),
-    )?;
+        conf.stateful_test_partition_path(),
+    ] {
+        fs::copy(src, data_dir.join(src.file_name().unwrap()))?;
+    }
 
     // Create the tarball.
     Command::with_args(

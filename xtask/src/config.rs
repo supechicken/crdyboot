@@ -113,6 +113,10 @@ impl Config {
         self.workspace_path().join("vboot_test_disk.bin")
     }
 
+    pub fn stateful_test_partition_path(&self) -> Utf8PathBuf {
+        self.workspace_path().join("stateful_test_partition.bin")
+    }
+
     pub fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
         let subdir = match arch {
             Arch::Ia32 => "uefi32",

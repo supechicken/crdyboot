@@ -4,6 +4,7 @@
 
 use crate::arch::Arch;
 use crate::config::{Config, EfiExe};
+use crate::mount::Mount;
 use crate::secure_boot::{self, SecureBootKeyPaths};
 use crate::vm_test::Operation;
 use anyhow::{bail, Context, Result};
@@ -241,6 +242,41 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
         }],
     };
     disk.create()
+}
+
+pub fn gen_stateful_test_partition(conf: &Config) -> Result<()> {
+    let uid = nix::unistd::getuid();
+    let gid = nix::unistd::getgid();
+
+    // Create the empty filesystem.
+    create_empty_file_with_size(&conf.stateful_test_partition_path(), "1MiB")?;
+    Command::with_args(
+        "mkfs.ext4",
+        [
+            // Set ownership in the filesystem to match the current user
+            // instead of root. Mounting still requires root, but
+            // unprivileged `std::fs` operations can be used to edit the
+            // filesystem.
+            "-E",
+            &format!("root_owner={uid}:{gid}"),
+            conf.stateful_test_partition_path().as_str(),
+        ],
+    )
+    .run()?;
+
+    let mount = Mount::new(&conf.stateful_test_partition_path())?;
+
+    // Create the capsule directory.
+    let capsules_path = mount
+        .mount_point()
+        .join("unencrypted/uefi_capsule_updates/EFI/chromeos/fw");
+    fs::create_dir_all(&capsules_path)?;
+    fs::write(
+        capsules_path.join("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"),
+        "test capsule data",
+    )?;
+
+    Ok(())
 }
 
 /// Generate the EFI system partition FAT file system containing the
