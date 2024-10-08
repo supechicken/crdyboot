@@ -12,7 +12,7 @@ use printf_compat as printf;
 
 // `core::ffi::c_size_t` is not yet stabilized:
 // https://github.com/rust-lang/rust/issues/88345
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 type c_size_t = usize;
 
 unsafe fn c_str_len(mut s: *const c_char) -> usize {

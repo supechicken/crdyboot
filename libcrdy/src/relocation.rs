@@ -155,7 +155,7 @@ fn apply_relocations(
 ///
 /// Precondition: the `dst` buffer should be initialized to all zero
 /// bytes to ensure there's no junk data in the result.
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn relocate_pe_into<N: ImageNtHeaders>(
     src: &PeFile<N>,
     dst: &mut [u8],

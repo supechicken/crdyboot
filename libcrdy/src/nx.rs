@@ -79,7 +79,7 @@ impl Display for NxError {
 }
 
 /// Check whether the address is aligned to the page size (4KiB).
-#[allow(clippy::verbose_bit_mask)]
+#[expect(clippy::verbose_bit_mask)]
 fn is_page_aligned(addr: PhysicalAddress) -> bool {
     (addr & 0xfff) == 0
 }

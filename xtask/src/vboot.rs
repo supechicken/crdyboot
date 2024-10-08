@@ -83,7 +83,7 @@ use crate::ReturnCode;
 
 /// Stringify a [`ReturnCode`].
 #[must_use]
-#[allow(clippy::pedantic)]
+#[expect(clippy::pedantic)]
 #[rustfmt::skip]
 pub fn return_code_to_str(rc: ReturnCode) -> &'static str {
     match rc {";

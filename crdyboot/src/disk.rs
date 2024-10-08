@@ -223,7 +223,7 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
     for (i, (n1, n2)) in p1.node_iter().zip(p2.node_iter()).enumerate() {
         // `count - 1` cannot fail because if we are in this loop then
         // `count` is not zero.
-        #[allow(clippy::arithmetic_side_effects)]
+        #[expect(clippy::arithmetic_side_effects)]
         if i < count - 1 {
             // Check that all nodes except the last are the same.
             if n1 != n2 {

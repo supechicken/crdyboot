@@ -55,7 +55,7 @@ struct TpmError {
 }
 
 impl TpmError {
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn v1(kind: TpmErrorKind, err: uefi::Error) -> Self {
         Self {
             version: TpmVersion::V1,
@@ -64,7 +64,7 @@ impl TpmError {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn v2(kind: TpmErrorKind, err: uefi::Error) -> Self {
         Self {
             version: TpmVersion::V2,

@@ -231,7 +231,7 @@ fn get_actual_bootloader_size(full_bootloader_data: &[u8]) -> Result<usize, Load
 /// Find the best kernel. The details are up to the firmware library in
 /// `vboot_reference`. If successful, the kernel and the command-line data
 /// have been verified against `packed_pubkey`.
-#[allow(clippy::needless_pass_by_value)]
+#[expect(clippy::needless_pass_by_value)]
 pub fn load_kernel<'kernel>(
     inputs: LoadKernelInputs<'kernel, '_>,
     disk_io: &mut dyn DiskIo,

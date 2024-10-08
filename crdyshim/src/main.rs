@@ -321,7 +321,7 @@ fn load_and_validate_next_stage(
     info!("next-stage signature: {:02x?}", signature.as_slice());
     // TODO(nicholasbishop): clippy is incorrectly warning here. Drop
     // this after the next Rust upgrade.
-    #[allow(clippy::needless_borrows_for_generic_args)]
+    #[expect(clippy::needless_borrows_for_generic_args)]
     let verified = public_key.verify(&raw_exe, &signature).is_ok();
 
     info!("signature verified? {}", verified);
