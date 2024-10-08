@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#![allow(clippy::indexing_slicing)]
+#![expect(clippy::indexing_slicing)]
 
 mod load_capsules;
 mod update_info;
