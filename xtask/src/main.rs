@@ -383,7 +383,7 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
     Command::new("cargo")
         .add_arg("test")
         .add_arg("--features")
-        .add_arg(&CHECK_FEATURES.join(","))
+        .add_arg(CHECK_FEATURES.join(","))
         .run()?;
 
     if !action.no_miri {
