@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 10;
+const SETUP_VERSION: u32 = 11;
 
 const VBOOT_REFERENCE_REPO: &str =
     "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";

@@ -455,7 +455,7 @@ mod tests {
         };
 
         let mut workbuf = vec![0; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
-        let mut kernel_buffer = vec![0; 16 * 1024 * 1024];
+        let mut kernel_buffer = vec![0; 24 * 1024 * 1024];
         let inputs = LoadKernelInputs {
             workbuf: &mut workbuf,
             kernel_buffer: &mut kernel_buffer,
