@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use ext4_view::{Ext4Error, PathError};
-use libcrdy::uefi::UefiImpl;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
@@ -181,19 +181,16 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
 /// Some errors are logged but otherwise ignored, with the intent of
 /// processing as many valid capsules as possible. Fatal errors are
 /// propagated to the caller.
-fn update_firmware_impl() -> Result<(), FirmwareError> {
+fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
     let variables = runtime::variable_keys()
         .collect::<Result<Vec<_>, _>>()
         .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
-    let updates = get_update_table(
-        &UefiImpl,
-        variables.iter().map(|var| (var.name(), var.vendor)),
-    );
+    let updates = get_update_table(uefi, variables.iter().map(|var| (var.name(), var.vendor)));
     info!("found {} capsule update variables", updates.len());
 
-    let capsules = load_capsules_from_disk(&updates)?;
+    let capsules = load_capsules_from_disk(uefi, &updates)?;
     info!("loaded {} capsules from disk", capsules.len());
 
     let capsule_refs = get_capsule_refs(&capsules);
@@ -230,7 +227,7 @@ pub fn update_firmware() {
         return;
     }
 
-    if let Err(err) = update_firmware_impl() {
+    if let Err(err) = update_firmware_impl(&UefiImpl) {
         error!("firmware update failed: {err}");
     }
 }
