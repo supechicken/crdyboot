@@ -14,17 +14,15 @@ use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
-use uefi::data_types::FromSliceWithNulError;
 use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
 #[derive(Debug)]
 enum FirmwareError {
-    GetVariableKeysFailed(Status),
     GetVariableFailed(Status),
     SetVariableFailed(Status),
-    InvalidVariableName(FromSliceWithNulError),
+    InvalidVariableKey(Status),
     UpdateInfoTooShort,
     UpdateInfoMalformedDevicePath,
     FilePathMissing,
@@ -41,12 +39,9 @@ enum FirmwareError {
 impl Display for FirmwareError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::GetVariableKeysFailed(status) => {
-                write!(f, "failed to get variable keys: {status}")
-            }
             Self::GetVariableFailed(status) => write!(f, "failed to read variable: {status}"),
             Self::SetVariableFailed(status) => write!(f, "failed to write variable: {status}"),
-            Self::InvalidVariableName(err) => write!(f, "invalid variable name: {err}"),
+            Self::InvalidVariableKey(err) => write!(f, "invalid variable key: {err}"),
             Self::UpdateInfoTooShort => write!(f, "invalid update variable: not enough data"),
             Self::UpdateInfoMalformedDevicePath => {
                 write!(f, "invalid update variable: malformed device path")
@@ -180,12 +175,9 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
 /// processing as many valid capsules as possible. Fatal errors are
 /// propagated to the caller.
 fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
-    let variables = runtime::variable_keys()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|err| FirmwareError::GetVariableKeysFailed(err.status()))?;
     // Check if any updates are available by searching for and validating
     // any update state variables.
-    let updates = get_update_table(uefi, variables.iter().map(|var| (var.name(), var.vendor)));
+    let updates = get_update_table(uefi, uefi.variable_keys());
     info!("found {} capsule update variables", updates.len());
 
     let capsules = load_capsules_from_disk(uefi, &updates)?;

@@ -3,16 +3,14 @@
 // found in the LICENSE file.
 
 use crate::firmware::FirmwareError;
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Range;
 use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
-use libcrdy::uefi::Uefi;
+use libcrdy::uefi::{Uefi, VariableKey, VariableKeys};
 use log::{info, warn};
-use uefi::data_types::FromSliceWithNulError;
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16, CString16};
@@ -179,8 +177,6 @@ fn delete_variable_no_error(uefi: &dyn Uefi, name: &CStr16, vendor: &VariableVen
     }
 }
 
-pub(super) type VarIterItem<'a> = (Result<&'a CStr16, FromSliceWithNulError>, VariableVendor);
-
 /// Try to read a variable and convert it to an `UpdateInfo`.
 ///
 /// Returns `Ok(Some(_))` if successful, `Ok(None)` for non-update
@@ -190,33 +186,33 @@ pub(super) type VarIterItem<'a> = (Result<&'a CStr16, FromSliceWithNulError>, Va
 /// the data fails, the variable will be deleted.
 fn get_update_from_var(
     uefi: &dyn Uefi,
-    (name, vendor): VarIterItem,
+    key: uefi::Result<VariableKey>,
 ) -> Result<Option<UpdateInfo>, FirmwareError> {
+    let key = key.map_err(|err| FirmwareError::InvalidVariableKey(err.status()))?;
+
     // Must be a fwupd state variable.
-    if vendor != FWUPDATE_VENDOR {
+    if key.vendor != FWUPDATE_VENDOR {
         return Ok(None);
     }
-
-    let name = name.map_err(FirmwareError::InvalidVariableName)?;
 
     // Skip fwupd-efi debugging settings.
-    if name == FWUPDATE_VERBOSE || name == FWUPDATE_DEBUG_LOG {
+    if key.name == FWUPDATE_VERBOSE || key.name == FWUPDATE_DEBUG_LOG {
         return Ok(None);
     }
 
-    info!("found update {name}");
+    info!("found update {}", key.name);
 
     let (data, attrs) = uefi
-        .get_variable_boxed(name, &FWUPDATE_VENDOR)
+        .get_variable_boxed(&key.name, &FWUPDATE_VENDOR)
         .map_err(|err| FirmwareError::GetVariableFailed(err.status()))?;
 
-    match UpdateInfo::new(name.to_owned(), attrs, data) {
+    match UpdateInfo::new(key.name.clone(), attrs, data) {
         Ok(info) => Ok(Some(info)),
         Err(err) => {
             // Delete the malformed variable.
-            delete_variable_no_error(uefi, name, &FWUPDATE_VENDOR);
+            delete_variable_no_error(uefi, &key.name, &FWUPDATE_VENDOR);
 
-            warn!("could not populate update info for {name}");
+            warn!("could not populate update info for {}", key.name);
             Err(err)
         }
     }
@@ -230,21 +226,12 @@ fn get_update_from_var(
 /// If no updates are found, an empty vector is returned.
 ///
 /// Errors are logged but otherwise ignored.
-pub fn get_update_table<'name>(
-    uefi: &dyn Uefi,
-    // An iterator is used here instead of `[VariableKey]` because
-    // uefi-rs does not currently provide a public method for
-    // constructing VariableKey, so unit tests can't create that type.
-    //
-    // TODO(b/365817661): improve the uefi-rs API so this workaround
-    // isn't needed.
-    variables: impl Iterator<Item = VarIterItem<'name>>,
-) -> Vec<UpdateInfo> {
+pub fn get_update_table(uefi: &dyn Uefi, variables: VariableKeys) -> Vec<UpdateInfo> {
     let now = current_time(uefi);
 
     let mut updates: Vec<UpdateInfo> = Vec::new();
     for var in variables {
-        let mut info = match get_update_from_var(uefi, var) {
+        let mut info = match get_update_from_var(uefi, var.clone()) {
             Ok(Some(info)) => info,
             Ok(None) => {
                 // Ignore non-update variable.
@@ -510,10 +497,10 @@ pub(crate) mod tests {
     fn test_get_update_from_var_other_vendor() {
         let uefi = create_mock_uefi_with_time();
 
-        let var = (
-            Ok(VAR_NAME),
+        let var = Ok(VariableKey::new(
+            VAR_NAME,
             VariableVendor(guid!("dfedddc7-c8d3-4250-9e10-0d11d192421b")),
-        );
+        ));
         assert!(get_update_from_var(&uefi, var).unwrap().is_none());
     }
 
@@ -524,28 +511,23 @@ pub(crate) mod tests {
         let uefi = create_mock_uefi_with_time();
 
         let vars = [
-            (Ok(FWUPDATE_VERBOSE), FWUPDATE_VENDOR),
-            (Ok(FWUPDATE_DEBUG_LOG), FWUPDATE_VENDOR),
+            (Ok(VariableKey::new(FWUPDATE_VERBOSE, FWUPDATE_VENDOR))),
+            (Ok(VariableKey::new(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR))),
         ];
         for var in vars {
             assert!(get_update_from_var(&uefi, var).unwrap().is_none());
         }
     }
 
-    /// Test that `get_update_from_var` skips variables with an invalid name.
+    /// Test that `get_update_from_var` skips variables with an invalid key.
     #[test]
-    fn test_get_update_from_var_invalid_name() {
+    fn test_get_update_from_var_invalid_key() {
         let uefi = create_mock_uefi_with_time();
 
-        let var = (
-            CStr16::from_u16_with_nul(&[0xf0, 0x9f, 0x98, 0x80]),
-            FWUPDATE_VENDOR,
-        );
+        let var = Err(Status::UNSUPPORTED.into());
         matches!(
             get_update_from_var(&uefi, var),
-            Err(FirmwareError::InvalidVariableName(
-                FromSliceWithNulError::InvalidChar(0)
-            ))
+            Err(FirmwareError::InvalidVariableKey(Status::UNSUPPORTED))
         );
     }
 
@@ -560,7 +542,7 @@ pub(crate) mod tests {
             Ok(())
         });
 
-        let var = (Ok(BAD_VAR_NAME), FWUPDATE_VENDOR);
+        let var = Ok(VariableKey::new(BAD_VAR_NAME, FWUPDATE_VENDOR));
         assert!(matches!(
             get_update_from_var(&uefi, var),
             Err(FirmwareError::UpdateInfoTooShort)
@@ -573,7 +555,7 @@ pub(crate) mod tests {
     fn test_get_update_table_empty() {
         let uefi = create_mock_uefi_with_time();
 
-        let vars = [];
+        let vars = VariableKeys::ForTest(vec![]);
         assert_eq!(get_update_table(&uefi, vars.into_iter()), []);
     }
 
@@ -586,8 +568,8 @@ pub(crate) mod tests {
         info.set_time_attempted(create_time());
         info.set_status(FWUPDATE_ATTEMPTED);
 
-        let vars = [(Ok(VAR_NAME), FWUPDATE_VENDOR)];
-        assert_eq!(get_update_table(&uefi, vars.into_iter()), [info]);
+        let vars = VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))]);
+        assert_eq!(get_update_table(&uefi, vars), [info]);
     }
 
     /// Test that `get_update_table` skips non-update variables and
@@ -606,11 +588,11 @@ pub(crate) mod tests {
         info.set_time_attempted(create_time());
         info.set_status(FWUPDATE_ATTEMPTED);
 
-        let vars = [
-            (Ok(BAD_VAR_NAME), FWUPDATE_VENDOR),
-            (Ok(FWUPDATE_DEBUG_LOG), FWUPDATE_VENDOR),
-            (Ok(VAR_NAME), FWUPDATE_VENDOR),
-        ];
+        let vars = VariableKeys::ForTest(vec![
+            Ok(VariableKey::new(BAD_VAR_NAME, FWUPDATE_VENDOR)),
+            Ok(VariableKey::new(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR)),
+            Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR)),
+        ]);
         assert_eq!(get_update_table(&uefi, vars.into_iter()), [info]);
     }
 
@@ -628,7 +610,10 @@ pub(crate) mod tests {
             info
         });
 
-        let vars = [(Ok(VAR_NAME), FWUPDATE_VENDOR); MAX_UPDATE_CAPSULES + 10];
-        assert_eq!(get_update_table(&uefi, vars.into_iter()), expected);
+        let vars = VariableKeys::ForTest(vec![
+            Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR));
+            MAX_UPDATE_CAPSULES + 10
+        ]);
+        assert_eq!(get_update_table(&uefi, vars), expected);
     }
 }
