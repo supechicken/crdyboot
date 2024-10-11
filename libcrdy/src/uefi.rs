@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
@@ -12,7 +13,7 @@ use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
-use uefi::{CStr16, Handle, Status};
+use uefi::{CStr16, CString16, Handle, Status};
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
 ///
@@ -21,6 +22,9 @@ use uefi::{CStr16, Handle, Status};
 #[cfg_attr(feature = "test_util", mockall::automock)]
 pub trait Uefi {
     fn get_time(&self) -> uefi::Result<Time>;
+
+    /// Get an iterator over all UEFI variable keys.
+    fn variable_keys(&self) -> VariableKeys;
 
     /// Read a UEFI variable into `buf`.
     ///
@@ -89,6 +93,10 @@ pub struct UefiImpl;
 impl Uefi for UefiImpl {
     fn get_time(&self) -> uefi::Result<Time> {
         runtime::get_time()
+    }
+
+    fn variable_keys(&self) -> VariableKeys {
+        VariableKeys::Real(uefi::runtime::variable_keys())
     }
 
     fn get_variable(
@@ -289,4 +297,59 @@ impl Deref for ScopedDiskIo {
 pub enum PartitionInfo {
     Mbr(MbrPartitionRecord),
     Gpt(GptPartitionEntry),
+}
+
+// TODO(b/365817661): after the next uefi-rs upgrade, we can drop this
+// struct and use `uefi::runtime::VariableKey` directly.
+#[derive(Clone, Debug)]
+pub struct VariableKey {
+    pub vendor: VariableVendor,
+    pub name: CString16,
+}
+
+#[cfg(feature = "test_util")]
+impl VariableKey {
+    pub fn new(name: &CStr16, vendor: VariableVendor) -> Self {
+        Self {
+            name: name.to_owned(),
+            vendor,
+        }
+    }
+}
+
+/// Iterator over all UEFI variable keys.
+pub enum VariableKeys {
+    Real(uefi::runtime::VariableKeys),
+    #[cfg(feature = "test_util")]
+    ForTest(Vec<uefi::Result<VariableKey>>),
+}
+
+impl Iterator for VariableKeys {
+    type Item = uefi::Result<VariableKey>;
+
+    fn next(&mut self) -> Option<uefi::Result<VariableKey>> {
+        match self {
+            Self::Real(iter) => iter.next().map(|r| match r {
+                Ok(key) => {
+                    if let Ok(name) = key.name() {
+                        Ok(VariableKey {
+                            vendor: key.vendor,
+                            name: name.to_owned(),
+                        })
+                    } else {
+                        Err(Status::UNSUPPORTED.into())
+                    }
+                }
+                Err(err) => Err(err),
+            }),
+            #[cfg(feature = "test_util")]
+            Self::ForTest(v) => {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.remove(0))
+                }
+            }
+        }
+    }
 }
