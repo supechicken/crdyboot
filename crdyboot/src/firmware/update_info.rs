@@ -12,7 +12,7 @@ use ext4_view::PathBuf;
 use libcrdy::uefi::{Uefi, VariableKey, VariableKeys};
 use log::{info, warn};
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
-use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
+use uefi::runtime::{Time, VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16, CString16};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
@@ -262,17 +262,16 @@ pub fn get_update_table(uefi: &dyn Uefi, variables: VariableKeys) -> Vec<UpdateI
 }
 
 /// Mark all updates as [`FWUPDATE_ATTEMPTED`] and note the time of the attempt.
-pub fn set_update_statuses(updates: &[UpdateInfo]) -> Result<(), FirmwareError> {
+pub fn set_update_statuses(uefi: &dyn Uefi, updates: &[UpdateInfo]) -> Result<(), FirmwareError> {
     for update in updates {
-        runtime::set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data).map_err(
-            |err| {
+        uefi.set_variable(&update.name, &FWUPDATE_VENDOR, update.attrs, &update.data)
+            .map_err(|err| {
                 warn!(
                     "could not update variable status for {0}: {err}",
                     update.name
                 );
                 FirmwareError::SetVariableFailed(err.status())
-            },
-        )?;
+            })?;
     }
     Ok(())
 }

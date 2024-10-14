@@ -188,7 +188,7 @@ fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
 
     let descriptors = get_capsule_block_descriptors(&capsule_refs);
 
-    set_update_statuses(&updates)?;
+    set_update_statuses(uefi, &updates)?;
 
     // If there are no capsules at this point then there's nothing left to do.
     if capsule_refs.is_empty() {
