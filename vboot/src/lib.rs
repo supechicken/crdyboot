@@ -31,7 +31,7 @@ mod stubs;
 extern crate cmem as _;
 
 /// Bindgen wrappers for parts of vboot_reference.
-#[allow(missing_docs)]
+#[allow(missing_docs, unused)]
 #[expect(non_camel_case_types)]
 #[expect(clippy::pedantic)]
 mod vboot_sys {
