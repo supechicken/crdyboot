@@ -648,4 +648,45 @@ pub(crate) mod tests {
         ]);
         assert_eq!(get_update_table(&uefi, vars), expected);
     }
+
+    /// Test that `set_update_statuses` writes out variables for each
+    /// update info.
+    #[test]
+    fn test_set_update_statuses_success() {
+        let expected_attrs = VariableAttributes::NON_VOLATILE
+            | VariableAttributes::BOOTSERVICE_ACCESS
+            | VariableAttributes::RUNTIME_ACCESS;
+
+        let mut uefi = MockUefi::new();
+        for expected_name in [VAR_NAME, cstr16!("update var 2")] {
+            uefi.expect_set_variable()
+                .withf(move |name, vendor, attrs, _data| {
+                    name == expected_name && *vendor == FWUPDATE_VENDOR && *attrs == expected_attrs
+                })
+                .return_const(Ok(()));
+        }
+
+        let info1 = create_update_info();
+        let mut info2 = create_update_info();
+        info2.name = cstr16!("update var 2").into();
+        set_update_statuses(&uefi, &[info1, info2]).unwrap();
+    }
+
+    /// Test that `set_update_statuses` stops on the first error and
+    /// propagates it.
+    #[test]
+    fn test_set_update_statuses_error() {
+        let mut uefi = MockUefi::new();
+        uefi.expect_set_variable()
+            .withf(|name, vendor, _attrs, _data| name == VAR_NAME && *vendor == FWUPDATE_VENDOR)
+            .return_const(Err(Status::DEVICE_ERROR.into()));
+
+        let info1 = create_update_info();
+        let mut info2 = create_update_info();
+        info2.name = cstr16!("update var 2").into();
+        assert!(matches!(
+            set_update_statuses(&uefi, &[info1, info2]),
+            Err(FirmwareError::SetVariableFailed(_))
+        ));
+    }
 }
