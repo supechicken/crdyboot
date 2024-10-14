@@ -284,6 +284,7 @@ pub(crate) mod tests {
     use libcrdy::uefi::MockUefi;
     use uefi::proto::device_path::build::{self, DevicePathBuilder};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
+    use uefi::proto::device_path::{DeviceSubType, DeviceType};
     use uefi::runtime::{Daylight, TimeParams};
     use uefi::Status;
 
@@ -378,6 +379,29 @@ pub(crate) mod tests {
             info.file_path().unwrap(),
             "EFI/chromeos/fw/fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523.cap"
         );
+    }
+
+    /// Test that `UpdateInfo::file_path` fails if the device path does
+    /// not end with a media file path.
+    #[test]
+    fn test_update_info_invalid_file_path() {
+        let mut info = create_update_info();
+
+        // Search for the bytes that encode the type and subtype of a
+        // media file path node. Alter the node's subtype so that it is
+        // no longer a file path.
+        for i in 0..info.data.len() {
+            if info.data[i] == DeviceType::MEDIA.0
+                && info.data[i + 1] == DeviceSubType::MEDIA_FILE_PATH.0
+            {
+                info.data[i + 1] = DeviceSubType::MEDIA_VENDOR.0;
+            }
+        }
+
+        assert!(matches!(
+            info.file_path().unwrap_err(),
+            FirmwareError::FilePathMissing
+        ));
     }
 
     #[test]
