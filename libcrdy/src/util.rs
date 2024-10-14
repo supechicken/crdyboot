@@ -57,4 +57,10 @@ mod tests {
     fn test_mib_to_bytes() {
         assert_eq!(mib_to_bytes(3), 3_145_728);
     }
+
+    #[test]
+    #[should_panic]
+    fn test_mib_to_bytes_overflow() {
+        let _ = mib_to_bytes(usize::MAX);
+    }
 }
