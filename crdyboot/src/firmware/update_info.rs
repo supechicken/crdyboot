@@ -549,10 +549,10 @@ pub(crate) mod tests {
         let uefi = create_mock_uefi_with_time();
 
         let var = Err(Status::UNSUPPORTED.into());
-        matches!(
+        assert!(matches!(
             get_update_from_var(&uefi, var),
             Err(FirmwareError::InvalidVariableKey(Status::UNSUPPORTED))
-        );
+        ));
     }
 
     /// Test that `get_update_from_var` deletes a variable with invalid
