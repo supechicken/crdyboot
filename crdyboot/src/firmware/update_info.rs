@@ -290,6 +290,7 @@ pub(crate) mod tests {
 
     const VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
     const BAD_VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-1");
+    const NO_ATTEMPT_VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-2");
 
     /// This test file is a direct copy of an efivarfs file created by
     /// `fwupd install`. The first four bytes are the variable
@@ -471,6 +472,12 @@ pub(crate) mod tests {
             let data = if name == VAR_NAME {
                 // Valid update info.
                 VAR_DATA[4..].to_vec()
+            } else if name == NO_ATTEMPT_VAR_NAME {
+                let mut data = VAR_DATA[4..].to_vec();
+                // Clear the `status` field so that `ATTEMPT_UPDATE` is
+                // not set.
+                data[UpdateInfo::STATUS_RANGE].copy_from_slice(&[0; 4]);
+                data
             } else if name == BAD_VAR_NAME {
                 // Invalid update info.
                 vec![1, 2, 3]
@@ -596,8 +603,9 @@ pub(crate) mod tests {
         assert_eq!(get_update_table(&uefi, vars), [info]);
     }
 
-    /// Test that `get_update_table` skips non-update variables and
-    /// variables that have some error, while still including successful
+    /// Test that `get_update_table` skips non-update variables,
+    /// variables that have some error, and variables that do not have
+    /// an ATTEMPT_UPDATE status, while still including successful
     /// variables.
     #[test]
     fn test_get_update_table_skip() {
@@ -615,6 +623,7 @@ pub(crate) mod tests {
         let vars = VariableKeys::ForTest(vec![
             Ok(VariableKey::new(BAD_VAR_NAME, FWUPDATE_VENDOR)),
             Ok(VariableKey::new(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR)),
+            Ok(VariableKey::new(NO_ATTEMPT_VAR_NAME, FWUPDATE_VENDOR)),
             Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR)),
         ]);
         assert_eq!(get_update_table(&uefi, vars.into_iter()), [info]);
