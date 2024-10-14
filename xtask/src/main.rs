@@ -49,6 +49,8 @@ pub struct Opt {
 enum Action {
     Setup(SetupAction),
     Check(CheckAction),
+    #[command(name = "cov")]
+    Coverage(CoverageAction),
     #[command(name = "fmt")]
     Format(FormatAction),
     Lint(LintAction),
@@ -107,6 +109,14 @@ impl CheckAction {
     fn verbose(&self) -> VerboseRuntimeLogs {
         VerboseRuntimeLogs(!self.disable_verbose_logs)
     }
+}
+
+/// Generate a code coverage report.
+#[derive(Parser)]
+struct CoverageAction {
+    /// Open the output in a browser.
+    #[arg(long)]
+    open: bool,
 }
 
 /// Run "cargo fmt" on all the code.
@@ -242,6 +252,19 @@ fn run_cargo_deny() -> Result<()> {
     // Run cargo-deny. This uses the config in `.deny.toml`.
     Command::with_args("cargo", ["deny", "check"]).run()?;
 
+    Ok(())
+}
+
+/// Generate a code coverage report.
+fn run_coverage(action: &CoverageAction) -> Result<()> {
+    let mut cmd = Command::with_args("cargo", ["llvm-cov", "--html"]);
+    for pkg in [Package::Crdyboot, Package::Crdyshim, Package::Libcrdy] {
+        cmd.add_arg_pair("-p", pkg.name());
+    }
+    if action.open {
+        cmd.add_arg("--open");
+    }
+    cmd.run()?;
     Ok(())
 }
 
@@ -513,6 +536,7 @@ fn main() -> Result<()> {
         Action::Build(action) => run_bootloader_build(&conf, action.is_android(), action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(action) => run_check(&conf, action),
+        Action::Coverage(action) => run_coverage(action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
         Action::Setup(action) => setup::run_setup(&conf, action),
