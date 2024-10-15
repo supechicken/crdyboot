@@ -221,3 +221,38 @@ pub fn update_firmware() {
         error!("firmware update failed: {err}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libcrdy::uefi::MockUefi;
+    use uefi::runtime::CapsuleInfo;
+    use uefi::Status;
+
+    /// Test that `get_reset_type` returns the same thing as
+    /// `query_capsule_capabilities` on success.
+    #[test]
+    fn test_get_reset_type_success() {
+        let mut uefi = MockUefi::new();
+
+        uefi.expect_query_capsule_capabilities()
+            .return_const(Ok(CapsuleInfo {
+                maximum_capsule_size: 1234,
+                reset_type: ResetType::COLD,
+            }));
+
+        assert_eq!(get_reset_type(&uefi, &[]), ResetType::COLD);
+    }
+
+    /// Test that `get_reset_type` returns `WARM` if
+    /// `query_capsule_capabilities` fails.
+    #[test]
+    fn test_get_reset_type_error() {
+        let mut uefi = MockUefi::new();
+
+        uefi.expect_query_capsule_capabilities()
+            .return_const(Err(Status::DEVICE_ERROR.into()));
+
+        assert_eq!(get_reset_type(&uefi, &[]), ResetType::WARM);
+    }
+}
