@@ -272,6 +272,39 @@ mod tests {
         unsafe { slice::from_raw_parts(ptr, mem::size_of::<CapsuleHeader>()) }
     }
 
+    /// Test that `get_one_capsule_ref` succeeds with valid data.
+    #[test]
+    fn test_get_one_capsule_ref_success() {
+        // Create space for the capsule. This allocation may not be
+        // properly aligned for `CapsuleHeader` under Miri.
+        let mut data = vec![0; 200];
+        // Find an aligned subslice.
+        let mut data = data.as_mut_slice();
+        while !data.as_ptr().cast::<CapsuleHeader>().is_aligned() {
+            data = &mut data[1..];
+        }
+
+        // Copy in a valid capsule header.
+        let header = create_capsule_header();
+        let src = capsule_header_as_bytes(&header);
+        data[..src.len()].copy_from_slice(src);
+
+        assert_eq!(*get_one_capsule_ref(&data).unwrap(), header);
+    }
+
+    /// Test that `get_one_capsule_ref` fails if the input data is
+    /// smaller than the header.
+    #[test]
+    fn test_get_one_capsule_ref_no_header() {
+        assert!(matches!(
+            get_one_capsule_ref(&[]).unwrap_err(),
+            FirmwareError::CapsuleTooSmall {
+                required: 28,
+                actual: 0,
+            }
+        ));
+    }
+
     /// Test that `get_one_capsule_ref` fails if the input data is
     /// smaller than the size specified in the header.
     #[test]
