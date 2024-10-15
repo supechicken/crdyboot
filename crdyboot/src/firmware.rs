@@ -96,8 +96,7 @@ fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> 
     // Check the alignment to make sure it matches CapsuleHeader. Since
     // all UEFI allocations are 8-byte aligned, this should never fail.
     let capsule_ptr: *const CapsuleHeader = capsule.as_ptr().cast();
-    // TODO(nicholasbishop): starting in Rust 1.79 can use `is_aligned` here.
-    if capsule_ptr.align_offset(mem::align_of::<CapsuleHeader>()) != 0 {
+    if !capsule_ptr.is_aligned() {
         return Err(FirmwareError::CapsuleNotAligned);
     }
 
@@ -286,6 +285,29 @@ mod tests {
                 required: 64,
                 actual: 28,
             }
+        ));
+    }
+
+    /// Test that `get_one_capsule_ref` fails if the input data is not
+    /// aligned.
+    #[test]
+    fn test_get_one_capsule_ref_not_aligned() {
+        let mut data = vec![0; 100];
+
+        // Create a slice of `data` that is not aligned.
+        let mut data = data.as_mut_slice();
+        if data.as_ptr().cast::<CapsuleHeader>().is_aligned() {
+            data = &mut data[1..];
+        }
+
+        // Copy header data into the unaligned slice.
+        let header = create_capsule_header();
+        let src = capsule_header_as_bytes(&header);
+        data[..src.len()].copy_from_slice(src);
+
+        assert!(matches!(
+            get_one_capsule_ref(data).unwrap_err(),
+            FirmwareError::CapsuleNotAligned
         ));
     }
 }
