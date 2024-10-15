@@ -108,7 +108,7 @@ fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> 
     // The header contains the expected size of the full capsule; make
     // sure that enough data is present.
     let required_size = u32_to_usize(capsule_ref.capsule_image_size);
-    if required_size < capsule.len() {
+    if capsule.len() < required_size {
         return Err(FirmwareError::CapsuleTooSmall {
             required: required_size,
             actual: capsule.len(),
@@ -225,9 +225,10 @@ pub fn update_firmware() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::{ptr, slice};
     use libcrdy::uefi::MockUefi;
-    use uefi::runtime::CapsuleInfo;
-    use uefi::Status;
+    use uefi::runtime::{CapsuleFlags, CapsuleInfo};
+    use uefi::{guid, Status};
 
     /// Test that `get_reset_type` returns the same thing as
     /// `query_capsule_capabilities` on success.
@@ -254,5 +255,37 @@ mod tests {
             .return_const(Err(Status::DEVICE_ERROR.into()));
 
         assert_eq!(get_reset_type(&uefi, &[]), ResetType::WARM);
+    }
+
+    /// Create a test capsule header.
+    fn create_capsule_header() -> CapsuleHeader {
+        CapsuleHeader {
+            capsule_guid: guid!("4f5c8eed-4346-4de8-82b2-48b884a84dee"),
+            header_size: 32,
+            flags: CapsuleFlags::PERSIST_ACROSS_RESET,
+            capsule_image_size: 64,
+        }
+    }
+
+    /// Convert a `CapsuleHeader` to a byte slice.
+    fn capsule_header_as_bytes(header: &CapsuleHeader) -> &[u8] {
+        let ptr: *const u8 = ptr::from_ref(header).cast();
+        unsafe { slice::from_raw_parts(ptr, mem::size_of::<CapsuleHeader>()) }
+    }
+
+    /// Test that `get_one_capsule_ref` fails if the input data is
+    /// smaller than the size specified in the header.
+    #[test]
+    fn test_get_one_capsule_ref_too_small() {
+        let header = create_capsule_header();
+        let bytes = capsule_header_as_bytes(&header);
+
+        assert!(matches!(
+            get_one_capsule_ref(&bytes).unwrap_err(),
+            FirmwareError::CapsuleTooSmall {
+                required: 64,
+                actual: 28,
+            }
+        ));
     }
 }
