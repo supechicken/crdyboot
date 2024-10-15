@@ -12,7 +12,10 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
-use uefi::runtime::{self, Time, VariableAttributes, VariableVendor};
+use uefi::runtime::{
+    self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, Time, VariableAttributes,
+    VariableVendor,
+};
 use uefi::{CStr16, CString16, Handle, Status};
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
@@ -56,6 +59,21 @@ pub trait Uefi {
     ) -> uefi::Result;
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result;
+
+    // Lifetime needed here due to the `mockall::automock` macro.
+    #[allow(clippy::needless_lifetimes)]
+    fn query_capsule_capabilities<'a>(
+        &self,
+        capsule_header_array: &[&'a CapsuleHeader],
+    ) -> uefi::Result<CapsuleInfo>;
+
+    // Lifetime needed here due to the `mockall::automock` macro.
+    #[allow(clippy::needless_lifetimes)]
+    fn update_capsule<'a>(
+        &self,
+        capsule_header_array: &[&'a CapsuleHeader],
+        capsule_block_descriptors: &[CapsuleBlockDescriptor],
+    ) -> uefi::Result;
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
@@ -132,6 +150,21 @@ impl Uefi for UefiImpl {
 
     fn delete_variable(&self, name: &CStr16, vendor: &VariableVendor) -> uefi::Result {
         runtime::delete_variable(name, vendor)
+    }
+
+    fn query_capsule_capabilities(
+        &self,
+        capsule_header_array: &[&CapsuleHeader],
+    ) -> uefi::Result<CapsuleInfo> {
+        runtime::query_capsule_capabilities(capsule_header_array)
+    }
+
+    fn update_capsule(
+        &self,
+        capsule_header_array: &[&CapsuleHeader],
+        capsule_block_descriptors: &[CapsuleBlockDescriptor],
+    ) -> uefi::Result {
+        runtime::update_capsule(capsule_header_array, capsule_block_descriptors)
     }
 
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>> {
