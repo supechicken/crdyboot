@@ -13,7 +13,7 @@ use ext4_view::{Ext4Error, PathError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
-use load_capsules::load_capsules_from_disk;
+use load_capsules::{CapsuleLoader, CapsuleLoaderImpl};
 use log::info;
 use uefi::boot::PAGE_SIZE;
 use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
@@ -184,13 +184,16 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
 /// Some errors are logged but otherwise ignored, with the intent of
 /// processing as many valid capsules as possible. Fatal errors are
 /// propagated to the caller.
-fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
+fn update_firmware_impl(
+    uefi: &dyn Uefi,
+    capsule_loader: &dyn CapsuleLoader,
+) -> Result<(), FirmwareError> {
     // Check if any updates are available by searching for and validating
     // any update state variables.
     let updates = get_update_table(uefi, uefi.variable_keys());
     info!("found {} capsule update variables", updates.len());
 
-    let capsules = load_capsules_from_disk(uefi, &updates)?;
+    let capsules = capsule_loader.load_capsules_from_disk(uefi, &updates)?;
     info!("loaded {} capsules from disk", capsules.len());
 
     let capsule_refs = get_capsule_refs(&capsules);
@@ -228,7 +231,7 @@ pub fn update_firmware() {
         return;
     }
 
-    if let Err(err) = update_firmware_impl(&UefiImpl) {
+    if let Err(err) = update_firmware_impl(&UefiImpl, &CapsuleLoaderImpl) {
         info!("firmware update failed: {err}");
     }
 }

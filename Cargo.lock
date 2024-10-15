@@ -251,6 +251,7 @@ dependencies = [
  "ext4-view",
  "libcrdy",
  "log",
+ "mockall",
  "object",
  "sha2",
  "uefi",

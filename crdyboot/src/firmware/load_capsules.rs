@@ -13,6 +13,50 @@ use libcrdy::uefi::{ScopedDiskIo, Uefi};
 use log::info;
 use uefi::boot::{AllocateType, MemoryType};
 
+#[cfg_attr(test, mockall::automock)]
+pub trait CapsuleLoader {
+    /// Load all update capsules from the stateful partition.
+    ///
+    /// Any capsule that cannot be read is skipped.
+    fn load_capsules_from_disk(
+        &self,
+        uefi: &dyn Uefi,
+        updates: &[UpdateInfo],
+    ) -> Result<Vec<ScopedPageAllocation>, FirmwareError>;
+}
+
+pub struct CapsuleLoaderImpl;
+
+impl CapsuleLoader for CapsuleLoaderImpl {
+    fn load_capsules_from_disk(
+        &self,
+        uefi: &dyn Uefi,
+        updates: &[UpdateInfo],
+    ) -> Result<Vec<ScopedPageAllocation>, FirmwareError> {
+        // Find and open the stateful partition block device.
+        let (stateful_disk_io, media_id) = disk::open_stateful_partition(uefi)
+            .map_err(FirmwareError::OpenStatefulPartitionFailed)?;
+
+        // Create a reader and load the stateful filesystem.
+        let stateful_reader = Box::new(DiskReader {
+            disk_io: stateful_disk_io,
+            media_id,
+        });
+        let stateful_fs = Ext4::load(stateful_reader).map_err(FirmwareError::Ext4LoadFailed)?;
+
+        // Load all capsules. Errors are logged but otherwise ignored.
+        let mut capsules: Vec<ScopedPageAllocation> = Vec::with_capacity(updates.len());
+        for update in updates {
+            match load_one_capsule_from_disk(&stateful_fs, update) {
+                Ok(capsule) => capsules.push(capsule),
+                Err(err) => info!("failed to read capsule: {err}"),
+            }
+        }
+
+        Ok(capsules)
+    }
+}
+
 /// Load a single update capsule from the stateful partition.
 fn load_one_capsule_from_disk(
     fs: &Ext4,
@@ -49,36 +93,6 @@ fn load_one_capsule_from_disk(
     pages[..data.len()].copy_from_slice(&data);
 
     Ok(pages)
-}
-
-/// Load all update capsules from the stateful partition.
-///
-/// Any capsule that cannot be read is skipped.
-pub fn load_capsules_from_disk(
-    uefi: &dyn Uefi,
-    updates: &[UpdateInfo],
-) -> Result<Vec<ScopedPageAllocation>, FirmwareError> {
-    // Find and open the stateful partition block device.
-    let (stateful_disk_io, media_id) =
-        disk::open_stateful_partition(uefi).map_err(FirmwareError::OpenStatefulPartitionFailed)?;
-
-    // Create a reader and load the stateful filesystem.
-    let stateful_reader = Box::new(DiskReader {
-        disk_io: stateful_disk_io,
-        media_id,
-    });
-    let stateful_fs = Ext4::load(stateful_reader).map_err(FirmwareError::Ext4LoadFailed)?;
-
-    // Load all capsules. Errors are logged but otherwise ignored.
-    let mut capsules: Vec<ScopedPageAllocation> = Vec::with_capacity(updates.len());
-    for update in updates {
-        match load_one_capsule_from_disk(&stateful_fs, update) {
-            Ok(capsule) => capsules.push(capsule),
-            Err(err) => info!("failed to read capsule: {err}"),
-        }
-    }
-
-    Ok(capsules)
 }
 
 struct DiskReader {
@@ -155,7 +169,9 @@ mod tests {
         ];
         let mut expected = b"test capsule data".to_vec();
         expected.resize(4096, 0u8);
-        let actual = load_capsules_from_disk(&uefi, &updates).unwrap();
+        let actual = CapsuleLoaderImpl
+            .load_capsules_from_disk(&uefi, &updates)
+            .unwrap();
         assert_eq!(actual.len(), 1);
         assert_eq!(&*actual[0], expected);
     }
