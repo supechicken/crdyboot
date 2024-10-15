@@ -133,6 +133,20 @@ mod tests {
         );
     }
 
+    /// Test that `DiskReader::read` returns an error when an invalid
+    /// range is requested.
+    #[test]
+    fn test_disk_reader_error() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+
+        let (stateful_disk_io, media_id) = disk::open_stateful_partition(&uefi).unwrap();
+        let mut reader = Box::new(DiskReader {
+            disk_io: stateful_disk_io,
+            media_id,
+        });
+        assert!(reader.read(u64::MAX, &mut []).is_err());
+    }
+
     /// Test that `ReadError` formats correctly.
     #[test]
     fn test_read_error() {
