@@ -108,10 +108,11 @@ mod tests {
     use crate::disk::tests::{create_mock_uefi, BootDrive};
     use crate::firmware::update_info::tests::{
         create_update_info, create_update_info_with_modified_path,
+        create_update_info_with_no_file_path,
     };
 
     /// Test that `load_capsules_from_disk` successfully loads an update
-    /// capsule, and correctly ignores a capsule that cannot be loaded.
+    /// capsule, and correctly ignores capsules that cannot be loaded.
     #[test]
     fn test_load_capsules_from_disk() {
         log::set_max_level(log::LevelFilter::Info);
@@ -119,7 +120,9 @@ mod tests {
         let uefi = create_mock_uefi(BootDrive::Hd1);
 
         let updates = [
-            // This update has an invalid path and will be silently skipped.
+            // This update has no file path and will be silently skipped.
+            create_update_info_with_no_file_path(),
+            // This update does not exist on disk and will be silently skipped.
             create_update_info_with_modified_path(),
             // This update is valid and will be loaded.
             create_update_info(),

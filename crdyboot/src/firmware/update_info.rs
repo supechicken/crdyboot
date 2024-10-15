@@ -325,6 +325,25 @@ pub(crate) mod tests {
         info
     }
 
+    /// Same as `create_update_info`, but the device path is modified so
+    /// that it does not contain a file path.
+    pub(crate) fn create_update_info_with_no_file_path() -> UpdateInfo {
+        let mut info = create_update_info();
+
+        // Search for the bytes that encode the type and subtype of a
+        // media file path node. Alter the node's subtype so that it is
+        // no longer a file path.
+        for i in 0..info.data.len() {
+            if info.data[i] == DeviceType::MEDIA.0
+                && info.data[i + 1] == DeviceSubType::MEDIA_FILE_PATH.0
+            {
+                info.data[i + 1] = DeviceSubType::MEDIA_VENDOR.0;
+            }
+        }
+
+        info
+    }
+
     #[test]
     fn test_update_info_construction() {
         // Successful construction.
@@ -385,18 +404,7 @@ pub(crate) mod tests {
     /// not end with a media file path.
     #[test]
     fn test_update_info_invalid_file_path() {
-        let mut info = create_update_info();
-
-        // Search for the bytes that encode the type and subtype of a
-        // media file path node. Alter the node's subtype so that it is
-        // no longer a file path.
-        for i in 0..info.data.len() {
-            if info.data[i] == DeviceType::MEDIA.0
-                && info.data[i + 1] == DeviceSubType::MEDIA_FILE_PATH.0
-            {
-                info.data[i + 1] = DeviceSubType::MEDIA_VENDOR.0;
-            }
-        }
+        let info = create_update_info_with_no_file_path();
 
         assert!(matches!(
             info.file_path().unwrap_err(),
