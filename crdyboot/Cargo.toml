@@ -20,6 +20,7 @@ log.workspace = true
 object.workspace = true
 uefi.workspace = true
 vboot = { path = "../vboot" }
+sha2.workspace = true
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }

@@ -5,8 +5,8 @@
 use crate::disk::{GptDisk, GptDiskError};
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
-use alloc::vec;
 use alloc::vec::Vec;
+use alloc::{format, vec};
 use core::fmt::{self, Display, Formatter};
 use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
@@ -20,6 +20,7 @@ use libcrdy::uefi::UefiImpl;
 use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
+use sha2::{Digest, Sha256};
 use uefi::boot::{self, SearchType};
 use uefi::data_types::Identify;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
@@ -42,6 +43,9 @@ const PCR_INDEX: PcrIndex = PcrIndex(8);
 
 // Max size (32 MiB) for the flexor kernel image, for safety reasons.
 const FLEXOR_KERNEL_MAX_SIZE: usize = 33_554_432;
+
+// List of valid `flexor_vmlinuz` SHA256 hashes.
+const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
 
 pub enum CrdybootError {
     /// Failed to allocate memory.
@@ -105,6 +109,9 @@ pub enum CrdybootError {
 
     /// Failed to load the flexor kernel.
     LoadFlexorKernelFailed,
+
+    /// Flexor kernel hash is not present in the list of valid hashes.
+    FlexorKernelNotInAllowList,
 }
 
 impl Display for CrdybootError {
@@ -142,6 +149,10 @@ impl Display for CrdybootError {
             }
             Self::ReadFileFailed(err) => write!(f, "Failed to read file: {err}"),
             Self::LoadFlexorKernelFailed => write!(f, "Failed to load the flexor kernel"),
+            Self::FlexorKernelNotInAllowList => write!(
+                f,
+                "flexor kernel hash is not present in the list of valid hashes"
+            ),
         }
     }
 }
@@ -289,13 +300,14 @@ fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocatio
 /// Load the flexor kernel.
 ///
 /// Iterate over all the file system handles that support the simple file system
-/// protocol, look for a `flexor_vmlinuz` file and return its raw data.
+/// protocol, look for a `flexor_vmlinuz` file, validate and return its raw data.
 /// An error is returned if:
 ///  * File system could not be opened or accessed.
 ///  * `flexor_vmlinuz` file is not found.
 ///  * Any error occurs when reading the file data.
+///  * A valid flexor kernel image is not found.
 fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
-    const FILE_NAME: &CStr16 = cstr16!("flexor_vmlinuz1");
+    const FILE_NAME: &CStr16 = cstr16!("flexor_vmlinuz");
     let handles_buffer =
         boot::locate_handle_buffer(SearchType::ByProtocol(&SimpleFileSystem::GUID))
             .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
@@ -329,7 +341,55 @@ fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
         // Read file contents into a buffer.
         read_regular_file(&mut file, file_size, &mut buffer)
             .map_err(CrdybootError::ReadFileFailed)?;
+
+        // Continue looking for other valid flexor images.
+        if validate_flexor_kernel(&buffer, VALID_FLEXOR_SHA256_HASHES).is_err() {
+            info!("flexor kernel validation failed.");
+            continue;
+        }
+
         return Ok(buffer);
     }
     Err(CrdybootError::LoadFlexorKernelFailed)
+}
+
+/// Validate flexor kernel image against a list of valid hashes.
+///
+/// An error is returned if:
+///  * Hash of the flexor image is not present in the list of valid hashes.
+fn validate_flexor_kernel(buffer: &[u8], valid_hashes: &[&str]) -> Result<(), CrdybootError> {
+    // Get SHA256 hash of the input buffer.
+    let hash = format!("{:x}", Sha256::digest(buffer));
+
+    if valid_hashes.contains(&hash.as_str()) {
+        Ok(())
+    } else {
+        Err(CrdybootError::FlexorKernelNotInAllowList)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_DATA: &[u8] = &[1, 2, 3];
+    const FLEXOR_SHA256_TEST_HASHES: &[&str] = &[
+        // SHA256 hash for `TEST_DATA`
+        "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+    ];
+
+    /// Test that validate_flexor_kernel fails with an invalid kernel image.
+    #[test]
+    fn test_validate_flexor_kernel_error() {
+        assert!(matches!(
+            validate_flexor_kernel(&[0, 0], FLEXOR_SHA256_TEST_HASHES),
+            Err(CrdybootError::FlexorKernelNotInAllowList)
+        ));
+    }
+
+    /// Test that validate_flexor_kernel succeeds with an valid kernel image.
+    #[test]
+    fn test_validate_flexor_kernel_success() {
+        assert!(validate_flexor_kernel(TEST_DATA, FLEXOR_SHA256_TEST_HASHES).is_ok());
+    }
 }
