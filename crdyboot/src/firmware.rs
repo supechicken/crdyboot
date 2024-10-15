@@ -70,8 +70,8 @@ impl Display for FirmwareError {
 /// Ask the firmware what type of system reset is needed for capsule updates.
 ///
 /// If an error occurs, default to [`ResetType::WARM`].
-fn get_reset_type(capsules: &[&CapsuleHeader]) -> ResetType {
-    match runtime::query_capsule_capabilities(capsules) {
+fn get_reset_type(uefi: &dyn Uefi, capsules: &[&CapsuleHeader]) -> ResetType {
+    match uefi.query_capsule_capabilities(capsules) {
         Ok(capabilities) => {
             info!("query capsule capabilities: {capabilities:?}");
             capabilities.reset_type
@@ -195,10 +195,10 @@ fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
         return Ok(());
     }
 
-    let reset_type = get_reset_type(&capsule_refs);
+    let reset_type = get_reset_type(uefi, &capsule_refs);
 
     info!("calling update_capsule");
-    runtime::update_capsule(&capsule_refs, &descriptors)
+    uefi.update_capsule(&capsule_refs, &descriptors)
         .map_err(|err| FirmwareError::UpdateCapsuleFailed(err.status()))?;
 
     info!("resetting the system: {reset_type:?}");
