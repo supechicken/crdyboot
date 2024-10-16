@@ -18,7 +18,7 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
 use log::info;
-use uefi::boot::{self, AllocateType, MemoryType};
+use uefi::boot::{AllocateType, MemoryType};
 use uefi::table::boot::PAGE_SIZE;
 use uefi::Status;
 
@@ -49,6 +49,69 @@ impl Display for PageAllocationError {
             }
         }
     }
+}
+
+#[cfg(target_os = "uefi")]
+fn allocate_pages(
+    allocate_type: AllocateType,
+    memory_type: MemoryType,
+    num_pages: usize,
+) -> uefi::Result<NonNull<u8>> {
+    uefi::boot::allocate_pages(allocate_type, memory_type, num_pages)
+}
+
+/// Free pages allocated with the UEFI version of `allocate_pages`.
+///
+/// # Safety
+///
+/// This must only be called with an allocation created by
+/// `allocate_pages`. The caller must ensure that no references into the
+/// allocation remain, and that the memory at the allocation is not used
+/// after it is freed.
+#[cfg(target_os = "uefi")]
+unsafe fn free_pages(allocation: NonNull<u8>, num_pages: usize) -> uefi::Result {
+    uefi::boot::free_pages(allocation, num_pages)
+}
+
+#[cfg(not(target_os = "uefi"))]
+#[repr(C, align(4096))]
+#[derive(Clone)]
+struct Page([u8; PAGE_SIZE]);
+
+#[cfg(not(target_os = "uefi"))]
+fn allocate_pages(
+    _allocate_type: AllocateType,
+    _memory_type: MemoryType,
+    num_pages: usize,
+) -> uefi::Result<NonNull<u8>> {
+    // Create the page-aligned allocation and convert to a boxed slice.
+    let b: Box<[Page]> = vec![Page([0; PAGE_SIZE]); num_pages].into_boxed_slice();
+    // Leak allocation and convert to a raw pointer.
+    let slice = Box::leak(b);
+    let ptr: *mut u8 = slice.as_mut_ptr().cast();
+    // OK to unwrap: the allocation cannot be null.
+    Ok(NonNull::new(ptr).unwrap().cast())
+}
+
+/// Free pages allocated with the non-UEFI version of `allocate_pages`.
+///
+/// # Safety
+///
+/// This must only be called with an allocation created by
+/// `allocate_pages`. The caller must ensure that no references into the
+/// allocation remain, and that the memory at the allocation is not used
+/// after it is freed.
+#[cfg(not(target_os = "uefi"))]
+unsafe fn free_pages(allocation: NonNull<u8>, num_pages: usize) -> uefi::Result {
+    let ptr: NonNull<[Page]> = NonNull::slice_from_raw_parts(allocation.cast::<Page>(), num_pages);
+
+    // SAFETY: this recreates the box allocated internally by
+    // `allocate_pages`. The allocation is valid and contains no
+    // uninitialized memory.
+    let b = unsafe { Box::from_raw(ptr.as_ptr()) };
+
+    drop(b);
+    Ok(())
 }
 
 /// Page-aligned memory allocation that will be freed on drop. This
@@ -88,7 +151,7 @@ impl ScopedPageAllocation {
         let num_pages = num_bytes / PAGE_SIZE;
 
         info!("allocating {num_pages} pages ({allocate_type:?}, {memory_type:?})");
-        let allocation = boot::allocate_pages(allocate_type, memory_type, num_pages)
+        let allocation = allocate_pages(allocate_type, memory_type, num_pages)
             .map_err(|err| PageAllocationError::AllocationFailed(num_pages, err.status()))?;
         info!("allocation address: {allocation:#x?}");
 
@@ -119,7 +182,7 @@ impl Drop for ScopedPageAllocation {
         // By the time we call `drop` no other references to the
         // allocation can exist, so it is safe to de-allocate the
         // pages.
-        if let Err(err) = unsafe { boot::free_pages(self.allocation, self.num_pages) } {
+        if let Err(err) = unsafe { free_pages(self.allocation, self.num_pages) } {
             info!("free_pages failed: {:?}", err.status());
         }
     }
@@ -174,5 +237,19 @@ mod tests {
             .unwrap_err(),
             PageAllocationError::InvalidSize(4112)
         );
+    }
+
+    /// Test that the non-UEFI implementation of `ScopedPageAllocation::new`
+    /// successfully allocates and initializes memory.
+    #[test]
+    fn test_scoped_page_allocation_new_success() {
+        let alloc = ScopedPageAllocation::new(
+            AllocateType::AnyPages,
+            MemoryType::LOADER_DATA,
+            3 * PAGE_SIZE,
+        )
+        .unwrap();
+        assert_eq!(*alloc, vec![0; 3 * PAGE_SIZE]);
+        assert_eq!(alloc.allocation.align_offset(PAGE_SIZE), 0);
     }
 }
