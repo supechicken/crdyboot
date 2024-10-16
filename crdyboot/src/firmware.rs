@@ -338,4 +338,29 @@ mod tests {
             }
         ));
     }
+
+    /// Test that `get_capsule_block_descriptors` returns a valid
+    /// sentinel-terminated list of descriptors.
+    #[test]
+    fn test_get_capsule_block_descriptors() {
+        let capsules = [&create_capsule_header(), &create_capsule_header()];
+
+        assert_eq!(
+            get_capsule_block_descriptors(&capsules),
+            [
+                CapsuleBlockDescriptor {
+                    length: 64,
+                    address: ptr::from_ref(capsules[0]) as u64,
+                },
+                CapsuleBlockDescriptor {
+                    length: 64,
+                    address: ptr::from_ref(capsules[1]) as u64,
+                },
+                CapsuleBlockDescriptor {
+                    length: 0,
+                    address: 0
+                }
+            ]
+        )
+    }
 }
