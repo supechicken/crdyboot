@@ -31,7 +31,6 @@ enum FirmwareError {
     OpenStatefulPartitionFailed(GptDiskError),
     Ext4LoadFailed(Ext4Error),
     Ext4ReadFailed(Ext4Error),
-    CapsuleNotAligned,
     CapsuleTooSmall { required: usize, actual: usize },
     UpdateCapsuleFailed(Status),
 }
@@ -56,7 +55,6 @@ impl Display for FirmwareError {
             }
             Self::Ext4LoadFailed(err) => write!(f, "failed to load the stateful filesystem: {err}"),
             Self::Ext4ReadFailed(err) => write!(f, "failed to read an update capsule: {err}"),
-            Self::CapsuleNotAligned => write!(f, "capsule is not aligned"),
             Self::CapsuleTooSmall { required, actual } => {
                 write!(f, "capsule is too small: {actual} < {required}")
             }
@@ -96,9 +94,7 @@ fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> 
     // Check the alignment to make sure it matches CapsuleHeader. Since
     // all UEFI allocations are 8-byte aligned, this should never fail.
     let capsule_ptr: *const CapsuleHeader = capsule.as_ptr().cast();
-    if !capsule_ptr.is_aligned() {
-        return Err(FirmwareError::CapsuleNotAligned);
-    }
+    assert!(capsule_ptr.is_aligned());
 
     // SAFETY: the pointed-to data is aligned and large enough to be
     // a `CapsuleHeader`.
@@ -345,29 +341,6 @@ mod tests {
                 required: 32,
                 actual: 28,
             }
-        ));
-    }
-
-    /// Test that `get_one_capsule_ref` fails if the input data is not
-    /// aligned.
-    #[test]
-    fn test_get_one_capsule_ref_not_aligned() {
-        let mut data = vec![0; 100];
-
-        // Create a slice of `data` that is not aligned.
-        let mut data = data.as_mut_slice();
-        if data.as_ptr().cast::<CapsuleHeader>().is_aligned() {
-            data = &mut data[1..];
-        }
-
-        // Copy header data into the unaligned slice.
-        let header = create_capsule_header();
-        let src = capsule_header_as_bytes(&header);
-        data[..src.len()].copy_from_slice(src);
-
-        assert!(matches!(
-            get_one_capsule_ref(data).unwrap_err(),
-            FirmwareError::CapsuleNotAligned
         ));
     }
 }
