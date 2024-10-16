@@ -8,11 +8,16 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4, Ext4Read, IoError, PathBuf};
+use libcrdy::page_alloc::ScopedPageAllocation;
 use libcrdy::uefi::{ScopedDiskIo, Uefi};
 use log::info;
+use uefi::boot::{AllocateType, MemoryType};
 
 /// Load a single update capsule from the stateful partition.
-fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>, FirmwareError> {
+fn load_one_capsule_from_disk(
+    fs: &Ext4,
+    update: &UpdateInfo,
+) -> Result<ScopedPageAllocation, FirmwareError> {
     let file_path = update.file_path()?;
     let path = PathBuf::new("/unencrypted/uefi_capsule_updates").join(file_path);
 
@@ -22,7 +27,28 @@ fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>,
         path.display()
     );
 
-    fs.read(&path).map_err(FirmwareError::Ext4ReadFailed)
+    // TODO(b/373881398): right now ext4-view-rs only provides this one
+    // way to read files, which internally allocates a `Vec`. The UEFI
+    // spec requires that capsules be page aligned, which we can't
+    // guarantee with a `Vec<u8>`.
+    //
+    // For now, read into a vec and copy into a new allocation. When
+    // ext4-view-rs supports reading into an existing buffer, switch to
+    // that API.
+    let data = fs.read(&path).map_err(FirmwareError::Ext4ReadFailed)?;
+
+    let mut pages = ScopedPageAllocation::new_unaligned(
+        AllocateType::AnyPages,
+        MemoryType::LOADER_DATA,
+        data.len(),
+    )
+    .map_err(FirmwareError::CapsuleAllocationFailed)?;
+    // Slice cannot fail, `alloc.len()` is guaranteed to be at least as
+    // large as `data.len()`.
+    #[expect(clippy::indexing_slicing)]
+    pages[..data.len()].copy_from_slice(&data);
+
+    Ok(pages)
 }
 
 /// Load all update capsules from the stateful partition.
@@ -31,7 +57,7 @@ fn load_one_capsule_from_disk(fs: &Ext4, update: &UpdateInfo) -> Result<Vec<u8>,
 pub fn load_capsules_from_disk(
     uefi: &dyn Uefi,
     updates: &[UpdateInfo],
-) -> Result<Vec<Vec<u8>>, FirmwareError> {
+) -> Result<Vec<ScopedPageAllocation>, FirmwareError> {
     // Find and open the stateful partition block device.
     let (stateful_disk_io, media_id) =
         disk::open_stateful_partition(uefi).map_err(FirmwareError::OpenStatefulPartitionFailed)?;
@@ -44,7 +70,7 @@ pub fn load_capsules_from_disk(
     let stateful_fs = Ext4::load(stateful_reader).map_err(FirmwareError::Ext4LoadFailed)?;
 
     // Load all capsules. Errors are logged but otherwise ignored.
-    let mut capsules: Vec<Vec<u8>> = Vec::with_capacity(updates.len());
+    let mut capsules: Vec<ScopedPageAllocation> = Vec::with_capacity(updates.len());
     for update in updates {
         match load_one_capsule_from_disk(&stateful_fs, update) {
             Ok(capsule) => capsules.push(capsule),
@@ -127,10 +153,11 @@ mod tests {
             // This update is valid and will be loaded.
             create_update_info(),
         ];
-        assert_eq!(
-            load_capsules_from_disk(&uefi, &updates).unwrap(),
-            [b"test capsule data"]
-        );
+        let mut expected = b"test capsule data".to_vec();
+        expected.resize(4096, 0u8);
+        let actual = load_capsules_from_disk(&uefi, &updates).unwrap();
+        assert_eq!(actual.len(), 1);
+        assert_eq!(&*actual[0], expected);
     }
 
     /// Test that `DiskReader::read` returns an error when an invalid

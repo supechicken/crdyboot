@@ -10,10 +10,12 @@ use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::mem;
 use ext4_view::{Ext4Error, PathError};
+use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
 use log::{error, info};
+use uefi::boot::PAGE_SIZE;
 use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
@@ -28,6 +30,7 @@ enum FirmwareError {
     FilePathMissing,
     FilePathEncodingInvalid,
     FilePathInvalid(PathError),
+    CapsuleAllocationFailed(PageAllocationError),
     OpenStatefulPartitionFailed(GptDiskError),
     Ext4LoadFailed(Ext4Error),
     Ext4ReadFailed(Ext4Error),
@@ -50,6 +53,9 @@ impl Display for FirmwareError {
             }
             Self::FilePathEncodingInvalid => write!(f, "file path encoding is invalid"),
             Self::FilePathInvalid(err) => write!(f, "file path is not valid for ext4: {err}"),
+            Self::CapsuleAllocationFailed(err) => {
+                write!(f, "failed to allocate pages for a capsule: {err}")
+            }
             Self::OpenStatefulPartitionFailed(err) => {
                 write!(f, "failed to open the stateful partition: {err}")
             }
@@ -82,19 +88,18 @@ fn get_reset_type(uefi: &dyn Uefi, capsules: &[&CapsuleHeader]) -> ResetType {
 }
 
 /// Get a `CapsuleHeader` reference from raw bytes.
-fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> {
-    // Make sure the capsule data is large enough to contain the header.
-    if capsule.len() < mem::size_of::<CapsuleHeader>() {
-        return Err(FirmwareError::CapsuleTooSmall {
-            required: mem::size_of::<CapsuleHeader>(),
-            actual: capsule.len(),
-        });
-    }
+fn get_one_capsule_ref(capsule: &ScopedPageAllocation) -> Result<&CapsuleHeader, FirmwareError> {
+    let capsule_ptr: *const CapsuleHeader = capsule.as_ptr().cast();
+
+    // Make sure the capsule data is large enough to contain the
+    // header. Since `ScopedPageAllocation` holds at least one page,
+    // this assert cannot fail.
+    assert!(capsule.len() >= mem::size_of::<CapsuleHeader>());
 
     // Check the alignment to make sure it matches CapsuleHeader. Since
-    // all UEFI allocations are 8-byte aligned, this should never fail.
-    let capsule_ptr: *const CapsuleHeader = capsule.as_ptr().cast();
+    // page allocations are `PAGE_SIZE` aligned, these asserts cannot fail.
     assert!(capsule_ptr.is_aligned());
+    assert_eq!(capsule_ptr.align_offset(PAGE_SIZE), 0);
 
     // SAFETY: the pointed-to data is aligned and large enough to be
     // a `CapsuleHeader`.
@@ -127,7 +132,7 @@ fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> 
 /// capsule bytes.
 ///
 /// Any capsules that are not valid are skipped.
-fn get_capsule_refs(capsules: &[Vec<u8>]) -> Vec<&CapsuleHeader> {
+fn get_capsule_refs(capsules: &[ScopedPageAllocation]) -> Vec<&CapsuleHeader> {
     let mut capsule_refs: Vec<&CapsuleHeader> = Vec::with_capacity(capsules.len());
     for capsule in capsules {
         match get_one_capsule_ref(capsule) {
@@ -232,6 +237,7 @@ mod tests {
     use super::*;
     use core::{ptr, slice};
     use libcrdy::uefi::MockUefi;
+    use uefi::boot::{AllocateType, MemoryType};
     use uefi::runtime::{CapsuleFlags, CapsuleInfo};
     use uefi::{guid, Status};
 
@@ -281,48 +287,33 @@ mod tests {
     /// Test that `get_one_capsule_ref` succeeds with valid data.
     #[test]
     fn test_get_one_capsule_ref_success() {
-        // Create space for the capsule. This allocation may not be
-        // properly aligned for `CapsuleHeader` under Miri.
-        let mut data = vec![0; 200];
-        // Find an aligned subslice.
-        let mut data = data.as_mut_slice();
-        while !data.as_ptr().cast::<CapsuleHeader>().is_aligned() {
-            data = &mut data[1..];
-        }
-
-        // Copy in a valid capsule header.
+        let mut capsule =
+            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
+                .unwrap();
         let header = create_capsule_header();
         let src = capsule_header_as_bytes(&header);
-        data[..src.len()].copy_from_slice(src);
+        capsule[..src.len()].copy_from_slice(src);
 
-        assert_eq!(*get_one_capsule_ref(&data).unwrap(), header);
-    }
-
-    /// Test that `get_one_capsule_ref` fails if the input data is
-    /// smaller than the header.
-    #[test]
-    fn test_get_one_capsule_ref_no_header() {
-        assert!(matches!(
-            get_one_capsule_ref(&[]).unwrap_err(),
-            FirmwareError::CapsuleTooSmall {
-                required: 28,
-                actual: 0,
-            }
-        ));
+        assert_eq!(*get_one_capsule_ref(&capsule).unwrap(), header);
     }
 
     /// Test that `get_one_capsule_ref` fails if the input data is
     /// smaller than the header size specified in the header.
     #[test]
     fn test_get_one_capsule_ref_too_small_for_header() {
-        let header = create_capsule_header();
-        let bytes = capsule_header_as_bytes(&header);
+        let mut capsule =
+            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
+                .unwrap();
+        let mut header = create_capsule_header();
+        header.header_size = 5000;
+        let src = capsule_header_as_bytes(&header);
+        capsule[..src.len()].copy_from_slice(src);
 
         assert!(matches!(
-            get_one_capsule_ref(bytes).unwrap_err(),
+            get_one_capsule_ref(&capsule).unwrap_err(),
             FirmwareError::CapsuleTooSmall {
-                required: 32,
-                actual: 28,
+                required: 5000,
+                actual: 4096,
             }
         ));
     }
@@ -331,15 +322,19 @@ mod tests {
     /// smaller than the full capsule size specified in the header.
     #[test]
     fn test_get_one_capsule_ref_too_small_for_capsule() {
+        let mut capsule =
+            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
+                .unwrap();
         let mut header = create_capsule_header();
-        header.capsule_image_size = 32;
-        let bytes = capsule_header_as_bytes(&header);
+        header.capsule_image_size = 9999;
+        let src = capsule_header_as_bytes(&header);
+        capsule[..src.len()].copy_from_slice(src);
 
         assert!(matches!(
-            get_one_capsule_ref(bytes).unwrap_err(),
+            get_one_capsule_ref(&capsule).unwrap_err(),
             FirmwareError::CapsuleTooSmall {
-                required: 32,
-                actual: 28,
+                required: 9999,
+                actual: 4096,
             }
         ));
     }
