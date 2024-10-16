@@ -104,6 +104,16 @@ fn get_one_capsule_ref(capsule: &[u8]) -> Result<&CapsuleHeader, FirmwareError> 
     // a `CapsuleHeader`.
     let capsule_ref: &CapsuleHeader = unsafe { &*capsule_ptr };
 
+    // The header contains a header size (which may be larger than
+    // `CapsuleHeader`), validate that enough data is present.
+    let required_size = u32_to_usize(capsule_ref.header_size);
+    if capsule.len() < required_size {
+        return Err(FirmwareError::CapsuleTooSmall {
+            required: required_size,
+            actual: capsule.len(),
+        });
+    }
+
     // The header contains the expected size of the full capsule; make
     // sure that enough data is present.
     let required_size = u32_to_usize(capsule_ref.capsule_image_size);
@@ -306,16 +316,33 @@ mod tests {
     }
 
     /// Test that `get_one_capsule_ref` fails if the input data is
-    /// smaller than the size specified in the header.
+    /// smaller than the header size specified in the header.
     #[test]
-    fn test_get_one_capsule_ref_too_small() {
+    fn test_get_one_capsule_ref_too_small_for_header() {
         let header = create_capsule_header();
         let bytes = capsule_header_as_bytes(&header);
 
         assert!(matches!(
-            get_one_capsule_ref(&bytes).unwrap_err(),
+            get_one_capsule_ref(bytes).unwrap_err(),
             FirmwareError::CapsuleTooSmall {
-                required: 64,
+                required: 32,
+                actual: 28,
+            }
+        ));
+    }
+
+    /// Test that `get_one_capsule_ref` fails if the input data is
+    /// smaller than the full capsule size specified in the header.
+    #[test]
+    fn test_get_one_capsule_ref_too_small_for_capsule() {
+        let mut header = create_capsule_header();
+        header.capsule_image_size = 32;
+        let bytes = capsule_header_as_bytes(&header);
+
+        assert!(matches!(
+            get_one_capsule_ref(bytes).unwrap_err(),
+            FirmwareError::CapsuleTooSmall {
+                required: 32,
                 actual: 28,
             }
         ));
