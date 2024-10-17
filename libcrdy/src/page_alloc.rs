@@ -13,6 +13,7 @@
 //! [`MemoryType::LOADER_CODE`] rather than [`MemoryType::LOADER_DATA`],
 //! since it is executable.
 
+use crate::util::{round_up_to_page_alignment, usize_to_u64};
 use core::fmt::{self, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
@@ -166,6 +167,24 @@ impl ScopedPageAllocation {
             num_bytes,
         })
     }
+
+    /// Same as `ScopedPageAllocation::new`, but `num_bytes` is rounded
+    /// up to the nearest page size.
+    ///
+    /// An error is returned if `num_bytes` is zero.
+    ///
+    /// The allocated memory is fully initialized with zeros.
+    pub fn new_unaligned(
+        allocate_type: AllocateType,
+        memory_type: MemoryType,
+        num_bytes: usize,
+    ) -> Result<Self, PageAllocationError> {
+        let num_bytes_page_aligned_u64 = round_up_to_page_alignment(usize_to_u64(num_bytes))
+            .ok_or(PageAllocationError::InvalidSize(num_bytes))?;
+        let num_bytes_page_aligned_usize = usize::try_from(num_bytes_page_aligned_u64)
+            .map_err(|_| PageAllocationError::InvalidSize(num_bytes))?;
+        Self::new(allocate_type, memory_type, num_bytes_page_aligned_usize)
+    }
 }
 
 impl Drop for ScopedPageAllocation {
@@ -250,6 +269,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(*alloc, vec![0; 3 * PAGE_SIZE]);
+        assert_eq!(alloc.allocation.align_offset(PAGE_SIZE), 0);
+    }
+
+    /// Test that the non-UEFI implementation of
+    /// `ScopedPageAllocation::new_unaligned` successfully allocates and
+    /// initializes memory.
+    #[test]
+    fn test_scoped_page_allocation_new_unaligned_success() {
+        let alloc =
+            ScopedPageAllocation::new_unaligned(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
+                .unwrap();
+        assert_eq!(*alloc, vec![0; PAGE_SIZE]);
         assert_eq!(alloc.allocation.align_offset(PAGE_SIZE), 0);
     }
 }
