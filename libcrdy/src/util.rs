@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use uefi::boot::PAGE_SIZE;
+use uefi::data_types::PhysicalAddress;
+
 /// Convert a `u32` to a `usize`.
 ///
 /// On the targets we care about, `usize` is always at least as large as `u32`.
@@ -49,6 +52,23 @@ pub const fn mib_to_bytes(mib: usize) -> usize {
     }
 }
 
+/// Round the address up to the nearest page size (4KiB).
+#[must_use]
+pub(crate) fn round_up_to_page_alignment(addr: PhysicalAddress) -> Option<PhysicalAddress> {
+    let efi_page_size = usize_to_u64(PAGE_SIZE);
+    // OK to unwrap: PAGE_SIZE is always 4096.
+    let r = addr.checked_rem(efi_page_size).unwrap();
+
+    if r == 0 {
+        Some(addr)
+    } else {
+        // OK to unwrap: `r` is less than `efi_page_size`.
+        let offset = efi_page_size.checked_sub(r).unwrap();
+
+        addr.checked_add(offset)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,5 +82,16 @@ mod tests {
     #[should_panic]
     fn test_mib_to_bytes_overflow() {
         let _ = mib_to_bytes(usize::MAX);
+    }
+
+    #[test]
+    fn test_round_up_to_page_alignment() {
+        assert_eq!(round_up_to_page_alignment(0), Some(0));
+        assert_eq!(round_up_to_page_alignment(1), Some(4096));
+        assert_eq!(round_up_to_page_alignment(4095), Some(4096));
+        assert_eq!(round_up_to_page_alignment(4096), Some(4096));
+        assert_eq!(round_up_to_page_alignment(4097), Some(8192));
+        assert_eq!(round_up_to_page_alignment(8192), Some(8192));
+        assert_eq!(round_up_to_page_alignment(8193), Some(12288));
     }
 }

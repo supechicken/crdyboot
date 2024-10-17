@@ -11,7 +11,7 @@
 //! more information:
 //! <https://techcommunity.microsoft.com/t5/hardware-dev-center/new-uefi-ca-memory-mitigation-requirements-for-signing/ba-p/3608714>
 
-use crate::util::usize_to_u64;
+use crate::util::round_up_to_page_alignment;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
@@ -21,7 +21,6 @@ use object::LittleEndian;
 use uefi::boot::{self, MemoryAttribute};
 use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
-use uefi::table::boot::PAGE_SIZE;
 use uefi::Status;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -82,23 +81,6 @@ impl Display for NxError {
 #[expect(clippy::verbose_bit_mask)]
 fn is_page_aligned(addr: PhysicalAddress) -> bool {
     (addr & 0xfff) == 0
-}
-
-/// Round the address up to the nearest page size (4KiB).
-fn round_up_to_page_alignment(addr: PhysicalAddress) -> Result<PhysicalAddress, NxError> {
-    let efi_page_size = usize_to_u64(PAGE_SIZE);
-    // OK to unwrap: PAGE_SIZE is always 4096.
-    let r = addr.checked_rem(efi_page_size).unwrap();
-
-    if r == 0 {
-        Ok(addr)
-    } else {
-        // OK to unwrap: `r` is less than `efi_page_size`.
-        let offset = efi_page_size.checked_sub(r).unwrap();
-
-        addr.checked_add(offset)
-            .ok_or(NxError::InvalidSectionBounds)
-    }
 }
 
 /// Memory protection attributes that should be cleared/set for a PE
@@ -176,7 +158,8 @@ impl NxSectionInfo {
                 .checked_add(self.len)
                 .ok_or(NxError::InvalidSectionBounds)?;
 
-            Ok(self.address..round_up_to_page_alignment(end)?)
+            Ok(self.address
+                ..round_up_to_page_alignment(end).ok_or(NxError::InvalidSectionBounds)?)
         } else {
             Err(NxError::SectionStartNotPageAligned(self.address))
         }
@@ -275,17 +258,6 @@ mod tests {
         assert!(!is_page_aligned(4095));
         assert!(is_page_aligned(4096));
         assert!(!is_page_aligned(4097));
-    }
-
-    #[test]
-    fn test_round_up_to_page_alignment() {
-        assert_eq!(round_up_to_page_alignment(0), Ok(0));
-        assert_eq!(round_up_to_page_alignment(1), Ok(4096));
-        assert_eq!(round_up_to_page_alignment(4095), Ok(4096));
-        assert_eq!(round_up_to_page_alignment(4096), Ok(4096));
-        assert_eq!(round_up_to_page_alignment(4097), Ok(8192));
-        assert_eq!(round_up_to_page_alignment(8192), Ok(8192));
-        assert_eq!(round_up_to_page_alignment(8193), Ok(12288));
     }
 
     #[test]
