@@ -22,9 +22,14 @@ use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::table::boot::PAGE_SIZE;
 use uefi::Status;
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum PageAllocationError {
-    /// Allocation request is not an even multiple of the page size.
-    InvalidSize(usize),
+    /// Allocation request is zero bytes or not an even multiple of the
+    /// page size.
+    InvalidSize(
+        /// Requested size.
+        usize,
+    ),
 
     /// UEFI page allocator failed.
     AllocationFailed(usize, Status),
@@ -49,6 +54,9 @@ impl Display for PageAllocationError {
 /// Page-aligned memory allocation that will be freed on drop. This
 /// implements [`Deref`] and [`DerefMut`] to provide access to the
 /// allocation.
+///
+/// The allocation is guaranteed to be at least one page in size.
+#[derive(Debug)]
 pub struct ScopedPageAllocation {
     allocation: NonNull<u8>,
     num_pages: usize,
@@ -57,11 +65,21 @@ pub struct ScopedPageAllocation {
 
 impl ScopedPageAllocation {
     /// Allocate `num_bytes` of page-aligned memory.
+    ///
+    /// An error is returned if `num_bytes` is zero, or if `num_bytes`
+    /// is not page aligned, or if the allocation fails.
+    ///
+    /// The allocated memory is fully initialized with zeros.
     pub fn new(
         allocate_type: AllocateType,
         memory_type: MemoryType,
         num_bytes: usize,
     ) -> Result<Self, PageAllocationError> {
+        // Reject the allocation if it's empty.
+        if num_bytes == 0 {
+            return Err(PageAllocationError::InvalidSize(num_bytes));
+        }
+
         // Reject the allocation if it's not a multiple of the page size.
         if num_bytes % PAGE_SIZE != 0 {
             return Err(PageAllocationError::InvalidSize(num_bytes));
@@ -126,5 +144,35 @@ impl DerefMut for ScopedPageAllocation {
         // The whole allocation was initialized with `write_bytes`, so
         // there is no uninitialized memory.
         unsafe { slice::from_raw_parts_mut(self.allocation.as_ptr(), self.num_bytes) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that `ScopedPageAllocation::new` fails with a zero-byte request.
+    #[test]
+    fn test_scoped_page_allocation_zero() {
+        assert_eq!(
+            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_DATA, 0)
+                .unwrap_err(),
+            PageAllocationError::InvalidSize(0)
+        );
+    }
+
+    /// Test that `ScopedPageAllocation::new` fails if the requested
+    /// size is not page aligned.
+    #[test]
+    fn test_scoped_page_allocation_unaligned() {
+        assert_eq!(
+            ScopedPageAllocation::new(
+                AllocateType::AnyPages,
+                MemoryType::LOADER_DATA,
+                PAGE_SIZE + 16
+            )
+            .unwrap_err(),
+            PageAllocationError::InvalidSize(4112)
+        );
     }
 }
