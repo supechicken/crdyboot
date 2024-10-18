@@ -340,6 +340,30 @@ mod tests {
         ));
     }
 
+    /// Test that `get_capsule_refs` ignores invalid capsules and
+    /// successfully gets valid capsule headers.
+    #[test]
+    fn test_get_capsule_refs() {
+        let valid_header = CapsuleHeader {
+            capsule_guid: TEST_GUID,
+            flags: TEST_FLAGS,
+            header_size: 28,
+            capsule_image_size: 1000,
+        };
+        let invalid_header = CapsuleHeader {
+            // Too large to fit in a page.
+            capsule_image_size: 9999,
+            ..valid_header
+        };
+
+        let capsules = &[
+            create_capsule(&invalid_header),
+            create_capsule(&valid_header),
+        ];
+
+        assert_eq!(get_capsule_refs(capsules), [&valid_header]);
+    }
+
     /// Test that `get_capsule_block_descriptors` returns a valid
     /// sentinel-terminated list of descriptors.
     #[test]
