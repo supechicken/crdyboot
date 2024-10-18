@@ -235,11 +235,14 @@ pub fn update_firmware() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::{ptr, slice};
+    use core::ptr;
     use libcrdy::uefi::MockUefi;
     use uefi::boot::{AllocateType, MemoryType};
     use uefi::runtime::{CapsuleFlags, CapsuleInfo};
-    use uefi::{guid, Status};
+    use uefi::{guid, Guid, Status};
+
+    const TEST_GUID: Guid = guid!("4f5c8eed-4346-4de8-82b2-48b884a84dee");
+    const TEST_FLAGS: CapsuleFlags = CapsuleFlags::PERSIST_ACROSS_RESET;
 
     /// Test that `get_reset_type` returns the same thing as
     /// `query_capsule_capabilities` on success.
@@ -268,31 +271,31 @@ mod tests {
         assert_eq!(get_reset_type(&uefi, &[]), ResetType::WARM);
     }
 
-    /// Create a test capsule header.
-    fn create_capsule_header() -> CapsuleHeader {
-        CapsuleHeader {
-            capsule_guid: guid!("4f5c8eed-4346-4de8-82b2-48b884a84dee"),
-            header_size: 32,
-            flags: CapsuleFlags::PERSIST_ACROSS_RESET,
-            capsule_image_size: 64,
-        }
-    }
+    /// Create a test capsule. The returned allocation contains one page
+    /// of memory. The `header` is copied to the beginning of the that
+    /// memory.
+    fn create_capsule(header: &CapsuleHeader) -> ScopedPageAllocation {
+        // Allocate one page.
+        let mut capsule =
+            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
+                .unwrap();
 
-    /// Convert a `CapsuleHeader` to a byte slice.
-    fn capsule_header_as_bytes(header: &CapsuleHeader) -> &[u8] {
-        let ptr: *const u8 = ptr::from_ref(header).cast();
-        unsafe { slice::from_raw_parts(ptr, mem::size_of::<CapsuleHeader>()) }
+        // Copy the header to the capsule.
+        unsafe { capsule.as_mut_ptr().cast::<CapsuleHeader>().write(*header) };
+
+        capsule
     }
 
     /// Test that `get_one_capsule_ref` succeeds with valid data.
     #[test]
     fn test_get_one_capsule_ref_success() {
-        let mut capsule =
-            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
-                .unwrap();
-        let header = create_capsule_header();
-        let src = capsule_header_as_bytes(&header);
-        capsule[..src.len()].copy_from_slice(src);
+        let header = CapsuleHeader {
+            capsule_guid: TEST_GUID,
+            flags: TEST_FLAGS,
+            header_size: 28,
+            capsule_image_size: 64,
+        };
+        let capsule = create_capsule(&header);
 
         assert_eq!(*get_one_capsule_ref(&capsule).unwrap(), header);
     }
@@ -301,13 +304,12 @@ mod tests {
     /// smaller than the header size specified in the header.
     #[test]
     fn test_get_one_capsule_ref_too_small_for_header() {
-        let mut capsule =
-            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
-                .unwrap();
-        let mut header = create_capsule_header();
-        header.header_size = 5000;
-        let src = capsule_header_as_bytes(&header);
-        capsule[..src.len()].copy_from_slice(src);
+        let capsule = create_capsule(&CapsuleHeader {
+            capsule_guid: TEST_GUID,
+            flags: TEST_FLAGS,
+            header_size: 5000,
+            capsule_image_size: 6000,
+        });
 
         assert!(matches!(
             get_one_capsule_ref(&capsule).unwrap_err(),
@@ -322,13 +324,12 @@ mod tests {
     /// smaller than the full capsule size specified in the header.
     #[test]
     fn test_get_one_capsule_ref_too_small_for_capsule() {
-        let mut capsule =
-            ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, PAGE_SIZE)
-                .unwrap();
-        let mut header = create_capsule_header();
-        header.capsule_image_size = 9999;
-        let src = capsule_header_as_bytes(&header);
-        capsule[..src.len()].copy_from_slice(src);
+        let capsule = create_capsule(&CapsuleHeader {
+            capsule_guid: TEST_GUID,
+            flags: TEST_FLAGS,
+            header_size: 28,
+            capsule_image_size: 9999,
+        });
 
         assert!(matches!(
             get_one_capsule_ref(&capsule).unwrap_err(),
@@ -343,7 +344,20 @@ mod tests {
     /// sentinel-terminated list of descriptors.
     #[test]
     fn test_get_capsule_block_descriptors() {
-        let capsules = [&create_capsule_header(), &create_capsule_header()];
+        let capsules = [
+            &CapsuleHeader {
+                capsule_guid: TEST_GUID,
+                flags: TEST_FLAGS,
+                header_size: 28,
+                capsule_image_size: 64,
+            },
+            &CapsuleHeader {
+                capsule_guid: TEST_GUID,
+                flags: TEST_FLAGS,
+                header_size: 28,
+                capsule_image_size: 128,
+            },
+        ];
 
         assert_eq!(
             get_capsule_block_descriptors(&capsules),
@@ -353,7 +367,7 @@ mod tests {
                     address: ptr::from_ref(capsules[0]) as u64,
                 },
                 CapsuleBlockDescriptor {
-                    length: 64,
+                    length: 128,
                     address: ptr::from_ref(capsules[1]) as u64,
                 },
                 CapsuleBlockDescriptor {
