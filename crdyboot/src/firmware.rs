@@ -14,7 +14,7 @@ use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use load_capsules::load_capsules_from_disk;
-use log::{error, info};
+use log::info;
 use uefi::boot::PAGE_SIZE;
 use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
@@ -229,7 +229,7 @@ pub fn update_firmware() {
     }
 
     if let Err(err) = update_firmware_impl(&UefiImpl) {
-        error!("firmware update failed: {err}");
+        info!("firmware update failed: {err}");
     }
 }
 
