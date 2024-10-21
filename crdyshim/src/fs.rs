@@ -3,18 +3,15 @@
 // found in the LICENSE file.
 
 use core::fmt::{self, Display, Formatter};
+use libcrdy::fs::get_file_size;
 use log::info;
 use uefi::boot::{self, ScopedProtocol};
 use uefi::data_types::chars::NUL_16;
-use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
+use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::{cstr16, CStr16, CString16, Status};
 
 pub enum FsError {
-    /// The buffer is too small to hold the file data. The `u64` value
-    /// is the size of the file.
-    BufferTooSmall(u64),
-
     /// The file is a directory, but a regular file was expected.
     IsADirectory,
 
@@ -34,17 +31,13 @@ pub enum FsError {
     /// Reading a file did not return the expected amount of data.
     ReadTruncated,
 
-    /// Failed to get the position of a file handle.
-    GetPositionFailed(Status),
-
-    /// Failed to set the position of a file handle.
-    SetPositionFailed(Status),
+    /// Failed to get the file size.
+    GetFileSizeFailed(libcrdy::fs::FsError),
 }
 
 impl Display for FsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BufferTooSmall(size) => write!(f, "buffer too small, file size is {size} bytes"),
             Self::IsADirectory => write!(f, "file is a directory"),
             Self::NotADirectory => write!(f, "file is not a directory"),
             Self::OpenBootFileSystemFailed(status) => {
@@ -53,11 +46,8 @@ impl Display for FsError {
             Self::OpenFailed(status) => write!(f, "file open failed: {status}"),
             Self::ReadFailed(status) => write!(f, "file read failed: {status}"),
             Self::ReadTruncated => write!(f, "failed to read the entire file"),
-            Self::GetPositionFailed(status) => {
-                write!(f, "failed to get the file position: {status}")
-            }
-            Self::SetPositionFailed(status) => {
-                write!(f, "failed to set the file position: {status}")
+            Self::GetFileSizeFailed(err) => {
+                write!(f, "failed to get the file size: {err}")
             }
         }
     }
@@ -106,21 +96,7 @@ pub fn read_file<'buf>(
         .ok_or(FsError::IsADirectory)?;
 
     // Get the size of the file.
-    file.set_position(RegularFile::END_OF_FILE)
-        .map_err(|err| FsError::SetPositionFailed(err.status()))?;
-    let file_size_u64 = file
-        .get_position()
-        .map_err(|err| FsError::GetPositionFailed(err.status()))?;
-
-    // Reset the file position to the beginning.
-    file.set_position(0)
-        .map_err(|err| FsError::SetPositionFailed(err.status()))?;
-
-    let file_size =
-        usize::try_from(file_size_u64).map_err(|_| FsError::BufferTooSmall(file_size_u64))?;
-    if file_size > buffer.len() {
-        return Err(FsError::BufferTooSmall(file_size_u64));
-    }
+    let file_size = get_file_size(&mut file).map_err(FsError::GetFileSizeFailed)?;
 
     // Read the file data.
     match file.read(buffer) {
