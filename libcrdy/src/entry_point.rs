@@ -153,11 +153,15 @@ mod tests {
 
     #[test]
     fn test_compat_entry() {
+        #[rustfmt::skip]
         let section = [
             // Small entry of unknown type.
-            0x02, 0x02, // ARM entry point.
-            0x1, 0x8, 0xc0, 0x01, 0x77, 0x66, 0x55, 0x44, // IA32 entry point.
-            0x1, 0x8, 0x4c, 0x01, 0x78, 0x56, 0x34, 0x12, // Ending entry.
+            0x02, 0x02,
+            // ARM entry point.
+            0x1, 0x8, 0xc0, 0x01, 0x77, 0x66, 0x55, 0x44,
+            // IA32 entry point.
+            0x1, 0x8, 0x4c, 0x01, 0x78, 0x56, 0x34, 0x12,
+            // Ending entry.
             0x0,
         ];
 
@@ -189,9 +193,37 @@ mod tests {
             ]
         );
 
+        // Find a valid entry.
         assert_eq!(
             find_compat_entry_point_in_section(&section, 0x14c),
             Some(0x12345678)
         );
+
+        // Find a nonexistent entry.
+        assert!(find_compat_entry_point_in_section(&section, 0x25d).is_none());
+    }
+
+    /// Test that iteration terminates if fields are missing.
+    #[test]
+    fn test_entry_too_small() {
+        // Empty section.
+        let section = [];
+        assert!(CompatEntryIter::new(&section).next().is_none());
+
+        // Size field is missing.
+        let section = [0x01];
+        assert!(CompatEntryIter::new(&section).next().is_none());
+
+        // Entry size is zero.
+        let section = [0x01, 0x00];
+        assert!(CompatEntryIter::new(&section).next().is_none());
+
+        // V1 machine type and entry point are missing.
+        let section = [0x01, 0x08];
+        assert!(CompatEntryIter::new(&section).next().is_none());
+
+        // V1 entry point is missing.
+        let section = [0x01, 0x08, 0x4c, 0x01];
+        assert!(CompatEntryIter::new(&section).next().is_none());
     }
 }
