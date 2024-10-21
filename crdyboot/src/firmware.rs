@@ -196,14 +196,15 @@ fn update_firmware_impl(uefi: &dyn Uefi) -> Result<(), FirmwareError> {
     let capsule_refs = get_capsule_refs(&capsules);
     info!("got {} valid capsule headers", capsule_refs.len());
 
-    let descriptors = get_capsule_block_descriptors(&capsule_refs);
-
-    set_update_statuses(uefi, &updates)?;
-
-    // If there are no capsules at this point then there's nothing left to do.
+    // The capsule list is now finalized. If there are no capsules at
+    // this point then there's nothing left to do.
     if capsule_refs.is_empty() {
         return Ok(());
     }
+
+    let descriptors = get_capsule_block_descriptors(&capsule_refs);
+
+    set_update_statuses(uefi, &updates)?;
 
     let reset_type = get_reset_type(uefi, &capsule_refs);
 
