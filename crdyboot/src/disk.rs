@@ -674,7 +674,7 @@ pub(crate) mod tests {
             // uefi-rs.
             let path: Box<DevicePath> = unsafe { mem::transmute(path) };
 
-            Ok(ScopedDevicePath::Boxed(path))
+            Ok(ScopedDevicePath::ForTest(path))
         }
     }
 
@@ -805,7 +805,7 @@ pub(crate) mod tests {
                 flush_blocks,
             };
             let bio: BlockIO = unsafe { mem::transmute(bio) };
-            Ok(ScopedBlockIo::ForTest(bio))
+            Ok(ScopedBlockIo::ForTest(Box::new(bio)))
         });
         uefi.expect_open_disk_io().returning(|handle| {
             assert_eq!(handle, DeviceKind::Hd1State.handle());
@@ -815,7 +815,7 @@ pub(crate) mod tests {
                 write_disk,
             };
             let dio: uefi::proto::media::disk::DiskIo = unsafe { mem::transmute(dio) };
-            Ok(ScopedDiskIo::ForTest(dio))
+            Ok(ScopedDiskIo::ForTest(Box::new(dio)))
         });
         uefi
     }

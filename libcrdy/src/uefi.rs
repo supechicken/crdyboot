@@ -6,12 +6,13 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
-use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
+use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams};
 use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
+use uefi::proto::Protocol;
 use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
     VariableVendor,
@@ -261,79 +262,48 @@ impl Uefi for UefiImpl {
     }
 }
 
-/// Wrapper around `ScopedProtocol<DevicePath>` that allows for mocking.
-#[derive(Debug)]
-pub enum ScopedDevicePath {
-    Protocol(ScopedProtocol<DevicePath>),
-    #[cfg(feature = "test_util")]
-    Boxed(Box<DevicePath>),
-}
-
-impl Deref for ScopedDevicePath {
-    type Target = DevicePath;
-
-    fn deref(&self) -> &DevicePath {
-        match self {
-            Self::Protocol(p) => p,
-            #[cfg(feature = "test_util")]
-            Self::Boxed(b) => b,
-        }
-    }
-}
-
-/// Wrapper around `ScopedProtocol<BlockIO>` that allows for mocking.
+/// Wrapper around `uefi::boot::ScopedProtocol` that allows for mocking.
 ///
-/// uefi-rs is a little inconsistent about `IO` vs `Io` (e.g. `DiskIo`
-/// vs `BlockIO`). For this code, consistently use `Io` in the public
-/// interface.
-#[derive(Debug)]
-pub enum ScopedBlockIo {
-    Protocol(ScopedProtocol<BlockIO>),
+/// Normally only the `Protocol` variant exists, which just passes
+/// through to the underlying `uefi::boot::ScopedProtocol`. If the
+/// `test_util` feature is enabled, the `ForTest` variant becomes
+/// available, allowing tests to create a protocol.
+///
+/// The test variant is boxed so that dynamically-sized structs such as
+/// `DevicePath` work.
+pub enum ScopedProtocol<P: Protocol + ?Sized> {
+    Protocol(boot::ScopedProtocol<P>),
     #[cfg(feature = "test_util")]
-    ForTest(BlockIO),
+    ForTest(Box<P>),
 }
 
-impl Deref for ScopedBlockIo {
-    type Target = BlockIO;
+impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
+    type Target = P;
 
-    fn deref(&self) -> &BlockIO {
+    #[inline]
+    fn deref(&self) -> &P {
         match self {
             Self::Protocol(p) => p,
             #[cfg(feature = "test_util")]
-            Self::ForTest(b) => b,
+            Self::ForTest(p) => p,
         }
     }
 }
 
-impl DerefMut for ScopedBlockIo {
-    fn deref_mut(&mut self) -> &mut BlockIO {
+impl<P: Protocol + ?Sized> DerefMut for ScopedProtocol<P> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut P {
         match self {
             Self::Protocol(p) => p,
             #[cfg(feature = "test_util")]
-            Self::ForTest(b) => b,
+            Self::ForTest(p) => p,
         }
     }
 }
 
-/// Wrapper around `ScopedProtocol<DiskIo>` that allows for mocking.
-#[derive(Debug)]
-pub enum ScopedDiskIo {
-    Protocol(ScopedProtocol<DiskIo>),
-    #[cfg(feature = "test_util")]
-    ForTest(DiskIo),
-}
-
-impl Deref for ScopedDiskIo {
-    type Target = DiskIo;
-
-    fn deref(&self) -> &DiskIo {
-        match self {
-            Self::Protocol(p) => p,
-            #[cfg(feature = "test_util")]
-            Self::ForTest(d) => d,
-        }
-    }
-}
+pub type ScopedBlockIo = ScopedProtocol<BlockIO>;
+pub type ScopedDevicePath = ScopedProtocol<DevicePath>;
+pub type ScopedDiskIo = ScopedProtocol<DiskIo>;
 
 #[derive(Clone)]
 pub enum PartitionInfo {
