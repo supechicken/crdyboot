@@ -16,7 +16,7 @@ use libcrdy::util::u32_to_usize;
 use load_capsules::{CapsuleLoader, CapsuleLoaderImpl};
 use log::info;
 use uefi::boot::PAGE_SIZE;
-use uefi::runtime::{self, CapsuleBlockDescriptor, CapsuleHeader, ResetType};
+use uefi::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
@@ -216,7 +216,9 @@ fn update_firmware_impl(
         .map_err(|err| FirmwareError::UpdateCapsuleFailed(err.status()))?;
 
     info!("resetting the system: {reset_type:?}");
-    runtime::reset(reset_type, Status::SUCCESS, None);
+    uefi.reset(reset_type);
+
+    Ok(())
 }
 
 /// Try to install firmware update capsules, if any are present.

@@ -13,7 +13,7 @@ use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::runtime::{
-    self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, Time, VariableAttributes,
+    self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
     VariableVendor,
 };
 use uefi::{CStr16, CString16, Handle, Status};
@@ -74,6 +74,11 @@ pub trait Uefi {
         capsule_header_array: &[&'a CapsuleHeader],
         capsule_block_descriptors: &[CapsuleBlockDescriptor],
     ) -> uefi::Result;
+
+    /// Reset the system.
+    ///
+    /// The actual UEFI implementation of this never returns.
+    fn reset(&self, reset_type: ResetType);
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
@@ -165,6 +170,10 @@ impl Uefi for UefiImpl {
         capsule_block_descriptors: &[CapsuleBlockDescriptor],
     ) -> uefi::Result {
         runtime::update_capsule(capsule_header_array, capsule_block_descriptors)
+    }
+
+    fn reset(&self, reset_type: ResetType) {
+        runtime::reset(reset_type, Status::SUCCESS, None);
     }
 
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>> {
