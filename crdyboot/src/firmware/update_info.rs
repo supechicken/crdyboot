@@ -18,7 +18,7 @@ use uefi::{cstr16, guid, CStr16, CString16};
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
 const FWUPDATE_ATTEMPTED: u32 = 0x0000_0002;
 
-const FWUPDATE_VENDOR: VariableVendor =
+pub(super) const FWUPDATE_VENDOR: VariableVendor =
     VariableVendor(guid!("0abba7dc-e516-4167-bbf5-4d9d1c739416"));
 
 const FWUPDATE_VERBOSE: &CStr16 = cstr16!("FWUPDATE_VERBOSE");
@@ -287,7 +287,7 @@ pub(crate) mod tests {
     use uefi::runtime::{Daylight, TimeParams};
     use uefi::Status;
 
-    const VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
+    pub(crate) const VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-0");
     const BAD_VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-1");
     const NO_ATTEMPT_VAR_NAME: &CStr16 = cstr16!("fwupd-61b65ccc-0116-4b62-80ed-ec5f089ae523-2");
 
@@ -470,7 +470,7 @@ pub(crate) mod tests {
         uefi
     }
 
-    fn create_mock_uefi_with_get_var() -> MockUefi {
+    pub(crate) fn create_mock_uefi_with_get_var() -> MockUefi {
         let mut uefi = create_mock_uefi_with_time();
 
         uefi.expect_get_variable_boxed().returning(|name, vendor| {

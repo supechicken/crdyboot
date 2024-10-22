@@ -242,10 +242,13 @@ pub fn update_firmware() {
 mod tests {
     use super::*;
     use core::ptr;
-    use libcrdy::uefi::MockUefi;
+    use libcrdy::uefi::{MockUefi, VariableKey, VariableKeys};
+    use load_capsules::MockCapsuleLoader;
     use uefi::boot::{AllocateType, MemoryType};
     use uefi::runtime::{CapsuleFlags, CapsuleInfo};
     use uefi::{guid, Guid, Status};
+    use update_info::tests::{create_mock_uefi_with_get_var, VAR_NAME};
+    use update_info::FWUPDATE_VENDOR;
 
     const TEST_GUID: Guid = guid!("4f5c8eed-4346-4de8-82b2-48b884a84dee");
     const TEST_FLAGS: CapsuleFlags = CapsuleFlags::PERSIST_ACROSS_RESET;
@@ -406,5 +409,61 @@ mod tests {
                 }
             ]
         )
+    }
+
+    /// Test that `update_firmware_impl` succeeds with a valid update
+    /// variable and valid capsule.
+    #[test]
+    fn test_update_firmware_impl_success() {
+        let mut uefi = create_mock_uefi_with_get_var();
+        uefi.expect_variable_keys().returning(|| {
+            VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))])
+        });
+        let mut loader = MockCapsuleLoader::new();
+        loader.expect_load_capsules_from_disk().returning(|_, _| {
+            Ok(vec![create_capsule(&CapsuleHeader {
+                capsule_guid: TEST_GUID,
+                flags: TEST_FLAGS,
+                header_size: 28,
+                capsule_image_size: 128,
+            })])
+        });
+        uefi.expect_set_variable().returning(|name, vendor, _, _| {
+            assert_eq!(name, VAR_NAME);
+            assert_eq!(*vendor, FWUPDATE_VENDOR);
+            Ok(())
+        });
+        uefi.expect_query_capsule_capabilities()
+            .returning(|capsules| {
+                assert_eq!(capsules.len(), 1);
+                Ok(CapsuleInfo {
+                    maximum_capsule_size: 123,
+                    reset_type: ResetType::COLD,
+                })
+            });
+        uefi.expect_update_capsule().returning(|capsules, desc| {
+            assert_eq!(capsules.len(), 1);
+            assert_eq!(desc.len(), 2);
+            Ok(())
+        });
+        uefi.expect_reset().returning(|reset_type| {
+            assert_eq!(reset_type, ResetType::COLD);
+        });
+        assert!(update_firmware_impl(&uefi, &loader).is_ok());
+    }
+
+    /// Test that `update_firmware_impl` returns early if no valid
+    /// capsules are loaded.
+    #[test]
+    fn test_update_firmware_impl_no_valid_capsule() {
+        let mut uefi = create_mock_uefi_with_get_var();
+        uefi.expect_variable_keys().returning(|| {
+            VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))])
+        });
+        let mut loader = MockCapsuleLoader::new();
+        loader
+            .expect_load_capsules_from_disk()
+            .returning(|_, _| Ok(vec![]));
+        assert!(update_firmware_impl(&uefi, &loader).is_ok());
     }
 }
