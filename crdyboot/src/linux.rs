@@ -21,12 +21,11 @@ use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
 use sha2::{Digest, Sha256};
-use uefi::boot::{self, SearchType};
+use uefi::boot::{self, AllocateType, MemoryType, SearchType};
 use uefi::data_types::Identify;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
-use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::{cstr16, CStr16, CString16, Status};
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 

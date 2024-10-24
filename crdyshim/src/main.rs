@@ -30,13 +30,12 @@ use libcrdy::util::mib_to_bytes;
 use log::{error, info};
 use sbat::RevocationSbat;
 use sbat_revocation::RevocationError;
-use uefi::boot::ScopedProtocol;
+use uefi::boot::{AllocateType, MemoryType, ScopedProtocol};
 use uefi::prelude::*;
 use uefi::proto::media::file::Directory;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::runtime::VariableVendor;
-use uefi::table::boot::{AllocateType, MemoryType};
 use uefi::{cstr16, CStr16, CString16};
 
 /// TPM PCR to measure into.

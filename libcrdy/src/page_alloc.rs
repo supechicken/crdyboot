@@ -19,8 +19,7 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
 use log::info;
-use uefi::boot::{AllocateType, MemoryType};
-use uefi::table::boot::PAGE_SIZE;
+use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::Status;
 
 #[derive(Debug, Eq, PartialEq)]
