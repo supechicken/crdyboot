@@ -209,3 +209,98 @@ pub fn relocate_pe_into<N: ImageNtHeaders>(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reloc(virtual_address: u32, typ: u16) -> Relocation {
+        Relocation {
+            virtual_address,
+            typ,
+        }
+    }
+
+    /// Test that `apply_one_relocation` succeeds with a valid `DIR64`
+    /// relocation.
+    #[test]
+    fn test_apply_one_relocation_dir64_success() {
+        let mut data = [0xff; 100];
+        data[20..28].copy_from_slice(&0x1111_1111_1111_1111i64.to_le_bytes());
+
+        apply_one_relocation(reloc(20, IMAGE_REL_BASED_DIR64), &mut data, 0x777).unwrap();
+
+        let mut expected = [0xff; 100];
+        expected[20..28].copy_from_slice(&0x1111_1111_1111_1888i64.to_le_bytes());
+        assert_eq!(data, expected);
+    }
+
+    /// Test that `apply_one_relocation` succeeds with a valid `HIGHLOW`
+    /// relocation.
+    #[test]
+    fn test_apply_one_relocation_highlow_success() {
+        let mut data = [0xff; 100];
+        data[20..24].copy_from_slice(&0x1111_1111i32.to_le_bytes());
+
+        apply_one_relocation(reloc(20, IMAGE_REL_BASED_HIGHLOW), &mut data, 0x777).unwrap();
+
+        let mut expected = [0xff; 100];
+        expected[20..24].copy_from_slice(&0x1111_1888i32.to_le_bytes());
+        assert_eq!(data, expected);
+    }
+
+    /// Test that `apply_one_relocation` succeeds with a valid
+    /// `ABSOLUTE` relocation.
+    #[test]
+    fn test_apply_one_relocation_absolute_success() {
+        let mut data = [0xff; 100];
+
+        apply_one_relocation(reloc(20, IMAGE_REL_BASED_ABSOLUTE), &mut data, 0x777).unwrap();
+
+        assert_eq!(data, [0xff; 100]);
+    }
+
+    /// Test that `apply_one_relocation` fails with an unknown type.
+    #[test]
+    fn test_apply_one_relocation_unknown_type() {
+        let mut data = [0xff; 100];
+
+        assert!(apply_one_relocation(
+            reloc(2000, object::pe::IMAGE_REL_BASED_HIGHADJ),
+            &mut data,
+            777,
+        )
+        .is_none());
+    }
+
+    /// Test that `apply_one_relocation` fails with a relocation at an
+    /// invalid offset.
+    #[test]
+    fn test_apply_one_relocation_invalid_offset() {
+        let mut data = [0xff; 100];
+        data[20..28].copy_from_slice(&1000u64.to_le_bytes());
+
+        assert!(apply_one_relocation(reloc(200, IMAGE_REL_BASED_DIR64), &mut data, 777).is_none());
+
+        assert!(
+            apply_one_relocation(reloc(200, IMAGE_REL_BASED_HIGHLOW), &mut data, 777).is_none()
+        );
+    }
+
+    /// Test that `apply_one_relocation` fails if overflow occurs.
+    #[test]
+    fn test_apply_one_relocation_overflow() {
+        let mut data = [0xff; 100];
+        data[20..28].copy_from_slice(&i64::MAX.to_le_bytes());
+
+        assert!(
+            apply_one_relocation(reloc(20, IMAGE_REL_BASED_DIR64), &mut data, 0xffff_ffff)
+                .is_none()
+        );
+
+        assert!(
+            apply_one_relocation(reloc(20, IMAGE_REL_BASED_HIGHLOW), &mut data, 0xffff_ffff)
+                .is_none()
+        );
+    }
+}
