@@ -12,7 +12,7 @@ use log::{error, info};
 use uguid::Guid;
 
 /// Errors produced by `load_kernel`.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LoadKernelError {
     /// Failed to convert numeric type.
     BadNumericConversion(&'static str),
@@ -42,7 +42,7 @@ pub enum LoadKernelError {
     },
 
     /// The kernel's x86 real-mode header doesn't have the expected magic.
-    BadHeaderMagic([u8; 4]),
+    BadHeaderMagic(Option<[u8; 4]>),
 
     /// The kernel's x86 real-mode header's `setup_sects` field is invalid.
     BadHeaderSetupSectors(u8),
@@ -205,10 +205,12 @@ fn get_actual_bootloader_size(full_bootloader_data: &[u8]) -> Result<usize, Load
     // Check that the header's four-byte magic signature is in the
     // expected place. This serves to make it immediately obvious if any
     // offset calculations so far are incorrect.
-    let magic_signature = &full_bootloader_data[MAGIC_SIGNATURE_START..MAGIC_SIGNATURE_END];
+    let magic_signature = full_bootloader_data
+        .get(MAGIC_SIGNATURE_START..MAGIC_SIGNATURE_END)
+        .ok_or(LoadKernelError::BadHeaderMagic(None))?;
     if magic_signature != b"HdrS" {
         return Err(LoadKernelError::BadHeaderMagic(
-            magic_signature.try_into().unwrap(),
+            magic_signature.try_into().ok(),
         ));
     }
 
@@ -485,5 +487,25 @@ mod tests {
                 panic!("load_kernel failed: {err}");
             }
         }
+    }
+
+    /// Test that `get_actual_bootloader_size` fails if the `magic`
+    /// field is missing.
+    #[test]
+    fn test_get_actual_bootloader_size_no_magic() {
+        assert_eq!(
+            get_actual_bootloader_size(&[0; 512]),
+            Err(LoadKernelError::BadHeaderMagic(None))
+        );
+    }
+
+    /// Test that `get_actual_bootloader_size` fails if the `magic`
+    /// field contains the wrong value.
+    #[test]
+    fn test_get_actual_bootloader_size_bad_magic() {
+        assert_eq!(
+            get_actual_bootloader_size(&[0; 1024]),
+            Err(LoadKernelError::BadHeaderMagic(Some([0; 4])))
+        );
     }
 }
