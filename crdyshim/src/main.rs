@@ -409,8 +409,7 @@ fn load_and_execute_next_stage(revocations: &RevocationSbat) -> Result<(), Crdys
 /// This is separated out from `efi_main` so that it can return a
 /// `Result` and propagate errors with `?`.
 fn run() -> Result<(), CrdyshimError> {
-    let embedded_revocations = include_bytes!("../revocations.csv");
-    let revocations = sbat_revocation::update_and_get_revocations(embedded_revocations)
+    let revocations = sbat_revocation::update_and_get_revocations()
         .map_err(CrdyshimError::RevocationDataError)?;
 
     // IMPORTANT: this self revocation check must happen as early in the

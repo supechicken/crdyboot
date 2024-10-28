@@ -37,6 +37,8 @@ use sbat::{ImageSbat, RevocationSbat, RevocationSbatOwned, ValidationResult};
 use uefi::runtime::{VariableAttributes, VariableVendor};
 use uefi::{cstr16, guid, CStr16};
 
+const EMBEDDED_REVOCATIONS: &[u8] = include_bytes!("../sbat_revocations.csv");
+
 const REVOCATION_VAR_ATTRS: VariableAttributes =
     VariableAttributes::NON_VOLATILE.union(VariableAttributes::BOOTSERVICE_ACCESS);
 
@@ -222,18 +224,16 @@ impl<'a> Revocation<'a> {
 
 /// Get the current SBAT revocations, updating the UEFI variable if necessary.
 ///
-/// `embedded_revocations` contains the raw data from `../revocations.csv`.
+/// `embedded_revocations` contains the raw data from `../sbat_revocations.csv`.
 ///
 /// See [`Revocation::update_and_get_revocations`] for details.
-pub fn update_and_get_revocations(
-    embedded_revocations: &[u8],
-) -> Result<RevocationSbatOwned, RevocationError> {
+pub fn update_and_get_revocations() -> Result<RevocationSbatOwned, RevocationError> {
     let var_access = UefiImpl;
     let revocation = Revocation {
         var_access: &var_access,
         var_vendor: &REVOCATION_VAR_VENDOR,
         var_name: REVOCATION_VAR_NAME,
-        embedded_revocations,
+        embedded_revocations: EMBEDDED_REVOCATIONS,
     };
     revocation.update_and_get_revocations()
 }
