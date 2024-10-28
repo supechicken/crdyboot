@@ -19,8 +19,9 @@ mod sbat;
 mod vbpubk;
 
 use firmware::update_firmware;
-use libcrdy::{embed_section, set_log_level};
+use libcrdy::{embed_section, sbat_revocation, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
+use log::info;
 use revocation::self_revocation_check;
 use uefi::prelude::*;
 
@@ -31,6 +32,12 @@ fn run() -> Result<(), CrdybootError> {
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
     self_revocation_check().map_err(CrdybootError::Revocation)?;
+
+    // Update SBAT revocations if necessary.
+    if let Err(err) = sbat_revocation::update_and_get_revocations() {
+        // Log the error but otherwise ignore it.
+        info!("failed to update SBAT revocations: {err:?}");
+    }
 
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.
