@@ -19,6 +19,7 @@ mod logging;
 pub mod nx;
 pub mod page_alloc;
 pub mod relocation;
+pub mod sbat_revocation;
 pub mod tpm;
 pub mod uefi;
 pub mod util;

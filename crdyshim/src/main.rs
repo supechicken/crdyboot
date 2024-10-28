@@ -12,7 +12,6 @@
 extern crate alloc;
 
 mod fs;
-mod sbat_revocation;
 
 use core::fmt::{self, Display, Formatter};
 use fs::FsError;
@@ -23,13 +22,13 @@ use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
+use libcrdy::sbat_revocation::{self, RevocationError};
 use libcrdy::set_log_level;
 use libcrdy::tpm::extend_pcr_and_log;
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
 use log::{error, info};
 use sbat::RevocationSbat;
-use sbat_revocation::RevocationError;
 use uefi::boot::{AllocateType, MemoryType, ScopedProtocol};
 use uefi::prelude::*;
 use uefi::proto::media::file::Directory;

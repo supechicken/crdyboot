@@ -27,10 +27,10 @@
 //! * <https://github.com/rhboot/shim/blob/HEAD/SbatLevel_Variable.txt>
 //! * <../../docs/sbat.md>
 
+use crate::arch::PeFileForCurrentArch;
+use crate::uefi::{Uefi, UefiImpl};
 use alloc::boxed::Box;
 use core::fmt::{self, Display, Formatter};
-use libcrdy::arch::PeFileForCurrentArch;
-use libcrdy::uefi::{Uefi, UefiImpl};
 use log::info;
 use object::{Object, ObjectSection};
 use sbat::{ImageSbat, RevocationSbat, RevocationSbatOwned, ValidationResult};
@@ -274,7 +274,7 @@ pub fn validate_pe(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libcrdy::uefi::MockUefi;
+    use crate::uefi::MockUefi;
     use mockall::predicate::*;
     use uefi::Status;
 

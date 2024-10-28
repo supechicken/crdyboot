@@ -546,6 +546,7 @@ dependencies = [
  "log",
  "mockall",
  "object",
+ "sbat",
  "uefi",
 ]
 
