@@ -17,7 +17,7 @@ use libcrdy::uefi::UefiImpl;
 use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
-use uefi::{CString16, Char16};
+use uefi::{cstr16, CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
 pub struct LoadedBuffersAvb {
@@ -639,6 +639,10 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     cmdline.push(Char16::try_from(' ').unwrap());
     cmdline.push_str(vendor_data.cmdline.as_ref());
     info!("combined command line: {cmdline}");
+
+    // TODO: Have this handle dynamic boot slots.
+    // TODO: have this be part of bootconfig once this handles bootconfig.
+    cmdline.push_str(cstr16!(" androidboot.slot_suffix=_a"));
 
     // At this point the cmdline, kernel and initramfs buffers
     // are allocated locally to this function.
