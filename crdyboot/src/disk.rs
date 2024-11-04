@@ -462,7 +462,6 @@ pub(crate) mod tests {
     use uefi::proto::device_path::build::messaging::{MacAddress, Scsi};
     use uefi::proto::device_path::build::{self, BuildError, BuildNode};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
-    use uefi::proto::device_path::DevicePath;
     use uefi::proto::media::block::BlockIO;
     use uefi::proto::media::partition::{
         GptPartitionAttributes, GptPartitionEntry, GptPartitionType, MbrOsType, MbrPartitionRecord,
@@ -667,14 +666,9 @@ pub(crate) mod tests {
             for node in nodes {
                 builder = builder.push(node)?;
             }
-            let _ = builder.finalize()?;
+            let path = builder.finalize()?;
 
-            let path: Box<[u8]> = vec.into_boxed_slice();
-            // TODO(b/366018844): add a way to construct Box<DevicePath>` to
-            // uefi-rs.
-            let path: Box<DevicePath> = unsafe { mem::transmute(path) };
-
-            Ok(ScopedDevicePath::ForTest(path))
+            Ok(ScopedDevicePath::ForTest(path.to_boxed()))
         }
     }
 
