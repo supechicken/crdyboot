@@ -13,7 +13,6 @@ extern crate alloc;
 
 mod fs;
 
-use core::fmt::{self, Display, Formatter};
 use fs::FsError;
 use libcrdy::arch::{Arch, PeFileForCurrentArch};
 use libcrdy::entry_point::get_primary_entry_point;
@@ -58,83 +57,64 @@ const NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES: usize = mib_to_bytes(2);
 #[derive(Debug, thiserror::Error)]
 pub enum CrdyshimError {
     /// Failed to get the revocation data.
-    RevocationDataError(RevocationError),
+    #[error("revocation data error")]
+    RevocationDataError(#[source] RevocationError),
 
     /// The current executable is revoked.
-    SelfRevoked(RevocationError),
+    #[error("current image is revoked")]
+    SelfRevoked(#[source] RevocationError),
 
     /// The next stage is revoked.
-    NextStageRevoked(RevocationError),
+    #[error("next stage is revoked")]
+    NextStageRevoked(#[source] RevocationError),
 
     /// Failed to allocate memory.
-    Allocation(PageAllocationError),
+    #[error("failed to allocate memory")]
+    Allocation(#[source] PageAllocationError),
 
     /// Failed to open the boot file system.
-    BootFileSystemError(FsError),
+    #[error("failed to open the boot file system")]
+    BootFileSystemError(#[source] FsError),
 
     /// Failed to read the next stage executable file.
-    ExecutableReadFailed(FsError),
+    #[error("failed to read the next stage executable")]
+    ExecutableReadFailed(#[source] FsError),
 
     /// The signature file name was not successfully created.
+    #[error("failed to create the signature file name")]
     InvalidSignatureName,
 
     /// Failed to read the signature file.
-    SignatureReadFailed(FsError),
+    #[error("failed to read the next stage signature")]
+    SignatureReadFailed(#[source] FsError),
 
     /// The embedded public key is not valid.
+    #[error("invalid public key")]
     InvalidPublicKey,
 
     /// The contents of the next stage signature file are not valid.
+    #[error("invalid signature file")]
     InvalidSignature,
 
     /// The next stage did not pass signature validation.
+    #[error("signature verification failed")]
     SignatureVerificationFailed,
 
     /// Failed to relocate a PE executable.
-    Relocation(RelocationError),
+    #[error("failed to relocate the next stage executable")]
+    Relocation(#[source] RelocationError),
 
     /// Failed to parse a PE executable.
+    #[error("invalid PE: {0}")]
     InvalidPe(object::Error),
 
     /// Failed to update memory attributes.
-    MemoryProtection(NxError),
+    #[error("failed to set up memory protection")]
+    MemoryProtection(#[source] NxError),
 
     /// Failed to launch the next stage.
-    Launch(LaunchError),
-}
-
-impl Display for CrdyshimError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::RevocationDataError(err) => write!(f, "revocation data error: {err}"),
-            Self::SelfRevoked(err) => write!(f, "current image is revoked: {err}"),
-            Self::NextStageRevoked(err) => write!(f, "next stage is revoked: {err}"),
-            Self::Allocation(err) => write!(f, "failed to allocate memory: {err}"),
-            Self::BootFileSystemError(err) => {
-                write!(f, "failed to open the boot file system: {err}")
-            }
-            Self::ExecutableReadFailed(err) => {
-                write!(f, "failed to read the next stage executable: {err}")
-            }
-            Self::InvalidSignatureName => {
-                write!(f, "failed to create the signature file name")
-            }
-            Self::SignatureReadFailed(err) => {
-                write!(f, "failed to read the next stage signature: {err}")
-            }
-            Self::InvalidPublicKey => write!(f, "invalid public key"),
-            Self::InvalidSignature => write!(f, "invalid signature file"),
-            Self::SignatureVerificationFailed => write!(f, "signature verification failed"),
-            Self::Relocation(err) => {
-                write!(f, "failed to relocate the next stage executable: {err}")
-            }
-            Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
-            Self::MemoryProtection(error) => {
-                write!(f, "failed to set up memory protection: {error}")
-            }
-            Self::Launch(error) => write!(f, "failed to launch next stage: {error}"),
-        }
-    }
+    #[error("failed to launch next stage")]
+    Launch(#[source] LaunchError),
 }
 
 /// Check whether secure boot is enabled or not.

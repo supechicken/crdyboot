@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use core::fmt::{self, Display, Formatter};
 use libcrdy::fs::get_file_size;
 use log::info;
 use uefi::boot::{self, ScopedProtocol};
@@ -14,44 +13,33 @@ use uefi::{cstr16, CStr16, CString16, Status};
 #[derive(Debug, thiserror::Error)]
 pub enum FsError {
     /// The file is a directory, but a regular file was expected.
+    #[error("file is a directory")]
     IsADirectory,
 
     /// The file is a regular file, but a directory was expected.
+    #[error("file is not a directory")]
     NotADirectory,
 
     /// Failed to open the [`SimpleFileSystem`] protocol for the
     /// partition that the curent executable was booted from.
+    #[error("failed to open the boot file system: {0}")]
     OpenBootFileSystemFailed(Status),
 
     /// Failed to open a file.
+    #[error("file open failed: {0}")]
     OpenFailed(Status),
 
     /// Failed to read a file.
+    #[error("file read failed: {0}")]
     ReadFailed(Status),
 
     /// Reading a file did not return the expected amount of data.
+    #[error("failed to read the entire file")]
     ReadTruncated,
 
     /// Failed to get the file size.
-    GetFileSizeFailed(libcrdy::fs::FsError),
-}
-
-impl Display for FsError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IsADirectory => write!(f, "file is a directory"),
-            Self::NotADirectory => write!(f, "file is not a directory"),
-            Self::OpenBootFileSystemFailed(status) => {
-                write!(f, "failed to open the boot file system: {status}")
-            }
-            Self::OpenFailed(status) => write!(f, "file open failed: {status}"),
-            Self::ReadFailed(status) => write!(f, "file read failed: {status}"),
-            Self::ReadTruncated => write!(f, "failed to read the entire file"),
-            Self::GetFileSizeFailed(err) => {
-                write!(f, "failed to get the file size: {err}")
-            }
-        }
-    }
+    #[error("failed to get the file size")]
+    GetFileSizeFailed(#[source] libcrdy::fs::FsError),
 }
 
 /// Open the file system protocol for the partition that the current
