@@ -22,7 +22,6 @@
 //! [`LoadImage`]: https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-loadimage
 
 use crate::util::u32_to_usize;
-use core::fmt::{self, Display, Formatter};
 use log::info;
 use object::pe::{IMAGE_REL_BASED_ABSOLUTE, IMAGE_REL_BASED_DIR64, IMAGE_REL_BASED_HIGHLOW};
 use object::read::pe::{
@@ -30,21 +29,26 @@ use object::read::pe::{
 };
 use object::LittleEndian;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 pub enum RelocationError {
     /// The image base caused overflow.
+    #[error("invalid image base: {0}")]
     ImageBase(u64),
 
     /// A section in the image caused overflow.
+    #[error("invalid section bounds: addr={addr}, len={len}")]
     SectionBounds { addr: usize, len: usize },
 
     /// Failed to parse relocation blocks.
+    #[error("invalid relocation blocks: {0}")]
     RelocationBlocks(object::Error),
 
     /// A relocation block is invalid.
+    #[error("invalid relocation block {0}: {1}")]
     Block(usize, object::Error),
 
     /// Failed to apply a relocation.
+    #[error("invalid relocation {relocation_index} in block {block_index}")]
     Relocation {
         block_index: usize,
         relocation_index: usize,
@@ -52,28 +56,8 @@ pub enum RelocationError {
 
     /// The destination buffer is not large enough to hold the relocated
     /// executable.
+    #[error("relocation buffer is not large enough")]
     DestinationTooSmall,
-}
-
-impl Display for RelocationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ImageBase(image_base) => write!(f, "invalid image base: {image_base}"),
-            Self::SectionBounds { addr, len } => {
-                write!(f, "invalid section bounds: addr={addr}, len={len}")
-            }
-            Self::RelocationBlocks(err) => write!(f, "invalid relocation blocks: {err}"),
-            Self::Block(index, err) => write!(f, "invalid relocation block {index}: {err}"),
-            Self::Relocation {
-                block_index,
-                relocation_index,
-            } => write!(
-                f,
-                "invalid relocation {relocation_index} in block {block_index}"
-            ),
-            Self::DestinationTooSmall => write!(f, "relocation buffer is not large enough"),
-        }
-    }
 }
 
 /// Apply a single relocation onto the PE image data contained in `dst`.

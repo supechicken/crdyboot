@@ -30,7 +30,6 @@
 use crate::arch::PeFileForCurrentArch;
 use crate::uefi::{Uefi, UefiImpl};
 use alloc::boxed::Box;
-use core::fmt::{self, Display, Formatter};
 use log::info;
 use object::{Object, ObjectSection};
 use sbat::{ImageSbat, RevocationSbat, RevocationSbatOwned, ValidationResult};
@@ -49,45 +48,28 @@ const REVOCATION_VAR_NAME: &CStr16 = cstr16!("SbatLevel");
 const REVOCATION_VAR_VENDOR: VariableVendor =
     VariableVendor(guid!("605dab50-e046-4300-abb6-3dd810dd8b23"));
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RevocationError {
     /// The revocations embedded in the executable are not valid.
+    #[error("invalid embedded revocations: {0}")]
     InvalidEmbeddedRevocations(sbat::ParseError),
 
     /// The revocations embedded in the executable do not have a
     /// datestamp.
+    #[error("embedded revocations are missing the datestamp")]
     UndatedEmbeddedRevocations,
 
     /// The image SBAT is not valid.
+    #[error("invalid image sbat: {0}")]
     InvalidImageSbat(sbat::ParseError),
 
     /// The image's SBAT did not pass the revocation check.
+    #[error("image has been revoked")]
     Revoked,
 
     /// The image does not have a `.sbat` section.
+    #[error("image has no `.sbat` section")]
     MissingSbatSection,
-}
-
-impl Display for RevocationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidEmbeddedRevocations(err) => {
-                write!(f, "invalid embedded revocations: {err}")
-            }
-            Self::UndatedEmbeddedRevocations => {
-                write!(f, "embedded revocations are missing the datestamp")
-            }
-            Self::InvalidImageSbat(err) => {
-                write!(f, "invalid image sbat: {err}")
-            }
-            Self::Revoked => {
-                write!(f, "image has been revoked")
-            }
-            Self::MissingSbatSection => {
-                write!(f, "image has no `.sbat` section")
-            }
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

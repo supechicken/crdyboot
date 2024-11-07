@@ -14,7 +14,6 @@
 //! since it is executable.
 
 use crate::util::{round_up_to_page_alignment, usize_to_u64};
-use core::fmt::{self, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
@@ -22,33 +21,19 @@ use log::info;
 use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::Status;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PageAllocationError {
     /// Allocation request is zero bytes or not an even multiple of the
     /// page size.
+    #[error("{0} is not an even multiple of page size ({PAGE_SIZE})")]
     InvalidSize(
         /// Requested size.
         usize,
     ),
 
     /// UEFI page allocator failed.
+    #[error("failed to allocate {0} pages: {1}")]
     AllocationFailed(usize, Status),
-}
-
-impl Display for PageAllocationError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidSize(num_bytes) => {
-                write!(
-                    f,
-                    "{num_bytes} is not an even multiple of page size ({PAGE_SIZE})"
-                )
-            }
-            Self::AllocationFailed(num_pages, status) => {
-                write!(f, "failed to allocate {num_pages} pages: {status}")
-            }
-        }
-    }
 }
 
 #[cfg(target_os = "uefi")]

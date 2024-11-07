@@ -43,11 +43,13 @@ use uefi::Status;
 const EVENT_TYPE: EventType = EventType::IPL;
 const EVENT_DATA: &[u8] = b"ChromeOS kernel partition data";
 
+#[derive(Debug)]
 enum TpmVersion {
     V1,
     V2,
 }
 
+#[derive(Debug, thiserror::Error)]
 struct TpmError {
     version: TpmVersion,
     kind: TpmErrorKind,
@@ -74,6 +76,7 @@ impl TpmError {
     }
 }
 
+#[derive(Debug)]
 enum TpmErrorKind {
     /// An unexpected error occurred when getting a `Tcg` handle.
     ///

@@ -4,39 +4,28 @@
 
 use crate::util::{u32_to_usize, usize_to_u64};
 use core::ffi::c_void;
-use core::fmt::{self, Display, Formatter};
 use core::mem;
 use log::info;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::{boot, table, Handle, Status};
 
+#[derive(Debug, thiserror::Error)]
 pub enum LaunchError {
     /// The system table is not set.
+    #[error("system table is not set")]
     SystemTableNotSet,
 
     /// The entry point offset is outside the image bounds.
+    #[error("entry point offset is out of bounds: {0:#08x}")]
     InvalidEntryPointOffset(u32),
 
     /// Failed to open the [`LoadedImage`] protocol.
+    #[error("failed to open LoadedImage protocol: {0}")]
     OpenLoadedImageProtocolFailed(Status),
 
     /// The load options (aka command line) size does not fit in a [`u32`].
+    #[error("load options are too big: {0}")]
     LoadOptionsTooBig(usize),
-}
-
-impl Display for LaunchError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::SystemTableNotSet => write!(f, "system table is not set"),
-            Self::InvalidEntryPointOffset(offset) => {
-                write!(f, "entry point offset is out of bounds: {offset:#08x}")
-            }
-            Self::OpenLoadedImageProtocolFailed(status) => {
-                write!(f, "failed to open LoadedImage protocol: {status}")
-            }
-            Self::LoadOptionsTooBig(size) => write!(f, "load options are too big: {size}"),
-        }
-    }
 }
 
 type EntryPointFn = unsafe extern "efiapi" fn(Handle, *mut c_void);
