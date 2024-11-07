@@ -68,6 +68,11 @@ pub enum CrdybootError {
     #[error("failed to convert kernel command line to UCS-2")]
     CommandLineUcs2ConversionFailed,
 
+    /// The flexor command line contains characters that cannot be encoded as
+    /// UCS-2.
+    #[error("failed to convert flexor command line to UCS-2")]
+    FlexorCommandLineUcs2ConversionFailed,
+
     /// Failed to get the current executable's vbpubk section.
     #[error("failed to get packed public key")]
     Vbpubk(#[source] VbpubkError),
@@ -239,23 +244,50 @@ pub fn vboot_load_kernel() -> Result<(), CrdybootError> {
         kernel_verification_key.len()
     );
 
-    let kernel = vboot::load_kernel(
+    let vboot_kernel;
+    let flexor_kernel;
+    let kernel_data: &[u8];
+    let kernel_cmdline: CString16;
+
+    match vboot::load_kernel(
         LoadKernelInputs {
             workbuf: &mut workbuf,
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
         &mut GptDisk::new(&UefiImpl).map_err(CrdybootError::GptDisk)?,
-    )
-    .map_err(CrdybootError::LoadKernelFailed)?;
+    ) {
+        Ok(loaded_kernel) => {
+            vboot_kernel = loaded_kernel;
+            kernel_data = vboot_kernel.data();
+            kernel_cmdline = get_kernel_command_line(&vboot_kernel)?;
+        }
+        Err(err) => {
+            // When load kernel fails, fallback to load flexor if the feature is
+            // enabled.
+            if cfg!(feature = "flexor") {
+                flexor_kernel = load_flexor_kernel()?;
+                kernel_data = &flexor_kernel;
+                kernel_cmdline = CString16::try_from(
+                    "earlycon=efifb keep_bootcon init=/sbin/init \
+                cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
+                dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
+                dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
+                kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
+                kvm-intel.vmentry_l1d_flush=always",
+                )
+                .map_err(|_| CrdybootError::FlexorCommandLineUcs2ConversionFailed)?;
+            } else {
+                return Err(CrdybootError::LoadKernelFailed(err));
+            }
+        }
+    }
 
     // Go ahead and free the workbuf, not needed anymore.
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(PCR_INDEX, kernel.data());
-
-    let cmdline = get_kernel_command_line(&kernel)?;
+    extend_pcr_and_log(PCR_INDEX, kernel_data);
 
     // Relocate the kernel into an allocated buffer.
     // This buffer will never be freed, unless loading or executing the
@@ -263,19 +295,14 @@ pub fn vboot_load_kernel() -> Result<(), CrdybootError> {
     //
     // As of R130 the required size is about 17.9MiB. Developer
     // kernels with different config options may be slightly larger,
-    // so add some extra space, bringing the total to 24 MiB.
-    let kernel_reloc_buffer = relocate_kernel(kernel.data(), mib_to_bytes(24))?;
+    // so add some extra space. The flexor kernel is about 27.1 MiB, so to
+    // accommodate either of these, buffer of 32MiB should be sufficient.
+    let kernel_reloc_buffer = relocate_kernel(kernel_data, mib_to_bytes(32))?;
 
     // Drop the original kernel buffer, not needed anymore.
     drop(kernel_buffer);
 
-    if cfg!(feature = "flexor") {
-        // Temporarily calling load_flexor_kernel here,
-        // it will be properly implemented in b/361836044.
-        let _ = load_flexor_kernel();
-    }
-
-    execute_linux_kernel(&kernel_reloc_buffer, &cmdline)
+    execute_linux_kernel(&kernel_reloc_buffer, &kernel_cmdline)
 }
 
 fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocation, CrdybootError> {
@@ -319,7 +346,7 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
 ///  * Any error occurs when reading the file data.
 ///  * A valid flexor kernel image is not found.
 fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
-    const FILE_NAME: &CStr16 = cstr16!("flexor_vmlinuz");
+    const FILE_NAME: &CStr16 = cstr16!(r"flexor_vmlinuz");
     let handles_buffer =
         boot::locate_handle_buffer(SearchType::ByProtocol(&SimpleFileSystem::GUID))
             .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
