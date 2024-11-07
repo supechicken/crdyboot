@@ -101,6 +101,10 @@ impl Config {
         &self.disk_path
     }
 
+    pub fn flexor_disk_path(&self) -> Utf8PathBuf {
+        self.workspace_path().join("flexor_disk.img")
+    }
+
     pub fn test_disk_path(&self) -> Utf8PathBuf {
         self.workspace_path().join("test_disk.bin")
     }

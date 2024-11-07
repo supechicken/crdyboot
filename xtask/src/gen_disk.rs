@@ -244,6 +244,73 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
     disk.create()
 }
 
+/// Generate the EFI system partition FAT file system containing the
+/// EFI/BOOT directories, for the flexor disk image.
+fn gen_flexor_esp_fs() -> Result<Vec<u8>> {
+    let mut esp_part_data = vec![0; mib_to_byte(90).try_into().unwrap()];
+
+    {
+        let esp_part_cursor = Cursor::new(&mut esp_part_data);
+        fatfs::format_volume(esp_part_cursor, FormatVolumeOptions::new())?;
+    }
+
+    {
+        let sys_part_cursor = Cursor::new(&mut esp_part_data);
+        let sys_part_fs = FileSystem::new(sys_part_cursor, FsOptions::new())?;
+        let root_dir = sys_part_fs.root_dir();
+        root_dir.create_dir("EFI")?.create_dir("BOOT")?;
+    }
+
+    Ok(esp_part_data)
+}
+
+// Create a disk image that recreates disk state of a device after running the
+// FRD agent. It contains 2 partitions:
+// * EFI System Partition - to hold crdyshim, crdyboot.
+// * Basic Data Partition - to hold flexor_vmlinuz, ChromeOS flex image.
+// Note: This function only creates the partitions and the `EFI/BOOT` directories.
+pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
+    let esp_part_data = gen_flexor_esp_fs()?;
+
+    // Generate FAT file system for the basic data partition.
+    let mut basic_part_data = vec![0; mib_to_byte(108).try_into().unwrap()];
+    let basic_part_cursor = Cursor::new(&mut basic_part_data);
+    fatfs::format_volume(basic_part_cursor, FormatVolumeOptions::new())?;
+
+    let disk = DiskSettings {
+        path: &conf.flexor_disk_path(),
+        // 200 MiB should be sufficient to store the bootloaders and the flexor kernel.
+        size: "200MiB",
+        // Arbitrary GUID.
+        guid: guid!("a2d46164-7684-4423-b165-5f6188732b93"),
+        partitions: &[
+            PartitionSettings {
+                label: "EFI System Partition",
+                data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(91)),
+                type_guid: GptPartitionType::EFI_SYSTEM,
+                // Arbitrary GUID.
+                guid: guid!("67f80b17-ae26-471c-83c5-2424f9f12874"),
+                set_successful_boot_bit: false,
+                priority: None,
+                data: &esp_part_data,
+            },
+            PartitionSettings {
+                label: "Basic Data Partition",
+                data_range: PartitionDataRange::from_byte_range(mib_to_byte(91)..mib_to_byte(199)),
+                type_guid: GptPartitionType::BASIC_DATA,
+                // Arbitrary GUID.
+                guid: guid!("73908410-c876-4ba9-b0ef-136baf49f21a"),
+                set_successful_boot_bit: false,
+                priority: None,
+                data: &basic_part_data,
+            },
+        ],
+    };
+    disk.create()?;
+
+    Ok(())
+}
+
 pub fn gen_stateful_test_partition(conf: &Config) -> Result<()> {
     let uid = nix::unistd::getuid();
     let gid = nix::unistd::getgid();

@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 13;
+const SETUP_VERSION: u32 = 14;
 
 const VBOOT_REFERENCE_REPO: &str =
     "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";
@@ -328,6 +328,9 @@ pub(super) fn run_setup(conf: &Config, action: &SetupAction) -> Result<()> {
     // Build and install shim, and sign the kernel partitions with a
     // local key.
     run_prep_disk(conf)?;
+
+    // Create disk image for testing flexor.
+    gen_disk::gen_flexor_disk_image(conf)?;
 
     // Record that the latest version of the setup has succeeded.
     conf.write_setup_version(SETUP_VERSION)
