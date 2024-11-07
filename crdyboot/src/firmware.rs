@@ -7,7 +7,6 @@ mod update_info;
 
 use crate::disk::GptDiskError;
 use alloc::vec::Vec;
-use core::fmt::{self, Display, Formatter};
 use core::mem;
 use ext4_view::{Ext4Error, PathError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
@@ -22,53 +21,47 @@ use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
 #[derive(Debug, thiserror::Error)]
 enum FirmwareError {
+    #[error("failed to read variable: {0}")]
     GetVariableFailed(Status),
-    SetVariableFailed(Status),
-    InvalidVariableKey(Status),
-    UpdateInfoTooShort,
-    UpdateInfoMalformedDevicePath,
-    FilePathMissing,
-    FilePathEncodingInvalid,
-    FilePathInvalid(PathError),
-    CapsuleAllocationFailed(PageAllocationError),
-    OpenStatefulPartitionFailed(GptDiskError),
-    Ext4LoadFailed(Ext4Error),
-    Ext4ReadFailed(Ext4Error),
-    CapsuleTooSmall { required: usize, actual: usize },
-    UpdateCapsuleFailed(Status),
-}
 
-impl Display for FirmwareError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::GetVariableFailed(status) => write!(f, "failed to read variable: {status}"),
-            Self::SetVariableFailed(status) => write!(f, "failed to write variable: {status}"),
-            Self::InvalidVariableKey(err) => write!(f, "invalid variable key: {err}"),
-            Self::UpdateInfoTooShort => write!(f, "invalid update variable: not enough data"),
-            Self::UpdateInfoMalformedDevicePath => {
-                write!(f, "invalid update variable: malformed device path")
-            }
-            Self::FilePathMissing => {
-                write!(f, "file path is not present in update info device path")
-            }
-            Self::FilePathEncodingInvalid => write!(f, "file path encoding is invalid"),
-            Self::FilePathInvalid(err) => write!(f, "file path is not valid for ext4: {err}"),
-            Self::CapsuleAllocationFailed(err) => {
-                write!(f, "failed to allocate pages for a capsule: {err}")
-            }
-            Self::OpenStatefulPartitionFailed(err) => {
-                write!(f, "failed to open the stateful partition: {err}")
-            }
-            Self::Ext4LoadFailed(err) => write!(f, "failed to load the stateful filesystem: {err}"),
-            Self::Ext4ReadFailed(err) => write!(f, "failed to read an update capsule: {err}"),
-            Self::CapsuleTooSmall { required, actual } => {
-                write!(f, "capsule is too small: {actual} < {required}")
-            }
-            Self::UpdateCapsuleFailed(status) => {
-                write!(f, "firmware capsule update failed: {status}")
-            }
-        }
-    }
+    #[error("failed to write variable: {0}")]
+    SetVariableFailed(Status),
+
+    #[error("invalid variable key: {0}")]
+    InvalidVariableKey(Status),
+
+    #[error("invalid update variable: not enough data")]
+    UpdateInfoTooShort,
+
+    #[error("invalid update variable: malformed device path")]
+    UpdateInfoMalformedDevicePath,
+
+    #[error("file path is not present in update info device path")]
+    FilePathMissing,
+
+    #[error("file path encoding is invalid")]
+    FilePathEncodingInvalid,
+
+    #[error("file path is not valid for ext4: {0}")]
+    FilePathInvalid(PathError),
+
+    #[error("failed to allocate pages for a capsule")]
+    CapsuleAllocationFailed(#[source] PageAllocationError),
+
+    #[error("failed to open the stateful partition")]
+    OpenStatefulPartitionFailed(#[source] GptDiskError),
+
+    #[error("failed to load the stateful filesystem: {0}")]
+    Ext4LoadFailed(Ext4Error),
+
+    #[error("failed to read an update capsule: {0}")]
+    Ext4ReadFailed(Ext4Error),
+
+    #[error("capsule is too small: {actual} < {required}")]
+    CapsuleTooSmall { required: usize, actual: usize },
+
+    #[error("firmware capsule update failed: {0}")]
+    UpdateCapsuleFailed(Status),
 }
 
 /// Ask the firmware what type of system reset is needed for capsule updates.

@@ -7,7 +7,6 @@ use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use alloc::vec::Vec;
 use alloc::{format, vec};
-use core::fmt::{self, Display, Formatter};
 use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
 use libcrdy::fs::{get_file_size, read_regular_file, FsError};
@@ -49,112 +48,90 @@ const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
 #[derive(Debug, thiserror::Error)]
 pub enum CrdybootError {
     /// Failed to allocate memory.
-    Allocation(PageAllocationError),
+    #[error("failed to allocate memory")]
+    Allocation(#[source] PageAllocationError),
 
     /// Self-revocation check failed.
-    Revocation(RevocationError),
+    #[error("self-revocation check failed")]
+    Revocation(#[source] RevocationError),
 
     /// The kernel partition is missing the command line data.
+    #[error("failed to get kernel command line")]
     GetCommandLineFailed,
 
     /// The command line contains characters that cannot be encoded as
     /// UCS-2.
+    #[error("failed to convert kernel command line to UCS-2")]
     CommandLineUcs2ConversionFailed,
 
     /// Failed to get the current executable's vbpubk section.
-    Vbpubk(VbpubkError),
+    #[error("failed to get packed public key")]
+    Vbpubk(#[source] VbpubkError),
 
     /// Failed to open the disk for reads and writes.
-    GptDisk(GptDiskError),
+    #[error("failed to open GPT disk")]
+    GptDisk(#[source] GptDiskError),
 
     /// Vboot failed to find a valid kernel partition.
-    LoadKernelFailed(LoadKernelError),
+    #[error("failed to load kernel")]
+    LoadKernelFailed(#[source] LoadKernelError),
 
     /// Failed to relocate a PE executable.
-    Relocation(RelocationError),
+    #[error("failed to relocate the kernel")]
+    Relocation(#[source] RelocationError),
 
     /// Failed to parse the kernel as a PE executable.
+    #[error("invalid PE: {0}")]
     InvalidPe(object::Error),
 
     /// The kernel does not have an entry point for booting from 32-bit
     /// firmware.
+    #[error("missing ia32 compatibility entry point")]
     MissingIa32CompatEntryPoint,
 
     /// Failed to update memory attributes.
-    MemoryProtection(NxError),
+    #[error("failed to set up memory protection")]
+    MemoryProtection(#[source] NxError),
 
     /// Failed to launch the kernel.
-    Launch(LaunchError),
+    #[error("failed to launch next stage")]
+    Launch(#[source] LaunchError),
 
     /// Failed to get file handles for a protocol.
+    #[error("failed to get handles for the protocol: {0}")]
     GetFileSystemHandlesFailed(Status),
 
     /// Failed to open the `SimpleFileSystem` protocol.
+    #[error("failed to open protocol: {0}")]
     OpenSimpleFileSystemProtocolFailed(Status),
 
     /// Failed to open a Volume.
+    #[error("failed to open volume: {0}")]
     OpenVolumeFailed(Status),
 
     /// Failed to convert to a regular file.
+    #[error("failed to convert to a regular file")]
     RegularFileConversionFailed,
 
     /// Failed to get the size of a file.
-    GetFileSizeFailed(FsError),
+    #[error("failed to get the file size")]
+    GetFileSizeFailed(#[source] FsError),
 
     /// Flexor kernel image size is too big.
+    #[error("flexor kernel image size is too big: {0}")]
     FlexorKernelSizeTooBig(usize),
 
     /// Failed to read file.
-    ReadFileFailed(FsError),
+    #[error("failed to read file")]
+    ReadFileFailed(#[source] FsError),
 
     /// Failed to load the flexor kernel.
+    #[error("failed to load the flexor kernel")]
     LoadFlexorKernelFailed,
 
     /// Flexor kernel hash is not present in the list of valid hashes.
+    #[error("flexor kernel hash is not present in the list of valid hashes")]
     FlexorKernelNotInAllowList,
-}
-
-impl Display for CrdybootError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Allocation(err) => write!(f, "failed to allocate memory: {err}"),
-            Self::Revocation(err) => write!(f, "self-revocation check failed: {err}"),
-            Self::GetCommandLineFailed => write!(f, "failed to get kernel command line"),
-            Self::CommandLineUcs2ConversionFailed => {
-                write!(f, "failed to convert kernel command line to UCS-2")
-            }
-            Self::Vbpubk(err) => write!(f, "failed to get packed public key: {err}"),
-            Self::GptDisk(err) => write!(f, "failed to open GPT disk: {err}"),
-            Self::LoadKernelFailed(err) => write!(f, "failed to load kernel: {err}"),
-            Self::InvalidPe(err) => write!(f, "invalid PE: {err}"),
-            Self::Relocation(err) => {
-                write!(f, "failed to relocate the kernel: {err}")
-            }
-            Self::MissingIa32CompatEntryPoint => {
-                write!(f, "missing ia32 compatibility entry point")
-            }
-            Self::MemoryProtection(err) => write!(f, "failed to set up memory protection: {err}"),
-            Self::Launch(err) => write!(f, "failed to launch next stage: {err}"),
-            Self::GetFileSystemHandlesFailed(status) => {
-                write!(f, "failed to get handles for the protocol: {status}")
-            }
-            Self::OpenSimpleFileSystemProtocolFailed(status) => {
-                write!(f, "failed to open protocol: {status}")
-            }
-            Self::OpenVolumeFailed(status) => write!(f, "failed to open volume: {status}"),
-            Self::RegularFileConversionFailed => write!(f, "failed to convert to a regular file"),
-            Self::GetFileSizeFailed(err) => write!(f, "failed to get the file size: {err}"),
-            Self::FlexorKernelSizeTooBig(file_size) => {
-                write!(f, "flexor kernel image size is too big: {file_size}")
-            }
-            Self::ReadFileFailed(err) => write!(f, "Failed to read file: {err}"),
-            Self::LoadFlexorKernelFailed => write!(f, "Failed to load the flexor kernel"),
-            Self::FlexorKernelNotInAllowList => write!(
-                f,
-                "flexor kernel hash is not present in the list of valid hashes"
-            ),
-        }
-    }
 }
 
 /// Get the kernel command line as a UCS-2 string.
