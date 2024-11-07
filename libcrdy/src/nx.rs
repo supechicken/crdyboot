@@ -12,7 +12,6 @@
 //! <https://techcommunity.microsoft.com/t5/hardware-dev-center/new-uefi-ca-memory-mitigation-requirements-for-signing/ba-p/3608714>
 
 use crate::util::round_up_to_page_alignment;
-use core::fmt::{self, Display, Formatter};
 use core::ops::Range;
 use log::info;
 use object::pe::IMAGE_DLLCHARACTERISTICS_NX_COMPAT;
@@ -23,9 +22,10 @@ use uefi::data_types::PhysicalAddress;
 use uefi::proto::security::MemoryProtection;
 use uefi::Status;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum NxError {
     /// Arithmetic overflow occurred due to the PE section bounds.
+    #[error("arithmetic overflow occurred due to section bounds")]
     InvalidSectionBounds,
 
     /// Failed to open the [`MemoryProtection`] protocol.
@@ -33,48 +33,30 @@ pub enum NxError {
     /// If no handles support the protocol, it is not considered an
     /// error. This error is only returned when a handle claims to
     /// support the protocol, but the protocol can't be opened.
+    #[error("failed to open protocol: {0}")]
     OpenProtocolFailed(Status),
 
     /// Failed to clear memory attributes from a region of memory.
+    #[error("failed to clear attributes in {1:#016x?}: {0}")]
     ClearAttributesFailed(Status, Range<PhysicalAddress>),
 
     /// Failed to set memory attributes on a region of memory.
+    #[error("failed to set attributes in {1:#016x?}: {0}")]
     SetAttributesFailed(Status, Range<PhysicalAddress>),
 
     /// The NX-compatability bit is not set in the PE attributes.
+    #[error("PE is not NX compat")]
     PeNotNxCompat,
 
     /// A section in the PE is both writable and executable, which is
     /// not allowed for NX compat.
+    #[error("section is both writable and executable")]
     SectionWritableAndExecutable,
 
     /// A section in the PE is not page aligned. Since memory attributes
     /// are set at page granularity, this is not allowed.
+    #[error("section start is not page aligned: {0:#016x}")]
     SectionStartNotPageAligned(PhysicalAddress),
-}
-
-impl Display for NxError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidSectionBounds => {
-                write!(f, "arithmetic overflow occurred due to section bounds")
-            }
-            Self::OpenProtocolFailed(status) => write!(f, "failed to open protocol: {status}"),
-            Self::ClearAttributesFailed(status, region) => {
-                write!(f, "failed to clear attributes in {region:#016x?}: {status}")
-            }
-            Self::SetAttributesFailed(status, region) => {
-                write!(f, "failed to set attributes in {region:#016x?}: {status}")
-            }
-            Self::PeNotNxCompat => write!(f, "PE is not NX compat"),
-            Self::SectionWritableAndExecutable => {
-                write!(f, "section is both writable and executable")
-            }
-            Self::SectionStartNotPageAligned(addr) => {
-                write!(f, "section start is not page aligned: {addr:#016x}")
-            }
-        }
-    }
 }
 
 /// Check whether the address is aligned to the page size (4KiB).

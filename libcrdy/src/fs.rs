@@ -2,44 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use core::fmt::{self, Display, Formatter};
 use uefi::proto::media::file::RegularFile;
 use uefi::Status;
 
+#[derive(Debug, thiserror::Error)]
 pub enum FsError {
     /// Reading a file did not return the expected amount of data.
+    #[error("failed to read the entire file")]
     ReadTruncated,
 
     /// Failed to get the position of a file handle.
+    #[error("failed to get the file position: {0}")]
     GetPositionFailed(Status),
 
     /// The file size is too big to fit in usize. The `u64` value is the size
     /// of the file.
+    #[error("file size too big to fit in usize: {0}")]
     FileSizeTooBig(u64),
 
     /// Failed to read the file.
+    #[error("failed to read file: {0}")]
     ReadFileFailed(Status),
 
     /// Failed to set the position of a file handle.
+    #[error("failed to set the file position: {0}")]
     SetPositionFailed(Status),
-}
-
-impl Display for FsError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ReadTruncated => write!(f, "failed to read the entire file"),
-            Self::FileSizeTooBig(file_size_u64) => {
-                write!(f, "file size too big to fit in usize: {file_size_u64}")
-            }
-            Self::GetPositionFailed(status) => {
-                write!(f, "failed to get the file position: {status}")
-            }
-            Self::ReadFileFailed(status) => write!(f, "Failed to read file: {status}"),
-            Self::SetPositionFailed(status) => {
-                write!(f, "failed to set the file position: {status}")
-            }
-        }
-    }
 }
 
 /// Return the size of a file when a regular file handle is passed.
