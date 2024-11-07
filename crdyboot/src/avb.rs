@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk;
+use alloc::format;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_data_free, avb_slot_verify_result_to_string,
@@ -17,6 +18,9 @@ use libcrdy::uefi::UefiImpl;
 use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
+use uefi::proto::device_path::acpi::Acpi;
+use uefi::proto::device_path::hardware::Pci;
+use uefi::proto::device_path::DevicePath;
 use uefi::{cstr16, CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
@@ -656,4 +660,86 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
         initramfs_buffer,
         cmdline,
     })
+}
+
+/// Create a linux sysfs device path string representation
+/// for `device_path`.
+///
+/// Returns None if the path does not have the necessary information
+/// to generate the path.
+///
+/// The path to the booted image is typically something as such:
+/// PciRoot(0x0)/Pci(0x4,0x0)/Scsi(0x0,0x0)/\
+/// HD(12,GPT,9513F9E9-AFD5-498B-BF79-0F2FDCCFDC7E,0x43000,0x20000)
+///
+/// The second stage bootloader wants something such as:
+/// pci0000:1d/0000:1d:2f.e
+///
+/// This is of the format: `pci{domain}:{bus_number}/{domain}:{bus_number}:{slot}.{function}`
+///
+/// For now assume the domain is 0000 or the uid from the ACPI device.
+/// TODO: Check the domain assumption.
+/// The slot and function are from the PCI device in the path.
+/// TODO: The `bus_number` is unlikely available from the path. It is going to need
+/// to be queried from something such as [EFI_PCI_IO_PROTOCOL.GetLocation()].
+///
+/// [EFI_PCI_IO_PROTOCOL.GetLocation()]: https://uefi.org/specs/UEFI/2.10/14_Protocols_PCI_Bus_Support.html#efi-pci-io-protocol-getlocation
+#[allow(dead_code)]
+fn get_root_device_linux_path(device_path: &DevicePath) -> Option<CString16> {
+    let mut domain: u32 = 0;
+    let bus_number: u8 = 0;
+    let mut slot_function: Option<(u8, u8)> = None;
+
+    for node in device_path.node_iter() {
+        if let Ok(acpi) = <&Acpi>::try_from(node) {
+            domain = acpi.uid();
+        } else if let Ok(pci) = <&Pci>::try_from(node) {
+            slot_function = Some((pci.device(), pci.function()));
+        }
+    }
+    let (slot, function) = slot_function?;
+    let sys_path = format!(
+        "pci{domain:04x}:{bus_number:02x}/{domain:04x}:\
+        {bus_number:02x}:{slot:02x}.{function:01x}"
+    );
+    // Unwrap OK: The format above will always result in a valid CString16.
+    Some(CString16::try_from(sys_path.as_str()).unwrap())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libcrdy::uefi::ScopedDevicePath;
+    use uefi::proto::device_path::build;
+
+    #[test]
+    fn test_android_bootdevice() {
+        let mut vec = Vec::new();
+        let path = ScopedDevicePath::for_test(
+            build::DevicePathBuilder::with_vec(&mut vec)
+                .push(&build::acpi::Acpi {
+                    hid: 0xefef_010b,
+                    uid: 0x0000_001d,
+                })
+                .unwrap()
+                .push(&build::hardware::Pci {
+                    function: 0xe,
+                    device: 0x2f,
+                })
+                .unwrap()
+                .push(&build::messaging::Scsi {
+                    target_id: 50,
+                    logical_unit_number: 60,
+                })
+                .unwrap()
+                .finalize()
+                .unwrap()
+                .to_boxed(),
+        );
+
+        assert_eq!(
+            get_root_device_linux_path(&path),
+            Some(CString16::try_from("pci001d:00/001d:00:2f.e").unwrap())
+        );
+    }
 }
