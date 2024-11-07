@@ -11,6 +11,7 @@ log.workspace = true
 mockall = { workspace = true, optional = true}
 object.workspace = true
 sbat = { workspace = true, features = ["alloc"] }
+thiserror.workspace = true
 uefi.workspace = true
 
 [features]
