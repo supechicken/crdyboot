@@ -7,32 +7,42 @@ use crate::{return_code_to_str, vboot_sys, ReturnCode};
 use alloc::string::{String, ToString};
 use core::ffi::c_void;
 use core::ops::Range;
-use core::{fmt, mem, ptr, str};
+use core::{mem, ptr, str};
 use log::{error, info};
 use uguid::Guid;
 
 /// Errors produced by `load_kernel`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LoadKernelError {
     /// Failed to convert numeric type.
+    #[error("failed to convert numeric type: {0}")]
     BadNumericConversion(&'static str),
 
     /// An arithmetic operation overflowed.
+    #[error("overflow: {0}")]
     Overflow(&'static str),
 
     /// Packed pubkey buffer is too small.
+    #[error("packed pubkey buffer is too small: {0}")]
     PubkeyTooSmall(usize),
 
     /// Call to `vb2api_init` failed.
+    #[error("call to vb2api_init failed: 0x{:x} ({})", .0.0, return_code_to_str(*.0))]
     ApiInitFailed(ReturnCode),
 
     /// Call to `vb2api_init_ctx_for_kernel_verification_only` failed.
+    #[error(
+        "call to vb2api_init_ctx_for_kernel_verification_only failed: 0x{:x} ({})",
+        .0.0, return_code_to_str(*.0))
+    ]
     ApiKernelInitFailed(ReturnCode),
 
     /// Call to `LoadKernel` failed.
+    #[error("call to LoadKernel failed: 0x{:x} ({})", .0.0, return_code_to_str(*.0))]
     LoadKernelFailed(ReturnCode),
 
     /// Bootloader range is not valid.
+    #[error("invalid bootloader offset and/or size: offset={offset:#x}, size={size:#x}")]
     BadBootloaderRange {
         /// Bootloader offset relative to the start of the kernel data.
         offset: u64,
@@ -42,55 +52,16 @@ pub enum LoadKernelError {
     },
 
     /// The kernel's x86 real-mode header doesn't have the expected magic.
+    #[error("invalid real-mode header magic: {0:04x?}")]
     BadHeaderMagic(Option<[u8; 4]>),
 
     /// The kernel's x86 real-mode header's `setup_sects` field is invalid.
+    #[error("invalid `setup_sects` field in the read-mode header: {0:#x}")]
     BadHeaderSetupSectors(u8),
 
     /// The expected UEFI stub signature was not found.
+    #[error("the UEFI stub is missing or not in the expected location")]
     MissingUefiStub,
-}
-
-impl fmt::Display for LoadKernelError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut write_with_rc =
-            |msg, rc: &ReturnCode| write!(f, "{msg}: 0x{:x} ({})", rc.0, return_code_to_str(*rc));
-
-        match self {
-            Self::BadNumericConversion(info) => {
-                write!(f, "failed to convert numeric type: {info}")
-            }
-            Self::Overflow(info) => {
-                write!(f, "overflow: {info}")
-            }
-            Self::PubkeyTooSmall(size) => {
-                write!(f, "packed pubkey buffer is too small: {size}")
-            }
-            Self::ApiInitFailed(rc) => write_with_rc("call to vb2api_init failed", rc),
-            Self::ApiKernelInitFailed(rc) => write_with_rc(
-                "call to vb2api_init_ctx_for_kernel_verification_only failed",
-                rc,
-            ),
-            Self::LoadKernelFailed(rc) => write_with_rc("call to LoadKernel failed", rc),
-            Self::BadBootloaderRange { offset, size } => {
-                write!(
-                    f,
-                    "invalid bootloader offset and/or size: offset={offset:#x}, size={size:#x}"
-                )
-            }
-            Self::BadHeaderMagic(val) => write!(f, "invalid real-mode header magic: {val:04x?}"),
-            Self::BadHeaderSetupSectors(val) => write!(
-                f,
-                "invalid `setup_sects` field in the read-mode header: {val:#x}"
-            ),
-            Self::MissingUefiStub => {
-                write!(
-                    f,
-                    "the UEFI stub is missing or not in the expected location"
-                )
-            }
-        }
-    }
 }
 
 fn u32_to_usize(v: u32) -> usize {

@@ -1027,6 +1027,7 @@ dependencies = [
  "cmem",
  "log",
  "printf-compat",
+ "thiserror 2.0.0",
  "uguid",
 ]
 

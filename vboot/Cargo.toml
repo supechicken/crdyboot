@@ -10,6 +10,7 @@ repository.workspace = true
 cmem.workspace = true
 log.workspace = true
 printf-compat.workspace = true
+thiserror.workspace = true
 uguid = "2.0.0"
 
 [build-dependencies]
