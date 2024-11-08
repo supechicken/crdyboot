@@ -19,7 +19,7 @@ mod sbat;
 mod vbpubk;
 
 use firmware::update_firmware;
-use libcrdy::{embed_section, sbat_revocation, set_log_level};
+use libcrdy::{embed_section, fail_with_fatal_error, sbat_revocation, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
 use log::info;
 use revocation::self_revocation_check;
@@ -55,7 +55,7 @@ fn efi_main() -> Status {
     match run() {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
-            panic!("boot failed: {err}");
+            fail_with_fatal_error!(err);
         }
     }
 }

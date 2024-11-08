@@ -16,17 +16,16 @@ mod fs;
 use core::fmt::{self, Display, Formatter};
 use fs::FsError;
 use libcrdy::arch::{Arch, PeFileForCurrentArch};
-use libcrdy::embed_section;
 use libcrdy::entry_point::get_primary_entry_point;
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::sbat_revocation::{self, RevocationError};
-use libcrdy::set_log_level;
 use libcrdy::tpm::extend_pcr_and_log;
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
+use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
 use log::{error, info};
 use sbat::RevocationSbat;
 use uefi::boot::{AllocateType, MemoryType, ScopedProtocol};
@@ -431,7 +430,7 @@ fn efi_main() -> Status {
     match run() {
         Ok(()) => unreachable!("next stage did not take control"),
         Err(err) => {
-            panic!("boot failed: {err}");
+            fail_with_fatal_error!(err);
         }
     }
 }

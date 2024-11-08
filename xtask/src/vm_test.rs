@@ -304,7 +304,7 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 
     let expected_output = &[
         "Kernel data verification failed",
-        "boot failed: failed to load kernel",
+        "Boot error in crdyboot-.*: failed to load kernel",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
@@ -314,14 +314,14 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 /// to the executable's signature no longer being valid.
 ///
 /// This validates that the `.vbpubk` section is properly included in
-/// the authenticode hash, and shim is correctly validating the
+/// the authenticode hash, and crdyshim is correctly validating the
 /// signature.
 fn test_vbpubk_mod_breaks_signature(conf: &Config) -> Result<()> {
     println!("test that modifying the vbpubk section prevents crdyboot from launching");
 
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(false))?;
 
-    let expected_output = &["boot failed: signature verification failed"];
+    let expected_output = &["Boot error in crdyshim-.*: signature verification failed"];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
@@ -341,7 +341,7 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
 
     let expected_output = &[
         "vb2api_inject_kernel_subkey failed",
-        "boot failed: failed to load kernel",
+        "Boot error in crdyboot-.*: failed to load kernel",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
@@ -354,7 +354,7 @@ fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
     delete_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_output =
-        &["boot failed: failed to read the next stage signature: file open failed: NOT_FOUND"];
+        &["Boot error in crdyshim-.*: failed to read the next stage signature: file open failed: NOT_FOUND"];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
@@ -365,7 +365,7 @@ fn test_invalid_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
 
     corrupt_crdyboot_signatures(&conf.test_disk_path())?;
 
-    let expected_output = &["boot failed: signature verification failed"];
+    let expected_output = &["Boot error in crdyshim-.*: signature verification failed"];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
