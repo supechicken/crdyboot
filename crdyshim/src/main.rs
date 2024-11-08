@@ -56,6 +56,7 @@ const PCR_INDEX: PcrIndex = PcrIndex(4);
 /// next stage actually needs.
 const NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES: usize = mib_to_bytes(2);
 
+#[derive(Debug, thiserror::Error)]
 pub enum CrdyshimError {
     /// Failed to get the revocation data.
     RevocationDataError(RevocationError),

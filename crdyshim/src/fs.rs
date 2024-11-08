@@ -11,6 +11,7 @@ use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::{cstr16, CStr16, CString16, Status};
 
+#[derive(Debug, thiserror::Error)]
 pub enum FsError {
     /// The file is a directory, but a regular file was expected.
     IsADirectory,

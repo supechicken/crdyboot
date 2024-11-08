@@ -16,6 +16,7 @@ libcrdy.workspace = true
 log.workspace = true
 object.workspace = true
 sbat = { workspace = true, features = ["alloc"] }
+thiserror.workspace = true
 uefi.workspace = true
 
 [target.'cfg(target_os = "uefi")'.dependencies]
