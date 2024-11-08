@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use crate::disk;
+use crate::disk::GptDiskError;
 use alloc::format;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
@@ -14,12 +15,13 @@ use bootimg::{BootImage, VendorImageHeader};
 use core::ffi::{CStr, FromBytesUntilNulError};
 use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
-use libcrdy::uefi::UefiImpl;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
 use uefi::proto::device_path::acpi::Acpi;
 use uefi::proto::device_path::hardware::Pci;
+use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
 use uefi::proto::device_path::DevicePath;
 use uefi::{cstr16, CString16, Char16};
 
@@ -88,6 +90,14 @@ pub enum AvbError {
     /// Combined initramfs is too large.
     #[error("initramfs is too large")]
     InitramfsTooLarge,
+
+    /// Failed looking up UEFI information for the ESP.
+    #[error("failed reading UEFI information for the ESP: {0}")]
+    FailedEspInfo(GptDiskError),
+
+    /// Unable to generate a boot path for the ESP.
+    #[error("unable to generate a sys boot path for the ESP: {0}")]
+    FailedEspPathGeneration(CString16),
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -648,6 +658,13 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     // TODO: have this be part of bootconfig once this handles bootconfig.
     cmdline.push_str(cstr16!(" androidboot.slot_suffix=_a"));
 
+    // Add the boot device needed for the second stage to discover
+    // the dynamic partitions.
+    // TODO: Put as bootconfig once it is supported.
+    let boot_path = get_android_boot_path(&UefiImpl)?;
+    cmdline.push_str(cstr16!(" androidboot.boot_device="));
+    cmdline.push_str(&boot_path);
+
     // At this point the cmdline, kernel and initramfs buffers
     // are allocated locally to this function.
     // The slot_verify_data can now be freed.
@@ -684,7 +701,6 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
 /// to be queried from something such as [EFI_PCI_IO_PROTOCOL.GetLocation()].
 ///
 /// [EFI_PCI_IO_PROTOCOL.GetLocation()]: https://uefi.org/specs/UEFI/2.10/14_Protocols_PCI_Bus_Support.html#efi-pci-io-protocol-getlocation
-#[allow(dead_code)]
 fn get_root_device_linux_path(device_path: &DevicePath) -> Option<CString16> {
     let mut domain: u32 = 0;
     let bus_number: u8 = 0;
@@ -704,6 +720,25 @@ fn get_root_device_linux_path(device_path: &DevicePath) -> Option<CString16> {
     );
     // Unwrap OK: The format above will always result in a valid CString16.
     Some(CString16::try_from(sys_path.as_str()).unwrap())
+}
+
+/// Look up the ESP partition handle and generate a sysfs device
+/// path for its boot device.
+///
+/// Returns None if there was an issue looking it up.
+fn get_android_boot_path(uefi: &dyn Uefi) -> Result<CString16, AvbError> {
+    let esp_handle = disk::find_esp_partition_handle(uefi).map_err(AvbError::FailedEspInfo)?;
+    let device_path =
+        disk::device_path_for_handle(uefi, esp_handle).map_err(AvbError::FailedEspInfo)?;
+    let Some(sys_path) = get_root_device_linux_path(&device_path) else {
+        // Attempt to make a readable version of the boot partition
+        // for the error log.
+        let st = device_path
+            .to_string(DisplayOnly(true), AllowShortcuts(false))
+            .unwrap_or_else(|_| CString16::try_from("No Path Text").unwrap());
+        return Err(AvbError::FailedEspPathGeneration(st));
+    };
+    Ok(sys_path)
 }
 
 #[cfg(test)]

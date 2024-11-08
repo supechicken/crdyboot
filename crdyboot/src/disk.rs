@@ -71,7 +71,7 @@ pub enum GptDiskError {
 }
 
 /// Open `DevicePath` protocol for `handle`.
-fn device_path_for_handle(
+pub fn device_path_for_handle(
     uefi: &dyn Uefi,
     handle: Handle,
 ) -> Result<ScopedDevicePath, GptDiskError> {
@@ -135,7 +135,7 @@ fn find_parent_disk(
 
 /// Find the [`Handle`] corresponding to the ESP partition that this
 /// executable is running from.
-fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
+pub fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     match uefi.find_esp_partition_handle() {
         Ok(Some(handle)) => Ok(handle),
         Ok(None) => Err(GptDiskError::LoadedImageHasNoDevice),
