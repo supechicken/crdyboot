@@ -20,7 +20,7 @@ use uefi::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
 use uefi::Status;
 use update_info::{get_update_table, set_update_statuses, UpdateInfo};
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum FirmwareError {
     GetVariableFailed(Status),
     SetVariableFailed(Status),

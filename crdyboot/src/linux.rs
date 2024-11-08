@@ -46,6 +46,7 @@ const FLEXOR_KERNEL_MAX_SIZE: usize = 33_554_432;
 // List of valid `flexor_vmlinuz` SHA256 hashes.
 const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
 
+#[derive(Debug, thiserror::Error)]
 pub enum CrdybootError {
     /// Failed to allocate memory.
     Allocation(PageAllocationError),
