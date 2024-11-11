@@ -535,6 +535,7 @@ dependencies = [
  "sbat",
  "thiserror 2.0.0",
  "uefi",
+ "uefi-raw",
 ]
 
 [[package]]

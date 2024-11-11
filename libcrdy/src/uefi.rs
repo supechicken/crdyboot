@@ -110,6 +110,9 @@ pub trait Uefi {
     /// mode. Opening disk handles in exclusive mode can be very slow --
     /// on the x1cg9, it takes over 800ms.
     unsafe fn open_disk_io(&self, handle: Handle) -> uefi::Result<ScopedDiskIo>;
+
+    /// Open the `LoadedImage` protocol for handle in exclusive mode.
+    fn open_loaded_image(&self, handle: Handle) -> uefi::Result<ScopedLoadedImage>;
 }
 
 pub struct UefiImpl;
@@ -260,6 +263,10 @@ impl Uefi for UefiImpl {
         )
         .map(ScopedDiskIo::new)
     }
+
+    fn open_loaded_image(&self, handle: Handle) -> uefi::Result<ScopedLoadedImage> {
+        boot::open_protocol_exclusive::<LoadedImage>(handle).map(ScopedLoadedImage::new)
+    }
 }
 
 enum ScopedProtocolInner<P: Protocol + ?Sized> {
@@ -336,6 +343,7 @@ impl<P: Protocol + ?Sized> DerefMut for ScopedProtocol<P> {
 pub type ScopedBlockIo = ScopedProtocol<BlockIO>;
 pub type ScopedDevicePath = ScopedProtocol<DevicePath>;
 pub type ScopedDiskIo = ScopedProtocol<DiskIo>;
+pub type ScopedLoadedImage = ScopedProtocol<LoadedImage>;
 
 #[derive(Clone)]
 pub enum PartitionInfo {

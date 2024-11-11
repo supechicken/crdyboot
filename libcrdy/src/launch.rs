@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::uefi::{Uefi, UefiImpl};
 use crate::util::{u32_to_usize, usize_to_u64};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
-use uefi::proto::loaded_image::LoadedImage;
 use uefi::{boot, table, Handle, Status};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LaunchError {
     /// The system table is not set.
     #[error("system table is not set")]
@@ -84,8 +84,13 @@ impl<'a> NextStage<'a> {
     /// The caller must ensure that that `self.image_data` and
     /// `self.load_options` remain valid for as long as the image is in
     /// use.
-    unsafe fn modify_loaded_image(&self, image_handle: Handle) -> Result<(), LaunchError> {
-        let mut li = boot::open_protocol_exclusive::<LoadedImage>(image_handle)
+    unsafe fn modify_loaded_image(
+        &self,
+        uefi: &dyn Uefi,
+        image_handle: Handle,
+    ) -> Result<(), LaunchError> {
+        let mut li = uefi
+            .open_loaded_image(image_handle)
             .map_err(|err| LaunchError::OpenLoadedImageProtocolFailed(err.status()))?;
 
         // Set load options (aka command line).
@@ -114,8 +119,10 @@ impl<'a> NextStage<'a> {
     /// The caller must ensure that the image data and entry point
     /// provide a valid UEFI target to execute.
     pub unsafe fn launch(self) -> Result<(), LaunchError> {
+        let uefi = &UefiImpl;
+
         let image_handle = boot::image_handle();
-        self.modify_loaded_image(image_handle)?;
+        self.modify_loaded_image(uefi, image_handle)?;
 
         let entry_point = self.entry_point_from_offset()?;
 
@@ -128,5 +135,97 @@ impl<'a> NextStage<'a> {
         // unexpected happening if the entry point somehow does return,
         // panic here.
         unreachable!("the next stage should not return control")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::uefi::{MockUefi, ScopedLoadedImage};
+    use core::ptr;
+    use uefi::boot::MemoryType;
+    use uefi::proto::loaded_image::LoadedImage;
+    use uefi::Error;
+    use uefi_raw::protocol::loaded_image::LoadedImageProtocol;
+
+    fn get_image_handle() -> Handle {
+        static IMAGE_HANDLE: u8 = 123u8;
+        unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
+    }
+
+    fn create_next_stage() -> NextStage<'static> {
+        NextStage {
+            image_data: b"image data",
+            load_options: b"load options",
+            entry_point_offset: 3,
+        }
+    }
+
+    /// Test that `modify_loaded_image` propagates the error if the
+    /// protocol can't be opened.
+    #[test]
+    fn test_modify_loaded_image_protocol_error() {
+        let ns = create_next_stage();
+
+        let mut uefi = MockUefi::new();
+        uefi.expect_open_loaded_image()
+            .returning(|_handle| Err(Error::from(Status::UNSUPPORTED)));
+
+        assert_eq!(
+            unsafe { ns.modify_loaded_image(&uefi, get_image_handle()) },
+            Err(LaunchError::OpenLoadedImageProtocolFailed(
+                Status::UNSUPPORTED
+            ))
+        );
+    }
+
+    /// Test that `modify_loaded_image` successfully modifies the
+    /// `LoadedImage` protocol.
+    #[test]
+    fn test_modify_loaded_image() {
+        let ns = create_next_stage();
+
+        let li = LoadedImageProtocol {
+            revision: 0,
+            parent_handle: ptr::null_mut(),
+            system_table: ptr::null_mut(),
+            device_handle: ptr::null_mut(),
+            file_path: ptr::null(),
+            reserved: ptr::null(),
+            load_options_size: 0,
+            load_options: ptr::null(),
+            image_base: ptr::null(),
+            image_size: 0,
+            image_code_type: MemoryType::LOADER_CODE,
+            image_data_type: MemoryType::LOADER_DATA,
+            unload: None,
+        };
+        let mut li: LoadedImage = unsafe { mem::transmute(li) };
+
+        let li_ptr = ptr::addr_of_mut!(li);
+
+        // Extra block to make clear how long the `uefi` object is live.
+        {
+            let mut uefi = MockUefi::new();
+            uefi.expect_open_loaded_image()
+                .return_once_st(move |_handle| {
+                    // SAFETY: this pointer remains valid until after
+                    // the `uefi` object is dropped, and the pointer is
+                    // not dereferenced except through the
+                    // ScopedLoadedImage wrapper.
+                    unsafe { Ok(ScopedLoadedImage::for_test_unsafe(li_ptr)) }
+                });
+
+            unsafe { ns.modify_loaded_image(&uefi, get_image_handle()) }.unwrap();
+        }
+
+        assert_eq!(
+            li.info(),
+            (
+                ns.image_data.as_ptr().cast(),
+                u64::try_from(ns.image_data.len()).unwrap()
+            )
+        );
+        assert_eq!(li.load_options_as_bytes().unwrap(), b"load options",);
     }
 }

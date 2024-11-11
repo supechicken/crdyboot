@@ -19,3 +19,6 @@ test_util = ["dep:mockall"]
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { workspace = true, features = ["logger", "global_allocator", "panic_handler"] }
+
+[dev-dependencies]
+uefi-raw.workspace = true
