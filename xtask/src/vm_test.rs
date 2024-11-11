@@ -12,8 +12,8 @@ use crate::arch::Arch;
 use crate::config::Config;
 use crate::gen_disk::{
     copy_partition_from_disk_to_disk, corrupt_crdyboot_signatures, corrupt_kern_a,
-    corrupt_pubkey_section, delete_crdyboot_signatures, install_uefi_test_tool, SignAfterCorrupt,
-    VerboseRuntimeLogs,
+    corrupt_pubkey_section, delete_crdyboot_signatures, install_uefi_test_tool,
+    update_flexor_disk_with_test_kernel, SignAfterCorrupt, VerboseRuntimeLogs,
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
@@ -180,6 +180,27 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Test that booting flexor fails when the flexor_vmlinuz kernel is not in the
+/// allow list of hashes.
+///
+/// The error is the generic `boot failed` output because we check each partition
+/// for a valid flexor kernel and return an error in the end when load fails due
+/// to kernel missing, invalid kernel or errors while reading from the filesystem.
+fn test_invalid_flexor_kernel(conf: &Config) -> Result<()> {
+    let opts = QemuOpts {
+        image_path: conf.flexor_disk_path(),
+        timeout: None,
+        network: true,
+        ..default_qemu_opts(conf)
+    };
+    // update flexor disk image with a test kernel.
+    update_flexor_disk_with_test_kernel(conf.disk_path(), &conf.flexor_disk_path())?;
+    let expected_output = &["Boot error in crdyboot-.*: failed to load the flexor kernel"];
+
+    launch_test_disk_and_expect_output(conf, opts, expected_output)?;
     Ok(())
 }
 
@@ -433,6 +454,19 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
         test(conf)?;
 
         reset_test_disk(conf)?;
+    }
+
+    // tests with flexor enabled.
+    run_bootloader_build(
+        conf,
+        BuildAndroid(false),
+        BuildFlexor(true),
+        VerboseRuntimeLogs(true),
+    )?;
+
+    let flexor_tests = [test_invalid_flexor_kernel];
+    for test in flexor_tests {
+        test(conf)?;
     }
 
     Ok(())

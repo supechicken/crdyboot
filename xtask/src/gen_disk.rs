@@ -401,15 +401,31 @@ pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
     disk.create()
 }
 
+/// Read a file from the EFI System Partition of a disk.
+///
+/// `file_path` is the path to the file inside the ESP. The file content is
+/// returned as a vector.
+fn read_file_from_esp(disk_path: &Utf8Path, file_path: &str) -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+
+    modify_system_partition(disk_path, |root_dir| {
+        let mut file_handle = root_dir.open_file(file_path).unwrap();
+        file_handle.read_to_end(&mut buffer)?;
+        Ok(())
+    })?;
+
+    Ok(buffer)
+}
+
 /// Modify data in the EFI system partition FAT file system.
 ///
 /// This loads the partition into memory and opens it with `fatfs`. The
 /// root directory handle is then passed to the `modify` function, and
 /// the caller can update the contents as desired. Then the partition is
 /// written back out to disk.
-fn modify_system_partition<F>(disk_path: &Utf8Path, modify: F) -> Result<()>
+fn modify_system_partition<F>(disk_path: &Utf8Path, mut modify: F) -> Result<()>
 where
-    F: Fn(fatfs::Dir<Cursor<&mut Vec<u8>>>) -> Result<()>,
+    F: FnMut(fatfs::Dir<Cursor<&mut Vec<u8>>>) -> Result<()>,
 {
     let mut disk_file = open_rw(disk_path)?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
@@ -478,9 +494,55 @@ pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()>
     .context("failed to update boot files")
 }
 
+/// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the EFI
+/// system partition in the disk image at `flexor_disk_path`.
+pub fn update_flexor_boot_files(flexor_disk_path: &Utf8PathBuf, src_dir: &Utf8Path) -> Result<()> {
+    modify_system_partition(flexor_disk_path, |root_dir| {
+        let dst_efi_dir = root_dir.open_dir("EFI")?;
+        let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
+
+        for entry in fs::read_dir(src_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name = file_name.to_str().unwrap();
+
+            println!(
+                "copying {} to EFI/BOOT in the flexor disk image.",
+                entry.path().display()
+            );
+
+            let src = fs::read(entry.path())?;
+
+            fat_write_file(&dst_boot_dir, file_name, &src)?;
+        }
+        Ok(())
+    })
+    .context("failed to update flexor boot files")
+}
+
+/// Copy `vmlinuz.A` from `disk_path` to `flexor_disk_path` with the name
+/// `flexor_vmlinuz`.
+pub fn update_flexor_disk_with_test_kernel(
+    disk_path: &Utf8Path,
+    flexor_disk_path: &Utf8PathBuf,
+) -> Result<()> {
+    modify_system_partition(flexor_disk_path, |root_dir| {
+        let vmlinuz_a = read_file_from_esp(disk_path, r"/syslinux/vmlinuz.A")?;
+
+        // Write `vmlinuz.A` as `flexor_vmlinuz`, for testing purposes.
+        fat_write_file(&root_dir, "flexor_vmlinuz", &vmlinuz_a)?;
+
+        Ok(())
+    })
+    .context("failed to update flexor disk image with the test kernel.")
+}
+
 pub struct SignAndUpdateBootloader<'a> {
     /// Path to a reven disk image.
     pub disk_path: &'a Utf8Path,
+
+    /// Path to flexor disk image.
+    pub flexor_disk_path: Utf8PathBuf,
 
     /// Keys to sign with.
     pub key_paths: SecureBootKeyPaths,
@@ -504,7 +566,8 @@ impl<'a> SignAndUpdateBootloader<'a> {
             secure_boot::sign(src, &signed_src, &self.key_paths)?;
         }
 
-        update_boot_files(self.disk_path, tmp_path)
+        update_boot_files(self.disk_path, tmp_path)?;
+        update_flexor_boot_files(&self.flexor_disk_path, tmp_path)
     }
 }
 
@@ -534,6 +597,7 @@ pub fn update_verbose_boot_file(conf: &Config, verbose: VerboseRuntimeLogs) -> R
 pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
     SignAndUpdateBootloader {
         disk_path: conf.disk_path(),
+        flexor_disk_path: conf.flexor_disk_path(),
         key_paths: conf.secure_boot_root_key_paths(),
         mapping: Arch::all()
             .iter()
@@ -549,6 +613,7 @@ pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
 
     SignAndUpdateBootloader {
         disk_path: conf.disk_path(),
+        flexor_disk_path: conf.flexor_disk_path(),
         key_paths: conf.secure_boot_shim_key_paths(),
         mapping: Arch::all()
             .iter()
@@ -818,6 +883,7 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
     // Sign the test tool and copy it to the ESP.
     SignAndUpdateBootloader {
         disk_path: &conf.test_disk_path(),
+        flexor_disk_path: conf.flexor_disk_path(),
         key_paths: conf.secure_boot_root_key_paths(),
         mapping: Arch::all()
             .iter()
