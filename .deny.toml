@@ -21,6 +21,7 @@ skip = [
      { name = "syn", version = "1.0.107" },
      { name = "thiserror", version = "1.0.40" },
      { name = "thiserror-impl", version = "1.0.40" },
+     { name = "windows-sys", version = "0.52.0" },
 ]
 
 [sources]
