@@ -1,8 +1,19 @@
 # Crdyboot Changelog
 
 ## 1.0.3
+* Update to uefi-0.31. <https://crrev.com/c/5808421>
 * When verbose logging is enabled, copy SbatLevel to SbatLevelRT so that
   it can be viewed while the OS is running. <https://crrev.com/c/5802606>
+* Add many new tests.
+* Bug fixes and other improvements for the firmware update feature. It
+  is still gated behind the `firmware_update` feature flag.
+* Add initial support for launching flexor. This is gated behind the
+  `flexor` feature flag.
+  <https://crrev.com/c/5845690>, <https://crrev.com/c/5898632>,
+  <https://crrev.com/c/5933487>
+* Apply updated SBAT revocations if available.
+  <https://crrev.com/c/5972838>, <https://crrev.com/c/5972839>,
+  <https://crrev.com/c/5972840>
 
 ## 1.0.2
 * Update to uefi-0.29. <https://crrev.com/c/5688491>
