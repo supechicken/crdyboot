@@ -22,6 +22,7 @@ use crate::{copy_file, run_bootloader_build, BuildAndroid};
 use anyhow::{bail, Result};
 use command_run::Command;
 use fs_err as fs;
+use regex::Regex;
 use std::fs::Permissions;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
@@ -236,7 +237,8 @@ fn launch_test_disk_and_expect_output(
         }
         print!(">>> {line}");
 
-        if line.contains(next_expected_error) {
+        let regex = Regex::new(next_expected_error).unwrap();
+        if regex.is_match(&line) {
             expected_output.remove(0);
         }
     }
