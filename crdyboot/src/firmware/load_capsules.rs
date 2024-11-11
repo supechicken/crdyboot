@@ -109,7 +109,7 @@ impl Ext4Read for DiskReader {
 }
 
 /// Error type produced by `DiskReader::read`.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 struct ReadError {
     start_byte: u64,
     len: usize,

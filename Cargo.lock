@@ -265,6 +265,7 @@ dependencies = [
  "mockall",
  "object",
  "sha2",
+ "thiserror 2.0.0",
  "uefi",
  "uefi-raw",
  "vboot",

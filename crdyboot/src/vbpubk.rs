@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use core::fmt::{self, Display, Formatter};
 use core::slice;
 use libcrdy::arch::PeFileForCurrentArch;
 use libcrdy::util::u32_to_usize;
@@ -10,31 +9,25 @@ use log::info;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::{boot, Status};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 pub enum VbpubkError {
+    #[error("image is larger than usize: {0}")]
     ImageTooBig(u64),
-    InvalidPe(object::Error),
-    InvalidSectionBounds { addr: usize, len: usize },
-    MissingSection,
-    MultipleSections,
-    OpenLoadedImageProtocolFailed(Status),
-}
 
-impl Display for VbpubkError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::ImageTooBig(size) => write!(f, "image is larger than usize: {size}"),
-            Self::InvalidPe(error) => write!(f, "invalid PE: {error}"),
-            Self::InvalidSectionBounds { addr, len } => {
-                write!(f, "invalid section bounds: addr={addr:#016x}, len={len:#x}")
-            }
-            Self::MissingSection => write!(f, "missing .vbpubk section"),
-            Self::MultipleSections => write!(f, "multiple .vbpubk sections"),
-            Self::OpenLoadedImageProtocolFailed(status) => {
-                write!(f, "failed to open LoadedImage protocol: {status}")
-            }
-        }
-    }
+    #[error("invalid PE: {0}")]
+    InvalidPe(object::Error),
+
+    #[error("invalid section bounds: addr={addr:#016x}, len={len:#x}")]
+    InvalidSectionBounds { addr: usize, len: usize },
+
+    #[error("missing .vbpubk section")]
+    MissingSection,
+
+    #[error("multiple .vbpubk section")]
+    MultipleSections,
+
+    #[error("failed to open LoadedImage protocol: {0}")]
+    OpenLoadedImageProtocolFailed(Status),
 }
 
 /// Get the currently-executing image's data.

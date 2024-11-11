@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use core::fmt::{self, Display, Formatter};
 use core::num::NonZeroU64;
 use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use log::error;
@@ -14,95 +13,61 @@ use uefi::Guid;
 use uefi::{CStr16, Char16};
 use vboot::{DiskIo, ReturnCode};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
     /// The disk block size is zero.
+    #[error("disk block size is zero")]
     InvalidBlockSize,
 
     /// The number of blocks cannot fit in [`u64`].
+    #[error("number of blocks cannot fit in u64")]
     InvalidLastBlock,
 
     /// No handles support the [`BlockIO`] protocol.
+    #[error("no handles support the BlockIO protocol: {0}")]
     BlockIoProtocolMissing(Status),
 
     /// No handles support the [`PartitionInfo`] protocol.
+    #[error("no handles support the PartitionInfo protocol: {0}")]
     PartitionInfoProtocolMissing(Status),
 
     /// Failed to open the [`BlockIO`] protocol.
+    #[error("failed to open the BlockIO protocol: {0}")]
     OpenBlockIoProtocolFailed(Status),
 
     /// Failed to open the [`DevicePath`] protocol.
+    #[error("failed to open the DevicePath protocol: {0}")]
     OpenDevicePathProtocolFailed(Status),
 
     /// Failed to open the [`UefiDiskIo`] protocol.
+    #[error("failed to open the DiskIO protocol: {0}")]
     OpenDiskIoProtocolFailed(Status),
 
     /// Failed to open the [`LoadedImage`] protocol.
+    #[error("failed to open the LoadedImage protocol: {0}")]
     OpenLoadedImageProtocolFailed(Status),
 
     /// Failed to open the [`PartitionInfo`] protocol.
+    #[error("failed to open the PartitionInfo protocol: {0}")]
     OpenPartitionInfoProtocolFailed(Status),
 
     /// The [`LoadedImage`] does not have a device handle set.
+    #[error("the LoadedImage does not have a device handle set")]
     LoadedImageHasNoDevice,
 
     /// Failed to find the handle for the disk that the current
     /// executable was booted from.
+    #[error("failed to get parent disk")]
     ParentDiskNotFound,
 
     /// Failed to find the handle for the named partition.
+    #[error("failed to find partition handle for a named partition")]
     PartitionNotFound,
 
     /// The partition size is zero or cannot fit into [`u64`].
     #[cfg(feature = "android")]
+    #[error("partition size is zero or too large")]
     InvalidPartitionSize,
-}
-
-impl Display for GptDiskError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidBlockSize => {
-                write!(f, "disk block size is zero")
-            }
-            Self::InvalidLastBlock => {
-                write!(f, "number of blocks cannot fit in u64")
-            }
-            Self::BlockIoProtocolMissing(status) => {
-                write!(f, "no handles support the BlockIO protocol: {status}")
-            }
-            Self::PartitionInfoProtocolMissing(status) => {
-                write!(f, "no handles support the PartitionInfo protocol: {status}")
-            }
-            Self::OpenBlockIoProtocolFailed(status) => {
-                write!(f, "failed to open the BlockIO protocol: {status}")
-            }
-            Self::OpenDevicePathProtocolFailed(status) => {
-                write!(f, "failed to open the DevicePath protocol: {status}")
-            }
-            Self::OpenDiskIoProtocolFailed(status) => {
-                write!(f, "failed to open the DiskIO protocol: {status}")
-            }
-            Self::OpenLoadedImageProtocolFailed(status) => {
-                write!(f, "failed to open the LoadedImage protocol: {status}")
-            }
-            Self::OpenPartitionInfoProtocolFailed(status) => {
-                write!(f, "failed to open the PartitionInfo protocol: {status}")
-            }
-            Self::LoadedImageHasNoDevice => {
-                write!(f, "the LoadedImage does not have a device handle set")
-            }
-            Self::ParentDiskNotFound => {
-                write!(f, "failed to get parent disk")
-            }
-            Self::PartitionNotFound => {
-                write!(f, "failed to find partition handle for a named partition")
-            }
-            #[cfg(feature = "android")]
-            Self::InvalidPartitionSize => {
-                write!(f, "partition size is zero or too large")
-            }
-        }
-    }
 }
 
 /// Open `DevicePath` protocol for `handle`.

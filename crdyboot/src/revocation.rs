@@ -140,7 +140,7 @@ impl UefiVarAccess for UefiVarAccessImpl {
 
 /// Error indicating that the currently-running executable has been
 /// revoked.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub struct RevocationError {
     /// Revocation level of the executable.
     executable_level: Level,
