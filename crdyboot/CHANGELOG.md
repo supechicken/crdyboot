@@ -1,5 +1,7 @@
 # Crdyboot Changelog
 
+## 1.0.4
+
 ## 1.0.3
 * Update to uefi-0.31. <https://crrev.com/c/5808421>
 * When verbose logging is enabled, copy SbatLevel to SbatLevelRT so that

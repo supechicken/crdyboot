@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "crdyboot"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "ext4-view",
  "libcrdy",
