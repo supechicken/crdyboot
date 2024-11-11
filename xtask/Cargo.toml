@@ -23,4 +23,4 @@ object = { workspace = true, features = ["std"] }
 sbat = { workspace = true, features = ["std"] }
 serde = "1.0.137"
 sha2 = { workspace = true }
-tempfile = "3.4.0"
+tempfile = "3.14.0"
