@@ -30,12 +30,9 @@ pub enum LoadKernelError {
     #[error("call to vb2api_init failed: 0x{:x} ({})", .0.0, return_code_to_str(*.0))]
     ApiInitFailed(ReturnCode),
 
-    /// Call to `vb2api_init_ctx_for_kernel_verification_only` failed.
-    #[error(
-        "call to vb2api_init_ctx_for_kernel_verification_only failed: 0x{:x} ({})",
-        .0.0, return_code_to_str(*.0))
-    ]
-    ApiKernelInitFailed(ReturnCode),
+    /// Call to `vb2api_inject_kernel_subkey` failed.
+    #[error("failed to inject kernel subkey: 0x{:x} ({})", .0.0, return_code_to_str(*.0))]
+    InjectKernelSubkeyFailed(ReturnCode),
 
     /// Call to `LoadKernel` failed.
     #[error("call to LoadKernel failed: 0x{:x} ({})", .0.0, return_code_to_str(*.0))]
@@ -134,7 +131,7 @@ unsafe fn init_vb2_context(
     ));
     if status != ReturnCode::VB2_SUCCESS {
         error!("vb2api_inject_kernel_subkey failed: 0x{:x}", status.0);
-        return Err(LoadKernelError::ApiKernelInitFailed(status));
+        return Err(LoadKernelError::InjectKernelSubkeyFailed(status));
     }
 
     Ok(ctx_ptr)

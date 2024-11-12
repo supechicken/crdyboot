@@ -340,8 +340,9 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
 
     let expected_output = &[
-        "vb2api_inject_kernel_subkey failed",
         "Boot error in crdyboot-.*: failed to load kernel",
+        "Caused by:",
+        r"    failed to inject kernel subkey: 0x10050013 \(VB2_ERROR_INSIDE_DATA_OVERLAP\)",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
