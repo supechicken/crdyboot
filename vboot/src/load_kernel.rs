@@ -119,7 +119,6 @@ unsafe fn init_vb2_context(
         &mut ctx_ptr,
     ));
     if status != ReturnCode::VB2_SUCCESS {
-        error!("vb2api_init failed: 0x{:x}", status.0);
         return Err(LoadKernelError::ApiInitFailed(status));
     }
 
@@ -130,7 +129,6 @@ unsafe fn init_vb2_context(
         packed_pubkey_len,
     ));
     if status != ReturnCode::VB2_SUCCESS {
-        error!("vb2api_inject_kernel_subkey failed: 0x{:x}", status.0);
         return Err(LoadKernelError::InjectKernelSubkeyFailed(status));
     }
 
@@ -249,7 +247,6 @@ pub fn load_kernel<'kernel>(
         vboot_sys::vb2api_load_kernel(ctx_ptr, &mut params, disk_info.as_mut_ptr())
     });
     if status != ReturnCode::VB2_SUCCESS {
-        error!("LoadKernel failed: 0x{:x}", status.0);
         return Err(LoadKernelError::LoadKernelFailed(status));
     }
 
