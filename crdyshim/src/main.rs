@@ -92,6 +92,10 @@ pub enum CrdyshimError {
     #[error("invalid public key")]
     InvalidPublicKey,
 
+    /// The next stage signature file has the wrong size.
+    #[error("signature file has incorrect size: {0}")]
+    InvalidSignatureSize(usize),
+
     /// The contents of the next stage signature file are not valid.
     #[error("invalid signature file")]
     InvalidSignature,
@@ -214,8 +218,7 @@ impl NextStageFileLoader {
         if read_size == signature.len() {
             Ok(signature)
         } else {
-            error!("invalid signature file size: {}", read_size);
-            Err(CrdyshimError::InvalidSignature)
+            Err(CrdyshimError::InvalidSignatureSize(read_size))
         }
     }
 }
