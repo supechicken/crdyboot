@@ -266,6 +266,8 @@ enum ScopedProtocolInner<P: Protocol + ?Sized> {
     Protocol(boot::ScopedProtocol<P>),
     #[cfg(feature = "test_util")]
     ForTest(Box<P>),
+    #[cfg(feature = "test_util")]
+    ForTestUnsafe(*mut P),
 }
 
 /// Wrapper around `uefi::boot::ScopedProtocol` that allows for mocking.
@@ -288,6 +290,19 @@ impl<P: Protocol + ?Sized> ScopedProtocol<P> {
     pub fn for_test(p: Box<P>) -> Self {
         Self(ScopedProtocolInner::ForTest(p))
     }
+
+    /// Create a `ScopedProtocol` from a raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that this pointer is valid until the
+    /// `ScopedProtocol` is dropped. The caller must ensure that the
+    /// pointer is not dereferenced except through this
+    /// `ScopedProtocol`, until the `ScopedProtocol` is dropped.
+    #[cfg(feature = "test_util")]
+    pub unsafe fn for_test_unsafe(p: *mut P) -> Self {
+        Self(ScopedProtocolInner::ForTestUnsafe(p))
+    }
 }
 
 impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
@@ -299,6 +314,8 @@ impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
             ScopedProtocolInner::Protocol(p) => p,
             #[cfg(feature = "test_util")]
             ScopedProtocolInner::ForTest(p) => p,
+            #[cfg(feature = "test_util")]
+            ScopedProtocolInner::ForTestUnsafe(p) => unsafe { &**p },
         }
     }
 }
@@ -310,6 +327,8 @@ impl<P: Protocol + ?Sized> DerefMut for ScopedProtocol<P> {
             ScopedProtocolInner::Protocol(p) => p,
             #[cfg(feature = "test_util")]
             ScopedProtocolInner::ForTest(p) => p,
+            #[cfg(feature = "test_util")]
+            ScopedProtocolInner::ForTestUnsafe(p) => unsafe { &mut **p },
         }
     }
 }
