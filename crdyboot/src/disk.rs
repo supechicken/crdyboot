@@ -631,7 +631,7 @@ pub(crate) mod tests {
             }
             let path = builder.finalize()?;
 
-            Ok(ScopedDevicePath::ForTest(path.to_boxed()))
+            Ok(ScopedDevicePath::for_test(path.to_boxed()))
         }
     }
 
@@ -762,7 +762,7 @@ pub(crate) mod tests {
                 flush_blocks,
             };
             let bio: BlockIO = unsafe { mem::transmute(bio) };
-            Ok(ScopedBlockIo::ForTest(Box::new(bio)))
+            Ok(ScopedBlockIo::for_test(Box::new(bio)))
         });
         uefi.expect_open_disk_io().returning(|handle| {
             assert_eq!(handle, DeviceKind::Hd1State.handle());
@@ -772,7 +772,7 @@ pub(crate) mod tests {
                 write_disk,
             };
             let dio: uefi::proto::media::disk::DiskIo = unsafe { mem::transmute(dio) };
-            Ok(ScopedDiskIo::ForTest(Box::new(dio)))
+            Ok(ScopedDiskIo::for_test(Box::new(dio)))
         });
         uefi
     }

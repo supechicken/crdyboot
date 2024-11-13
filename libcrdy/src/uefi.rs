@@ -198,7 +198,7 @@ impl Uefi for UefiImpl {
                 OpenProtocolAttributes::GetProtocol,
             )
         }
-        .map(ScopedDevicePath::Protocol)
+        .map(ScopedDevicePath::new)
     }
 
     fn find_esp_partition_handle(&self) -> uefi::Result<Option<Handle>> {
@@ -246,7 +246,7 @@ impl Uefi for UefiImpl {
             },
             OpenProtocolAttributes::GetProtocol,
         )
-        .map(ScopedBlockIo::Protocol)
+        .map(ScopedBlockIo::new)
     }
 
     unsafe fn open_disk_io(&self, handle: Handle) -> uefi::Result<ScopedDiskIo> {
@@ -258,23 +258,36 @@ impl Uefi for UefiImpl {
             },
             OpenProtocolAttributes::GetProtocol,
         )
-        .map(ScopedDiskIo::Protocol)
+        .map(ScopedDiskIo::new)
     }
 }
 
-/// Wrapper around `uefi::boot::ScopedProtocol` that allows for mocking.
-///
-/// Normally only the `Protocol` variant exists, which just passes
-/// through to the underlying `uefi::boot::ScopedProtocol`. If the
-/// `test_util` feature is enabled, the `ForTest` variant becomes
-/// available, allowing tests to create a protocol.
-///
-/// The test variant is boxed so that dynamically-sized structs such as
-/// `DevicePath` work.
-pub enum ScopedProtocol<P: Protocol + ?Sized> {
+enum ScopedProtocolInner<P: Protocol + ?Sized> {
     Protocol(boot::ScopedProtocol<P>),
     #[cfg(feature = "test_util")]
     ForTest(Box<P>),
+}
+
+/// Wrapper around `uefi::boot::ScopedProtocol` that allows for mocking.
+pub struct ScopedProtocol<P: Protocol + ?Sized>(ScopedProtocolInner<P>);
+
+impl<P: Protocol + ?Sized> ScopedProtocol<P> {
+    /// Create a `ScopedProtocol` that wraps a `uefi::boot::ScopedProtocol`.
+    #[inline]
+    fn new(p: boot::ScopedProtocol<P>) -> Self {
+        Self(ScopedProtocolInner::Protocol(p))
+    }
+
+    /// Create a `ScopedProtocol` from a boxed protocol.
+    ///
+    /// The protocol is boxed so that dynamically-sized structs such as
+    /// `DevicePath` work.
+    ///
+    /// This method is only available in tests.
+    #[cfg(feature = "test_util")]
+    pub fn for_test(p: Box<P>) -> Self {
+        Self(ScopedProtocolInner::ForTest(p))
+    }
 }
 
 impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
@@ -282,10 +295,10 @@ impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
 
     #[inline]
     fn deref(&self) -> &P {
-        match self {
-            Self::Protocol(p) => p,
+        match &self.0 {
+            ScopedProtocolInner::Protocol(p) => p,
             #[cfg(feature = "test_util")]
-            Self::ForTest(p) => p,
+            ScopedProtocolInner::ForTest(p) => p,
         }
     }
 }
@@ -293,10 +306,10 @@ impl<P: Protocol + ?Sized> Deref for ScopedProtocol<P> {
 impl<P: Protocol + ?Sized> DerefMut for ScopedProtocol<P> {
     #[inline]
     fn deref_mut(&mut self) -> &mut P {
-        match self {
-            Self::Protocol(p) => p,
+        match &mut self.0 {
+            ScopedProtocolInner::Protocol(p) => p,
             #[cfg(feature = "test_util")]
-            Self::ForTest(p) => p,
+            ScopedProtocolInner::ForTest(p) => p,
         }
     }
 }
