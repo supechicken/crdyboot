@@ -75,6 +75,10 @@ pub enum AvbError {
     /// Vendor command line is malformed.
     #[error("vendor command line is malformed")]
     VendorCommandlineMalformed,
+
+    /// Combined initramfs is too large.
+    #[error("initramfs is too large")]
+    InitramfsTooLarge,
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -163,7 +167,6 @@ impl AvbDiskOps for AvbDiskOpsImpl {
 /// are included.
 struct BootImageParts<'a> {
     kernel: &'a [u8],
-    #[expect(dead_code)]
     initramfs: &'a [u8],
 }
 
@@ -238,7 +241,6 @@ impl<'a> BootImageParts<'a> {
 /// Only the sections that relevant for this bootloader
 /// are included.
 struct VendorData<'a> {
-    #[expect(dead_code)]
     initramfs: &'a [u8],
     cmdline: CString16,
     // TODO: handle bootconfig!
@@ -443,6 +445,62 @@ fn load_kernel(boot_part: &AvbPartitionData) -> Result<ScopedPageAllocation, Avb
     Ok(kernel_buffer)
 }
 
+/// Assemble the initramfs by concatenating the vendor and
+/// generic (init) ramdisks.
+/// Allocates a buffer to contain the assembled initramfs.
+///
+/// See the description in [bootimg.h] and [partitions architecture]
+/// for a description of the layout.
+///
+/// [partitions architecture]: https://source.android.com/docs/core/architecture/partitions/generic-boot#architecture
+/// [bootimg.h]: https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/heads/main/include/bootimg/bootimg.h#404
+fn assemble_initramfs(
+    vendor_data: &VendorData,
+    init_data: &BootImageParts,
+) -> Result<ScopedPageAllocation, AvbError> {
+    let vendor_initramfs = vendor_data.initramfs;
+    let generic_initramfs = init_data.initramfs;
+
+    // Generic ramdisk must have a size.
+    if generic_initramfs.is_empty() {
+        return Err(AvbError::InvalidRamdiskSize(0));
+    }
+
+    // Size of the combined initramfs data.
+    let initramfs_size = generic_initramfs
+        .len()
+        .checked_add(vendor_initramfs.len())
+        .ok_or(AvbError::InitramfsTooLarge)?;
+
+    let mut initramfs_buffer = ScopedPageAllocation::new_unaligned(
+        AllocateType::AnyPages,
+        MemoryType::LOADER_CODE,
+        initramfs_size,
+    )
+    .map_err(AvbError::Allocation)?;
+
+    let vendor_initramfs = vendor_data.initramfs;
+    let generic_initramfs = init_data.initramfs;
+
+    // Copy the vendor_initramfs to the front of the buffer.
+    initramfs_buffer
+        .get_mut(..vendor_initramfs.len())
+        .expect("buffer should be large enough")
+        .copy_from_slice(vendor_initramfs);
+
+    // Append the generic_initramfs after the vendor_initramfs.
+    initramfs_buffer
+        .get_mut(vendor_initramfs.len()..initramfs_size)
+        .expect("buffer should be large enough")
+        .copy_from_slice(generic_initramfs);
+
+    // TODO: This must also handle the bootconfig config options which
+    // are supposed to be placed after the initramfs with a
+    // bootconfig trailer.
+    // See https://android-review.git.corp.google.com/c/platform/external/u-boot/+/1579246
+    Ok(initramfs_buffer)
+}
+
 fn debug_print_avb_vbmeta_data(verify_data: *const AvbSlotVerifyData) {
     let vbmeta = unsafe {
         slice::from_raw_parts(
@@ -554,12 +612,14 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
 
     // Parse the "generic" `initramfs` from the "init_boot" partition.
     // The initramfs is the only part of this partition that is used.
-    let _init_data = BootImageParts::from_avb_boot_partition(init_boot)?;
+    let init_data = BootImageParts::from_avb_boot_partition(init_boot)?;
 
     // Slice up the vendor boot partition data.
     let vendor_data = VendorData::from_avb_vendor_partition(vendor_boot)?;
     debug!("vendor bootconfig_size: {}", vendor_data.bootconfig.len());
     debug!("vendor cmdline: {}", vendor_data.cmdline);
+
+    let _initramfs_buffer = assemble_initramfs(&vendor_data, &init_data)?;
 
     todo!("allocate, load and return buffers");
 }
