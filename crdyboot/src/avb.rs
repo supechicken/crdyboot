@@ -6,7 +6,7 @@ use crate::disk;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_result_to_string, AvbHashtreeErrorMode, AvbIOResult,
-    AvbSlotVerifyData, AvbSlotVerifyFlags, AvbSlotVerifyResult, AvbVBMetaData,
+    AvbPartitionData, AvbSlotVerifyData, AvbSlotVerifyFlags, AvbSlotVerifyResult, AvbVBMetaData,
 };
 use core::ffi::CStr;
 use core::{ptr, slice, str};
@@ -27,6 +27,10 @@ pub enum AvbError {
     /// The avb slot verify call failed.
     #[error("image verification failed: {}", verify_result_to_str(*.0))]
     AvbVerifyFailure(AvbSlotVerifyResult),
+
+    /// Missing a required avb partition.
+    #[error("missing the required partition: {0}")]
+    MissingAvbPartition(&'static str),
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -168,8 +172,12 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let verify_cmdline = unsafe { CStr::from_ptr((*verify_data).cmdline) };
     debug!("verify cmdline: {}", verify_cmdline.to_string_lossy());
 
-    // Convert the loadead_partitions list to a slice of AvbPartitionData
-    let parts = unsafe {
+    let mut boot = None;
+    let mut init_boot = None;
+    let mut vendor_boot = None;
+
+    // Convert the loaded_partitions list to a slice of AvbPartitionData
+    let parts: &[AvbPartitionData] = unsafe {
         slice::from_raw_parts(
             (*verify_data).loaded_partitions,
             (*verify_data).num_loaded_partitions,
@@ -177,10 +185,37 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     };
     debug!("Loaded partition count {}", parts.len());
 
+    // Locate the three useful partitions:
+    // * boot (kernel)
+    // * init_boot (initramfs)
+    // * vendor_boot (initramfs)
+    //
+    // There will be three resulting buffers to pass to the kernel loader:
+    //  * kernel
+    //  * initramfs : created from the two initramfs buffers and
+    //    bootconfig options
+    //  * cmdline (kernel command line with necessary modifications applied)
     for part in parts {
         let name = unsafe { CStr::from_ptr(part.partition_name) };
         debug!("Loaded partition {}: {part:?}", name.to_string_lossy());
+        if name == boot_partition_name {
+            boot = Some(part);
+        } else if name == init_partition_name {
+            init_boot = Some(part);
+        } else if name == vendor_boot_partition_name {
+            vendor_boot = Some(part);
+        }
     }
+
+    let Some(_boot) = boot else {
+        return Err(AvbError::MissingAvbPartition("boot"));
+    };
+    let Some(_vendor_boot) = vendor_boot else {
+        return Err(AvbError::MissingAvbPartition("vendor_boot"));
+    };
+    let Some(_init_boot) = init_boot else {
+        return Err(AvbError::MissingAvbPartition("init_boot"));
+    };
 
     todo!("allocate, load and return buffers");
 }
