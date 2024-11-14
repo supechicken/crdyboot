@@ -704,12 +704,12 @@ pub(crate) mod tests {
 
             let offset = usize::try_from(offset).unwrap();
             let Some(src) = DATA.get(offset..offset + buffer_size) else {
-                return Status::INVALID_PARAMETER;
+                return uefi_raw::Status::INVALID_PARAMETER;
             };
 
             buffer.cast::<u8>().copy_from(src.as_ptr(), buffer_size);
 
-            return Status::SUCCESS;
+            return uefi_raw::Status::SUCCESS;
         }
 
         unsafe extern "efiapi" fn write_disk(

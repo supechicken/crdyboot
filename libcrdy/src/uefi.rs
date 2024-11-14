@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
@@ -382,16 +381,10 @@ impl Iterator for VariableKeys {
     fn next(&mut self) -> Option<uefi::Result<VariableKey>> {
         match self {
             Self::Real(iter) => iter.next().map(|r| match r {
-                Ok(key) => {
-                    if let Ok(name) = key.name() {
-                        Ok(VariableKey {
-                            vendor: key.vendor,
-                            name: name.to_owned(),
-                        })
-                    } else {
-                        Err(Status::UNSUPPORTED.into())
-                    }
-                }
+                Ok(key) => Ok(VariableKey {
+                    vendor: key.vendor,
+                    name: key.name,
+                }),
                 Err(err) => Err(err),
             }),
             #[cfg(feature = "test_util")]
