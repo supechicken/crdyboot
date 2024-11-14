@@ -344,12 +344,16 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let Some(_vendor_boot) = vendor_boot else {
         return Err(AvbError::MissingAvbPartition("vendor_boot"));
     };
-    let Some(_init_boot) = init_boot else {
+    let Some(init_boot) = init_boot else {
         return Err(AvbError::MissingAvbPartition("init_boot"));
     };
 
     // Load the kernel buffer from the boot partition header.
     let _kernel_buffer = load_kernel(boot)?;
+
+    // Parse the "generic" `initramfs` from the "init_boot" partition.
+    // The initramfs is the only part of this partition that is used.
+    let _init_data = BootImageParts::from_avb_boot_partition(init_boot)?;
 
     todo!("allocate, load and return buffers");
 }
