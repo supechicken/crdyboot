@@ -8,12 +8,13 @@ use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_result_to_string, AvbHashtreeErrorMode, AvbIOResult,
     AvbPartitionData, AvbSlotVerifyData, AvbSlotVerifyFlags, AvbSlotVerifyResult, AvbVBMetaData,
 };
-use bootimg::BootImage;
-use core::ffi::CStr;
+use bootimg::{BootImage, VendorImageHeader};
+use core::ffi::{CStr, FromBytesUntilNulError};
 use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::UefiImpl;
-use log::{debug, log_enabled};
+use libcrdy::util::u32_to_usize;
+use log::{debug, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
 use uefi::CString16;
 
@@ -42,9 +43,18 @@ pub enum AvbError {
     #[error("unable to parse bootimage partition header: {0}")]
     BootImageHeaderParseError(bootimg::ImageError),
 
+    /// Failed to parse vendor partition header.
+    #[error("unable to parse vendor partition header: {0}")]
+    VendorImageHeaderParseError(bootimg::ImageError),
+
     /// Parsed a bootimg partition header of the wrong version.
     #[error("the partition header is not V4")]
     UnsupportedPartitionHeaderVersion,
+
+    /// Unsupported number of ramdisks in the vendor
+    /// partition.
+    #[error("only one ramdisk is supported for the vendor partition, found: {0}")]
+    UnsupportedVendorRamdiskCount(u32),
 
     /// Invalid kernel size.
     #[error("invalid kernel size: {0}")]
@@ -57,6 +67,14 @@ pub enum AvbError {
     /// Index is out of bounds for the avb image header.
     #[error("index is out of bounds of the avb image header: {0}")]
     IndexOutOfBounds(&'static str),
+
+    /// Vendor command line is not terminated.
+    #[error("vendor command line is not terminated")]
+    VendorCommandlineUnterminated(#[from] FromBytesUntilNulError),
+
+    /// Vendor command line is malformed.
+    #[error("vendor command line is malformed")]
+    VendorCommandlineMalformed,
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -216,6 +234,189 @@ impl<'a> BootImageParts<'a> {
     }
 }
 
+/// Slices to the data sections in a `VendorImageHeader`.
+/// Only the sections that relevant for this bootloader
+/// are included.
+struct VendorData<'a> {
+    #[expect(dead_code)]
+    initramfs: &'a [u8],
+    cmdline: CString16,
+    // TODO: handle bootconfig!
+    bootconfig: &'a [u8],
+}
+
+impl<'a> VendorData<'a> {
+    /// Determine the section slices for a partition with a
+    /// `VendorImageHeader`.
+    fn from_avb_vendor_partition(
+        vendor_part: &AvbPartitionData,
+    ) -> Result<VendorData<'a>, AvbError> {
+        // vendor boot image layout comment from [bootimg.h vendor v4]:
+        // The structure of the vendor boot image version 4, which is required to be
+        // present when a version 4 boot image is used, is as follows:
+        //
+        // +------------------------+
+        // | vendor boot header     | o pages
+        // +------------------------+
+        // | vendor ramdisk section | p pages
+        // +------------------------+
+        // | dtb                    | q pages
+        // +------------------------+
+        // | vendor ramdisk table   | r pages
+        // +------------------------+
+        // | bootconfig             | s pages
+        // +------------------------+
+        //
+        // o = (2128 + page_size - 1) / page_size
+        // p = (vendor_ramdisk_size + page_size - 1) / page_size
+        // q = (dtb_size + page_size - 1) / page_size
+        // r = (vendor_ramdisk_table_size + page_size - 1) / page_size
+        // s = (vendor_bootconfig_size + page_size - 1) / page_size
+        //
+        // Note that in version 4 of the vendor boot image, multiple vendor ramdisks can
+        // be included in the vendor boot image. The bootloader can select a subset of
+        // ramdisks to load at runtime. To help the bootloader select the ramdisks, each
+        // ramdisk is tagged with a type tag and a set of hardware identifiers
+        // describing the board, soc or platform that this ramdisk is intended for.
+        //
+        // The vendor ramdisk section is consist of multiple ramdisk images concatenated
+        // one after another, and vendor_ramdisk_size is the size of the section, which
+        // is the total size of all the ramdisks included in the vendor boot image.
+        //
+        // The vendor ramdisk table holds the size, offset, type, name and hardware
+        // identifiers of each ramdisk. The type field denotes the type of its content.
+        // The vendor ramdisk names are unique. The hardware identifiers are specified
+        // in the board_id field in each table entry. The board_id field is consist of a
+        // vector of unsigned integer words, and the encoding scheme is defined by the
+        // hardware vendor.
+        //
+        // For the different type of ramdisks, there are:
+        //    - VENDOR_RAMDISK_TYPE_NONE indicates the value is unspecified.
+        //    - VENDOR_RAMDISK_TYPE_PLATFORM ramdisks contain platform specific bits, so
+        //      the bootloader should always load these into memory.
+        //    - VENDOR_RAMDISK_TYPE_RECOVERY ramdisks contain recovery resources, so
+        //      the bootloader should load these when booting into recovery.
+        //    - VENDOR_RAMDISK_TYPE_DLKM ramdisks contain dynamic loadable kernel
+        //      modules.
+        //
+        // Version 4 of the vendor boot image also adds a bootconfig section to the end
+        // of the image. This section contains Boot Configuration parameters known at
+        // build time. The bootloader is responsible for placing this section directly
+        // after the generic ramdisk, followed by the bootconfig trailer, before
+        // entering the kernel.
+        //
+        // [bootimg.h vendor v4]: https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/heads/main/include/bootimg/bootimg.h#344
+
+        // The vendor_boot partition contains a VendorImageHeader V4.
+        let vendor_data = unsafe { slice::from_raw_parts(vendor_part.data, vendor_part.data_size) };
+        let vendor_header =
+            VendorImageHeader::parse(vendor_data).map_err(AvbError::VendorImageHeaderParseError)?;
+        let VendorImageHeader::V4(vendor_header) = vendor_header else {
+            return Err(AvbError::UnsupportedPartitionHeaderVersion);
+        };
+        let vendor_base = vendor_header._base;
+
+        // This bootloader requires a non-zero vendor ramdisk size.
+        if vendor_base.vendor_ramdisk_size == 0 {
+            return Err(AvbError::InvalidRamdiskSize(0))?;
+        }
+
+        // TODO: Fix the ramdisk selection when these android images
+        // actually have multiple ramdisks. For now they only have
+        // one and enforce that here to simplify parsing.
+        if vendor_header.vendor_ramdisk_table_entry_num != 1 {
+            return Err(AvbError::UnsupportedVendorRamdiskCount(
+                vendor_header.vendor_ramdisk_table_entry_num,
+            ))?;
+        }
+
+        // Page size for the vendor boot partition is specified in
+        // the header.
+        let page_size = u32_to_usize(vendor_base.page_size);
+
+        // Find the section lengths and offsets of each section.
+        // Each section is a multiple of the `page_size`.
+        // The header is at the front of the buffer.
+        let vendor_boot_header_section_bytes = u32_to_usize(vendor_base.header_size)
+            .checked_next_multiple_of(page_size)
+            .ok_or(AvbError::IndexOutOfBounds("vendor header"))?;
+
+        // Length of the 'vendor ramdisk section'.
+        let ramdisk_section_bytes = u32_to_usize(vendor_base.vendor_ramdisk_size)
+            .checked_next_multiple_of(page_size)
+            .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk"))?;
+        // Length of the dtb section.
+        let dtb_section_bytes = u32_to_usize(vendor_base.dtb_size)
+            .checked_next_multiple_of(page_size)
+            .ok_or(AvbError::IndexOutOfBounds("vendor dtb"))?;
+        // Length of the vendor ramdisk table section in bytes.
+        let ramdisk_table_section_bytes = u32_to_usize(vendor_header.vendor_ramdisk_table_size)
+            .checked_next_multiple_of(page_size)
+            .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk table"))?;
+
+        // Expect a zero dtb on an x86 image, warn otherwise.
+        if dtb_section_bytes == 0 {
+            warn!("vendor dtb section is non-zero and ignored.");
+        }
+
+        let bootconfig_size = u32_to_usize(vendor_header.bootconfig_size);
+        // Calculate the offset to the bootconfig section which
+        // is after all the other sections.
+        let bootconfig_offset_bytes = {
+            || {
+                vendor_boot_header_section_bytes
+                    .checked_add(ramdisk_section_bytes)?
+                    .checked_add(dtb_section_bytes)?
+                    .checked_add(ramdisk_table_section_bytes)
+            }
+        }()
+        .ok_or(AvbError::IndexOutOfBounds("bootconfig"))?;
+
+        // NOTE: For now there is only a single ramdisk in the section
+        // future changes must use the ramdisk table to determine which
+        // ramdisk in this section is to be loaded.
+        // Size of the ramdisk if there is a single ramdisk in the section.
+        let ramdisk_size = u32_to_usize(vendor_base.vendor_ramdisk_size);
+        // The ramdisk starts after the vendor header when there is
+        // only a single ramdisk.
+        let ramdisk_offset = vendor_boot_header_section_bytes;
+
+        // Get a slice pointing to the ramdisk offset of
+        // for the length of the ramdisk.
+        let initramfs = ramdisk_offset
+            .checked_add(ramdisk_size)
+            .and_then(|x| vendor_data.get(ramdisk_offset..x))
+            .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
+
+        // Slice into the bootconfig data.
+        let bootconfig = bootconfig_offset_bytes
+            .checked_add(bootconfig_size)
+            .and_then(|x| vendor_data.get(bootconfig_offset_bytes..x))
+            .ok_or(AvbError::IndexOutOfBounds("bootconfig"))?;
+
+        let cmdline = CStr::from_bytes_until_nul(&vendor_base.cmdline)
+            .map_err(AvbError::VendorCommandlineUnterminated)?;
+
+        // Convert the CStr to &str then to CString16.
+        // Return an error if any of those fail.
+        let cmdline = cmdline
+            .to_str()
+            .ok()
+            .and_then(|x| CString16::try_from(x).ok())
+            .ok_or(AvbError::VendorCommandlineMalformed)?;
+
+        // TODO: return bootconfig information in a useful way.
+        // It might need to be modified or packed in a certain way.
+        // Find additional context in
+        // https://android-review.git.corp.google.com/c/platform/external/u-boot/+/1579246/7 for
+        Ok(VendorData {
+            initramfs,
+            cmdline,
+            bootconfig,
+        })
+    }
+}
+
 fn load_kernel(boot_part: &AvbPartitionData) -> Result<ScopedPageAllocation, AvbError> {
     // From the "boot" partition only the kernel is used.
     let kernel_src = BootImageParts::from_avb_boot_partition(boot_part)?.kernel;
@@ -341,7 +542,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let Some(boot) = boot else {
         return Err(AvbError::MissingAvbPartition("boot"));
     };
-    let Some(_vendor_boot) = vendor_boot else {
+    let Some(vendor_boot) = vendor_boot else {
         return Err(AvbError::MissingAvbPartition("vendor_boot"));
     };
     let Some(init_boot) = init_boot else {
@@ -354,6 +555,11 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     // Parse the "generic" `initramfs` from the "init_boot" partition.
     // The initramfs is the only part of this partition that is used.
     let _init_data = BootImageParts::from_avb_boot_partition(init_boot)?;
+
+    // Slice up the vendor boot partition data.
+    let vendor_data = VendorData::from_avb_vendor_partition(vendor_boot)?;
+    debug!("vendor bootconfig_size: {}", vendor_data.bootconfig.len());
+    debug!("vendor cmdline: {}", vendor_data.cmdline);
 
     todo!("allocate, load and return buffers");
 }
