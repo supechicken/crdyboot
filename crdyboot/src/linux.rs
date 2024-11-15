@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #[cfg(feature = "android")]
-use crate::avb::do_avb_verify;
+use crate::avb::{do_avb_verify, AvbError};
 use crate::disk::{GptDisk, GptDiskError};
 #[cfg(feature = "android")]
 use crate::initramfs::set_up_loadfile_protocol;
@@ -141,6 +141,11 @@ pub enum CrdybootError {
     /// Flexor kernel hash is not present in the list of valid hashes.
     #[error("flexor kernel hash is not present in the list of valid hashes")]
     FlexorKernelNotInAllowList,
+
+    /// Failed loading the android image.
+    #[cfg(feature = "android")]
+    #[error("failed to load the android image")]
+    AndroidLoadFailure(#[source] AvbError),
 }
 
 /// Get the kernel command line as a UCS-2 string.
@@ -194,8 +199,7 @@ fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), Crdy
 
 #[cfg(feature = "android")]
 fn avb_load_kernel() -> Result<(), CrdybootError> {
-    // TODO: handle errors!
-    let buffers = do_avb_verify();
+    let buffers = do_avb_verify().map_err(CrdybootError::AndroidLoadFailure)?;
 
     // Measure the kernel into the TPM.
     // TODO: make sure this data buffer length trimmed to not include

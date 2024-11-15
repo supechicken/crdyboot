@@ -5,8 +5,8 @@
 use crate::disk;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
-    avb_slot_verify, AvbHashtreeErrorMode, AvbIOResult, AvbSlotVerifyData, AvbSlotVerifyFlags,
-    AvbSlotVerifyResult, AvbVBMetaData,
+    avb_slot_verify, avb_slot_verify_result_to_string, AvbHashtreeErrorMode, AvbIOResult,
+    AvbSlotVerifyData, AvbSlotVerifyFlags, AvbSlotVerifyResult, AvbVBMetaData,
 };
 use core::ffi::CStr;
 use core::{ptr, slice, str};
@@ -20,6 +20,21 @@ pub struct LoadedBuffersAvb {
     pub kernel_buffer: ScopedPageAllocation,
     pub initramfs_buffer: ScopedPageAllocation,
     pub cmdline: CString16,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AvbError {
+    /// The avb slot verify call failed.
+    #[error("image verification failed: {}", verify_result_to_str(*.0))]
+    AvbVerifyFailure(AvbSlotVerifyResult),
+}
+
+fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
+    // SAFETY: `avb_slot_verify_result_to_string` always returns a valid
+    // pointer to a string literal, so a static lifetime is correct.
+    let s = unsafe { CStr::from_ptr(avb_slot_verify_result_to_string(r)) };
+    // Unwrap is OK, the string is always UTF-8.
+    s.to_str().unwrap()
 }
 
 pub struct AvbDiskOpsImpl;
@@ -108,7 +123,7 @@ fn debug_print_avb_vbmeta_data(verify_data: *const AvbSlotVerifyData) {
 /// Use AVB to verify the partitions and return buffers
 /// including the loaded data from the partitions
 /// necessary to boot the kernel.
-pub fn do_avb_verify() -> LoadedBuffersAvb {
+pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let mut holder = AvbDiskOpsImpl;
     let mut disk_ops_ref = AvbDiskOpsRef(&mut holder);
 
@@ -142,10 +157,9 @@ pub fn do_avb_verify() -> LoadedBuffersAvb {
             &mut verify_data,
         )
     };
-    assert!(
-        !(res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK),
-        "avb_slot_verify not OK with: {res:?}"
-    );
+    if res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK {
+        return Err(AvbError::AvbVerifyFailure(res));
+    }
 
     if log_enabled!(log::Level::Debug) {
         debug_print_avb_vbmeta_data(verify_data);
