@@ -13,6 +13,7 @@ use avb::avb_sys::{
 };
 use bootimg::{BootImage, VendorImageHeader};
 use core::ffi::{CStr, FromBytesUntilNulError};
+use core::ops::Deref;
 use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::{Uefi, UefiImpl};
@@ -27,7 +28,7 @@ use uefi::{cstr16, CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
 pub struct LoadedBuffersAvb {
-    pub kernel_buffer: ScopedPageAllocation,
+    pub kernel_buffer: KernelData,
     pub initramfs_buffer: ScopedPageAllocation,
     pub cmdline: CString16,
 }
@@ -438,7 +439,39 @@ impl<'a> VendorData<'a> {
     }
 }
 
-fn load_kernel(boot_part: &AvbPartitionData) -> Result<ScopedPageAllocation, AvbError> {
+pub struct KernelData {
+    /// Underlying buffer allocated for the referenced data.
+    allocation: ScopedPageAllocation,
+    /// Space in the buffer that is being used.
+    /// The length of the data without the padding.
+    used_bytes: usize,
+}
+
+impl KernelData {
+    /// Create a new `KernelData`
+    ///
+    /// Panics if `used_bytes` > `allocation.len()`
+    pub fn new(allocation: ScopedPageAllocation, used_bytes: usize) -> Self {
+        assert!(used_bytes <= allocation.len());
+        KernelData {
+            allocation,
+            used_bytes,
+        }
+    }
+}
+
+impl Deref for KernelData {
+    type Target = [u8];
+
+    /// Slice to the area of the buffer that is used.
+    fn deref(&self) -> &[u8] {
+        // Unwrap is ok, used bytes is never larger than
+        // the allocation length.
+        self.allocation.get(..self.used_bytes).unwrap()
+    }
+}
+
+fn load_kernel(boot_part: &AvbPartitionData) -> Result<KernelData, AvbError> {
     // From the "boot" partition only the kernel is used.
     let kernel_src = BootImageParts::from_avb_boot_partition(boot_part)?.kernel;
 
@@ -459,9 +492,8 @@ fn load_kernel(boot_part: &AvbPartitionData) -> Result<ScopedPageAllocation, Avb
         .get_mut(..kernel_src.len())
         .unwrap()
         .copy_from_slice(kernel_src);
-    // TODO: pass back the actual kernel length? The callers
-    // might find this useful (to measure for example).
-    Ok(kernel_buffer)
+
+    Ok(KernelData::new(kernel_buffer, kernel_src.len()))
 }
 
 /// Assemble the initramfs by concatenating the vendor and

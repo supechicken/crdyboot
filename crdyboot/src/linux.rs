@@ -203,8 +203,7 @@ fn avb_load_kernel() -> Result<(), CrdybootError> {
     let buffers = do_avb_verify().map_err(CrdybootError::AndroidLoadFailure)?;
 
     // Measure the kernel into the TPM.
-    // TODO: make sure this data buffer length trimmed to not include
-    // the page size padding as relocate will measure the empty space...
+    // Measure only the used space avoiding the extra 0 padding.
     extend_pcr_and_log(PCR_INDEX, &buffers.kernel_buffer);
 
     // TODO: it is known what the size of the kernel is from avb_load, it
