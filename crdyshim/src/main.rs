@@ -14,6 +14,7 @@ extern crate alloc;
 mod fs;
 
 use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use fs::{FileLoader, FileLoaderImpl, FsError};
 use libcrdy::arch::{Arch, PeFileForCurrentArch};
 use libcrdy::entry_point::get_primary_entry_point;
@@ -27,7 +28,7 @@ use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
 use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
 use log::{error, info};
-use sbat::RevocationSbat;
+use sbat::{RevocationSbat, RevocationSbatOwned};
 use uefi::boot::{AllocateType, MemoryType};
 use uefi::prelude::*;
 use uefi::proto::tcg::PcrIndex;
@@ -122,12 +123,120 @@ pub enum CrdyshimError {
 ///
 /// This is implemented as a trait to allow for mocking.
 #[cfg_attr(test, mockall::automock)]
-trait Crdyshim {}
+trait Crdyshim {
+    fn update_and_get_revocations(&self) -> Result<RevocationSbatOwned, CrdyshimError>;
+
+    fn self_revocation_check(&self, revocations: &RevocationSbat) -> Result<(), CrdyshimError>;
+
+    fn allocate_pages(
+        &self,
+        memory_type: MemoryType,
+        num_bytes: usize,
+    ) -> Result<ScopedPageAllocation, CrdyshimError>;
+
+    fn is_secure_boot_enabled(&self) -> bool;
+
+    fn boot_file_loader(&self) -> Result<Box<dyn FileLoader>, CrdyshimError>;
+
+    fn get_public_key(&self) -> ed25519_compact::PublicKey;
+
+    fn extend_pcr_and_log(&self, raw_exe: &[u8]);
+
+    fn next_stage_revocation_check(
+        &self,
+        raw_exe: &[u8],
+        revocations: &RevocationSbat,
+    ) -> Result<(), CrdyshimError>;
+
+    fn relocate_pe_into(&self, src: &[u8], dst: &mut [u8]) -> Result<(), CrdyshimError>;
+
+    fn get_entry_point_offset(&self, relocated_exe: &[u8]) -> Result<u32, CrdyshimError>;
+
+    fn update_mem_attrs(&self, relocated_exe: &[u8]) -> Result<(), CrdyshimError>;
+
+    fn launch_next_stage(
+        &self,
+        relocated_exe: &[u8],
+        entry_point_offset: u32,
+    ) -> Result<(), CrdyshimError>;
+}
 
 /// The real implementation of the `Crdyshim` trait used at runtime.
 struct CrdyshimImpl;
 
-impl Crdyshim for CrdyshimImpl {}
+impl Crdyshim for CrdyshimImpl {
+    fn update_and_get_revocations(&self) -> Result<RevocationSbatOwned, CrdyshimError> {
+        sbat_revocation::update_and_get_revocations().map_err(CrdyshimError::RevocationDataError)
+    }
+
+    fn self_revocation_check(&self, revocations: &RevocationSbat) -> Result<(), CrdyshimError> {
+        sbat_revocation::validate_image(&SBAT, revocations).map_err(CrdyshimError::SelfRevoked)
+    }
+
+    fn allocate_pages(
+        &self,
+        memory_type: MemoryType,
+        num_bytes: usize,
+    ) -> Result<ScopedPageAllocation, CrdyshimError> {
+        ScopedPageAllocation::new(AllocateType::AnyPages, memory_type, num_bytes)
+            .map_err(CrdyshimError::Allocation)
+    }
+
+    fn is_secure_boot_enabled(&self) -> bool {
+        is_secure_boot_enabled(&UefiImpl)
+    }
+
+    fn boot_file_loader(&self) -> Result<Box<dyn FileLoader>, CrdyshimError> {
+        Ok(Box::new(
+            FileLoaderImpl::open_boot_file_system().map_err(CrdyshimError::BootFileSystemError)?,
+        ))
+    }
+
+    fn get_public_key(&self) -> ed25519_compact::PublicKey {
+        get_public_key()
+    }
+
+    fn extend_pcr_and_log(&self, raw_exe: &[u8]) {
+        extend_pcr_and_log(PCR_INDEX, raw_exe);
+    }
+
+    fn next_stage_revocation_check(
+        &self,
+        raw_exe: &[u8],
+        revocations: &RevocationSbat,
+    ) -> Result<(), CrdyshimError> {
+        let pe = PeFileForCurrentArch::parse(raw_exe).map_err(CrdyshimError::InvalidPe)?;
+        sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)
+    }
+
+    fn relocate_pe_into(&self, src: &[u8], dst: &mut [u8]) -> Result<(), CrdyshimError> {
+        let pe = PeFileForCurrentArch::parse(src).map_err(CrdyshimError::InvalidPe)?;
+        relocate_pe_into(&pe, dst).map_err(CrdyshimError::Relocation)
+    }
+
+    fn get_entry_point_offset(&self, relocated_exe: &[u8]) -> Result<u32, CrdyshimError> {
+        let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
+        Ok(get_primary_entry_point(&pe))
+    }
+
+    fn update_mem_attrs(&self, relocated_exe: &[u8]) -> Result<(), CrdyshimError> {
+        let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
+        nx::update_mem_attrs(&pe).map_err(CrdyshimError::MemoryProtection)
+    }
+
+    fn launch_next_stage(
+        &self,
+        relocated_exe: &[u8],
+        entry_point_offset: u32,
+    ) -> Result<(), CrdyshimError> {
+        let next_stage = NextStage {
+            image_data: relocated_exe,
+            load_options: &[],
+            entry_point_offset,
+        };
+        unsafe { next_stage.launch() }.map_err(CrdyshimError::Launch)
+    }
+}
 
 /// Check whether secure boot is enabled or not.
 ///
@@ -237,28 +346,23 @@ fn get_public_key() -> ed25519_compact::PublicKey {
 }
 
 fn load_and_validate_next_stage(
-    _crdyshim: &dyn Crdyshim,
+    crdyshim: &dyn Crdyshim,
     next_stage_name: &CStr16,
 ) -> Result<ScopedPageAllocation, CrdyshimError> {
-    let uefi = &UefiImpl;
-
-    let is_secure_boot_enabled = is_secure_boot_enabled(uefi);
+    let is_secure_boot_enabled = crdyshim.is_secure_boot_enabled();
     info!("secure boot enabled? {}", is_secure_boot_enabled);
 
     // Allocate space for the raw next stage executable.
-    let mut raw_exe_alloc = ScopedPageAllocation::new(
-        AllocateType::AnyPages,
+    let mut raw_exe_alloc = crdyshim.allocate_pages(
         // Use `LOADER_DATA` because this buffer will not be used
         // for code execution. The executable will be relocated in a
         // separate buffer.
         MemoryType::LOADER_DATA,
         NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES,
-    )
-    .map_err(CrdyshimError::Allocation)?;
+    )?;
 
     // Read the next stage executable.
-    let mut file_loader =
-        FileLoaderImpl::open_boot_file_system().map_err(CrdyshimError::BootFileSystemError)?;
+    let mut file_loader = crdyshim.boot_file_loader()?;
     let exe_path = get_executable_path(next_stage_name, Arch::get_current_exe_arch());
     let exe_size = file_loader
         .read_file_into(&exe_path, &mut raw_exe_alloc)
@@ -268,7 +372,7 @@ fn load_and_validate_next_stage(
     let raw_exe = raw_exe_alloc.get(..exe_size).unwrap();
 
     // Read the next stage signature.
-    let raw_signature = match read_signature(&mut file_loader, &exe_path) {
+    let raw_signature = match read_signature(&mut *file_loader, &exe_path) {
         Ok(raw_signature) => raw_signature,
         Err(err) => {
             if is_secure_boot_enabled {
@@ -286,7 +390,7 @@ fn load_and_validate_next_stage(
         }
     };
 
-    let public_key = get_public_key();
+    let public_key = crdyshim.get_public_key();
     info!("embedded public key: {:02x?}", public_key.as_slice());
 
     // Verify the executable's signature.
@@ -317,27 +421,20 @@ fn load_and_validate_next_stage(
     // We measure at this point because we still have access to
     // `raw_exe`. The full `raw_exe_alloc` has extra padding at the end
     // filled with zeroes, which would make the measurement less useful.
-    extend_pcr_and_log(PCR_INDEX, raw_exe);
+    crdyshim.extend_pcr_and_log(raw_exe);
 
     Ok(raw_exe_alloc)
 }
 
 fn execute_relocated_next_stage(
-    _crdyshim: &dyn Crdyshim,
+    crdyshim: &dyn Crdyshim,
     relocated_exe: &[u8],
 ) -> Result<(), CrdyshimError> {
-    let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
+    let entry_point_offset = crdyshim.get_entry_point_offset(relocated_exe)?;
 
-    let entry_point_offset = get_primary_entry_point(&pe);
+    crdyshim.update_mem_attrs(relocated_exe)?;
 
-    nx::update_mem_attrs(&pe).map_err(CrdyshimError::MemoryProtection)?;
-
-    let next_stage = NextStage {
-        image_data: relocated_exe,
-        load_options: &[],
-        entry_point_offset,
-    };
-    unsafe { next_stage.launch() }.map_err(CrdyshimError::Launch)
+    crdyshim.launch_next_stage(relocated_exe, entry_point_offset)
 }
 
 /// Load, validate, and execute the next stage.
@@ -364,18 +461,13 @@ fn load_and_execute_next_stage(
     // Allocate space for the relocated next stage executable. This is
     // the allocation the next stage will actually run from, so it is
     // allocated as type `LOADER_CODE`.
-    let mut relocated_exe_alloc = ScopedPageAllocation::new(
-        AllocateType::AnyPages,
-        MemoryType::LOADER_CODE,
-        NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES,
-    )
-    .map_err(CrdyshimError::Allocation)?;
+    let mut relocated_exe_alloc =
+        crdyshim.allocate_pages(MemoryType::LOADER_CODE, NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES)?;
 
     {
         let raw_exe_alloc = load_and_validate_next_stage(crdyshim, next_stage_name)?;
-        let pe = PeFileForCurrentArch::parse(&raw_exe_alloc).map_err(CrdyshimError::InvalidPe)?;
-        sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)?;
-        relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
+        crdyshim.next_stage_revocation_check(&raw_exe_alloc, revocations)?;
+        crdyshim.relocate_pe_into(&raw_exe_alloc, &mut relocated_exe_alloc)?;
     }
 
     execute_relocated_next_stage(crdyshim, &relocated_exe_alloc)
@@ -391,15 +483,14 @@ fn load_and_execute_next_stage(
 /// This is separated out from `efi_main` so that it can return a
 /// `Result` and propagate errors with `?`.
 fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
-    let revocations = sbat_revocation::update_and_get_revocations()
-        .map_err(CrdyshimError::RevocationDataError)?;
+    let revocations = crdyshim.update_and_get_revocations()?;
 
     // IMPORTANT: this self revocation check must happen as early in the
     // program as possible. If a security flaw is found that
     // necessitates a revocation of crdyshim, that revocation can only
     // occur via SBAT if the flaw is _after_ this point, so we want as
     // little code as possible prior to this point.
-    sbat_revocation::validate_image(&SBAT, &revocations).map_err(CrdyshimError::SelfRevoked)?;
+    crdyshim.self_revocation_check(&revocations)?;
 
     load_and_execute_next_stage(crdyshim, &revocations)
 }
