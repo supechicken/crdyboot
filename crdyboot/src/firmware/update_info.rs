@@ -9,10 +9,10 @@ use alloc::vec::Vec;
 use core::ops::Range;
 use core::{mem, ptr, slice};
 use ext4_view::PathBuf;
-use libcrdy::uefi::{Uefi, VariableKey, VariableKeys};
+use libcrdy::uefi::{Uefi, VariableKeys};
 use log::{info, warn};
 use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
-use uefi::runtime::{Time, VariableAttributes, VariableVendor};
+use uefi::runtime::{Time, VariableAttributes, VariableKey, VariableVendor};
 use uefi::{cstr16, guid, CStr16, CString16};
 
 const FWUPDATE_ATTEMPT_UPDATE: u32 = 0x0000_0001;
@@ -529,13 +529,20 @@ pub(crate) mod tests {
         delete_variable_no_error(&uefi, VAR_NAME, &FWUPDATE_VENDOR);
     }
 
+    fn new_var_key(name: &CStr16, vendor: VariableVendor) -> VariableKey {
+        VariableKey {
+            name: name.to_owned(),
+            vendor,
+        }
+    }
+
     /// Test that `get_update_from_var` skips variables with a vendor
     /// other than `FWUPDATE_VENDOR`.
     #[test]
     fn test_get_update_from_var_other_vendor() {
         let uefi = create_mock_uefi_with_time();
 
-        let var = Ok(VariableKey::new(
+        let var = Ok(new_var_key(
             VAR_NAME,
             VariableVendor(guid!("dfedddc7-c8d3-4250-9e10-0d11d192421b")),
         ));
@@ -549,8 +556,8 @@ pub(crate) mod tests {
         let uefi = create_mock_uefi_with_time();
 
         let vars = [
-            (Ok(VariableKey::new(FWUPDATE_VERBOSE, FWUPDATE_VENDOR))),
-            (Ok(VariableKey::new(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR))),
+            (Ok(new_var_key(FWUPDATE_VERBOSE, FWUPDATE_VENDOR))),
+            (Ok(new_var_key(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR))),
         ];
         for var in vars {
             assert!(get_update_from_var(&uefi, var).unwrap().is_none());
@@ -580,7 +587,7 @@ pub(crate) mod tests {
             Ok(())
         });
 
-        let var = Ok(VariableKey::new(BAD_VAR_NAME, FWUPDATE_VENDOR));
+        let var = Ok(new_var_key(BAD_VAR_NAME, FWUPDATE_VENDOR));
         assert!(matches!(
             get_update_from_var(&uefi, var),
             Err(FirmwareError::UpdateInfoTooShort)
@@ -606,7 +613,7 @@ pub(crate) mod tests {
         info.set_time_attempted(create_time());
         info.set_status(FWUPDATE_ATTEMPTED);
 
-        let vars = VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))]);
+        let vars = VariableKeys::ForTest(vec![Ok(new_var_key(VAR_NAME, FWUPDATE_VENDOR))]);
         assert_eq!(get_update_table(&uefi, vars), [info]);
     }
 
@@ -628,10 +635,10 @@ pub(crate) mod tests {
         info.set_status(FWUPDATE_ATTEMPTED);
 
         let vars = VariableKeys::ForTest(vec![
-            Ok(VariableKey::new(BAD_VAR_NAME, FWUPDATE_VENDOR)),
-            Ok(VariableKey::new(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR)),
-            Ok(VariableKey::new(NO_ATTEMPT_VAR_NAME, FWUPDATE_VENDOR)),
-            Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR)),
+            Ok(new_var_key(BAD_VAR_NAME, FWUPDATE_VENDOR)),
+            Ok(new_var_key(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR)),
+            Ok(new_var_key(NO_ATTEMPT_VAR_NAME, FWUPDATE_VENDOR)),
+            Ok(new_var_key(VAR_NAME, FWUPDATE_VENDOR)),
         ]);
         assert_eq!(get_update_table(&uefi, vars.into_iter()), [info]);
     }
@@ -651,7 +658,7 @@ pub(crate) mod tests {
         });
 
         let vars = VariableKeys::ForTest(vec![
-            Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR));
+            Ok(new_var_key(VAR_NAME, FWUPDATE_VENDOR));
             MAX_UPDATE_CAPSULES + 10
         ]);
         assert_eq!(get_update_table(&uefi, vars), expected);

@@ -14,9 +14,9 @@ use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord}
 use uefi::proto::Protocol;
 use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
-    VariableVendor,
+    VariableKey, VariableVendor,
 };
-use uefi::{CStr16, CString16, Handle, Status};
+use uefi::{CStr16, Handle, Status};
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
 ///
@@ -348,24 +348,6 @@ pub type ScopedLoadedImage = ScopedProtocol<LoadedImage>;
 pub enum PartitionInfo {
     Mbr(MbrPartitionRecord),
     Gpt(GptPartitionEntry),
-}
-
-// TODO(b/365817661): after the next uefi-rs upgrade, we can drop this
-// struct and use `uefi::runtime::VariableKey` directly.
-#[derive(Clone, Debug)]
-pub struct VariableKey {
-    pub vendor: VariableVendor,
-    pub name: CString16,
-}
-
-#[cfg(feature = "test_util")]
-impl VariableKey {
-    pub fn new(name: &CStr16, vendor: VariableVendor) -> Self {
-        Self {
-            name: name.to_owned(),
-            vendor,
-        }
-    }
 }
 
 /// Iterator over all UEFI variable keys.

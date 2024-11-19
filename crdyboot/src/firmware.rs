@@ -235,10 +235,10 @@ pub fn update_firmware() {
 mod tests {
     use super::*;
     use core::ptr;
-    use libcrdy::uefi::{MockUefi, VariableKey, VariableKeys};
+    use libcrdy::uefi::{MockUefi, VariableKeys};
     use load_capsules::MockCapsuleLoader;
     use uefi::boot::{AllocateType, MemoryType};
-    use uefi::runtime::{CapsuleFlags, CapsuleInfo};
+    use uefi::runtime::{CapsuleFlags, CapsuleInfo, VariableKey};
     use uefi::{guid, Guid, Status};
     use update_info::tests::{create_mock_uefi_with_get_var, VAR_NAME};
     use update_info::FWUPDATE_VENDOR;
@@ -410,7 +410,10 @@ mod tests {
     fn test_update_firmware_impl_success() {
         let mut uefi = create_mock_uefi_with_get_var();
         uefi.expect_variable_keys().returning(|| {
-            VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))])
+            VariableKeys::ForTest(vec![Ok(VariableKey {
+                name: VAR_NAME.to_owned(),
+                vendor: FWUPDATE_VENDOR,
+            })])
         });
         let mut loader = MockCapsuleLoader::new();
         loader.expect_load_capsules_from_disk().returning(|_, _| {
@@ -451,7 +454,10 @@ mod tests {
     fn test_update_firmware_impl_no_valid_capsule() {
         let mut uefi = create_mock_uefi_with_get_var();
         uefi.expect_variable_keys().returning(|| {
-            VariableKeys::ForTest(vec![Ok(VariableKey::new(VAR_NAME, FWUPDATE_VENDOR))])
+            VariableKeys::ForTest(vec![Ok(VariableKey {
+                name: VAR_NAME.to_owned(),
+                vendor: FWUPDATE_VENDOR,
+            })])
         });
         let mut loader = MockCapsuleLoader::new();
         loader
