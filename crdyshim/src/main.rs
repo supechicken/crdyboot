@@ -165,61 +165,36 @@ fn is_secure_boot_enabled(uefi: &dyn Uefi) -> bool {
     }
 }
 
-/// Provides methods to read the next-stage bootloader's executable and
-/// signature.
-struct NextStageFileLoader {
-    loader: FileLoaderImpl,
-    executable_path: CString16,
+/// Get the path of an executable in the boot directory for the given
+/// name and arch.
+fn get_executable_path(name: &CStr16, arch: Arch) -> CString16 {
+    let mut path = cstr16!(r"\efi\boot\").to_owned();
+    path.push_str(name);
+    path.push_str(match arch {
+        Arch::Ia32 => cstr16!("ia32.efi"),
+        Arch::X86_64 => cstr16!("x64.efi"),
+    });
+    path
 }
 
-impl NextStageFileLoader {
-    /// Create a new `NextStageFileLoader` for the given name and arch.
-    fn new(name: &CStr16, arch: Arch) -> Result<Self, CrdyshimError> {
-        let mut path = cstr16!(r"\efi\boot\").to_owned();
-        path.push_str(name);
-        path.push_str(match arch {
-            Arch::Ia32 => cstr16!("ia32.efi"),
-            Arch::X86_64 => cstr16!("x64.efi"),
-        });
+/// Read and return the raw signature data. Valid signature data has
+/// a fixed size of 64 bytes; an error will be returned if the file
+/// has the wrong length.
+fn read_signature(
+    file_loader: &mut dyn FileLoader,
+    exe_path: &CStr16,
+) -> Result<[u8; ed25519_compact::Signature::BYTES], CrdyshimError> {
+    let signature_path = fs::replace_final_extension(exe_path, cstr16!("sig"))
+        .ok_or(CrdyshimError::InvalidSignatureName)?;
 
-        Ok(Self {
-            loader: FileLoaderImpl::open_boot_file_system()
-                .map_err(CrdyshimError::BootFileSystemError)?,
-            executable_path: path,
-        })
-    }
-
-    /// Read the raw executable data into `buffer`.
-    fn read_executable<'buf>(
-        &mut self,
-        buffer: &'buf mut [u8],
-    ) -> Result<&'buf mut [u8], CrdyshimError> {
-        let size = self
-            .loader
-            .read_file_into(&self.executable_path, buffer)
-            .map_err(CrdyshimError::ExecutableReadFailed)?;
-        // OK to unwrap: if `read_file_into` succeeded, the size it
-        // returns is less than or equal to the `buffer` length.
-        Ok(buffer.get_mut(..size).unwrap())
-    }
-
-    /// Read and return the raw signature data. Valid signature data has
-    /// a fixed size of 64 bytes; an error will be returned if the file
-    /// has the wrong length.
-    fn read_signature(&mut self) -> Result<[u8; ed25519_compact::Signature::BYTES], CrdyshimError> {
-        let signature_path = fs::replace_final_extension(&self.executable_path, cstr16!("sig"))
-            .ok_or(CrdyshimError::InvalidSignatureName)?;
-
-        let mut signature = [0; ed25519_compact::Signature::BYTES];
-        let read_size = self
-            .loader
-            .read_file_into(&signature_path, &mut signature)
-            .map_err(CrdyshimError::SignatureReadFailed)?;
-        if read_size == signature.len() {
-            Ok(signature)
-        } else {
-            Err(CrdyshimError::InvalidSignatureSize(read_size))
-        }
+    let mut signature = [0; ed25519_compact::Signature::BYTES];
+    let read_size = file_loader
+        .read_file_into(&signature_path, &mut signature)
+        .map_err(CrdyshimError::SignatureReadFailed)?;
+    if read_size == signature.len() {
+        Ok(signature)
+    } else {
+        Err(CrdyshimError::InvalidSignatureSize(read_size))
     }
 }
 
@@ -272,10 +247,19 @@ fn load_and_validate_next_stage(
     )
     .map_err(CrdyshimError::Allocation)?;
 
-    // Read the next stage executable and signature.
-    let mut loader = NextStageFileLoader::new(next_stage_name, Arch::get_current_exe_arch())?;
-    let raw_exe = loader.read_executable(&mut raw_exe_alloc)?;
-    let raw_signature = match loader.read_signature() {
+    // Read the next stage executable.
+    let mut file_loader =
+        FileLoaderImpl::open_boot_file_system().map_err(CrdyshimError::BootFileSystemError)?;
+    let exe_path = get_executable_path(next_stage_name, Arch::get_current_exe_arch());
+    let exe_size = file_loader
+        .read_file_into(&exe_path, &mut raw_exe_alloc)
+        .map_err(CrdyshimError::ExecutableReadFailed)?;
+    // OK to unwrap: if `read_file_into` succeeded, the size it
+    // returns is less than or equal to the buffer length.
+    let raw_exe = raw_exe_alloc.get(..exe_size).unwrap();
+
+    // Read the next stage signature.
+    let raw_signature = match read_signature(&mut file_loader, &exe_path) {
         Ok(raw_signature) => raw_signature,
         Err(err) => {
             if is_secure_boot_enabled {
@@ -456,6 +440,19 @@ mod tests {
                 }
             });
         uefi
+    }
+
+    /// Test that `get_executable_path` works for both arches.
+    #[test]
+    fn test_get_executable_path() {
+        assert_eq!(
+            get_executable_path(cstr16!("abc"), Arch::X86_64),
+            cstr16!(r"\efi\boot\abcx64.efi")
+        );
+        assert_eq!(
+            get_executable_path(cstr16!("abc"), Arch::Ia32),
+            cstr16!(r"\efi\boot\abcia32.efi")
+        );
     }
 
     /// Test that `is_secure_boot_enabled` returns true if secure boot
