@@ -116,6 +116,19 @@ pub enum CrdyshimError {
     Launch(#[source] LaunchError),
 }
 
+/// Represents the high-level flow of the crdyshim application. Crdyshim
+/// has a very linear flow, so control mostly goes through these methods
+/// in order.
+///
+/// This is implemented as a trait to allow for mocking.
+#[cfg_attr(test, mockall::automock)]
+trait Crdyshim {}
+
+/// The real implementation of the `Crdyshim` trait used at runtime.
+struct CrdyshimImpl;
+
+impl Crdyshim for CrdyshimImpl {}
+
 /// Check whether secure boot is enabled or not.
 ///
 /// The firmware communicates secure boot status with a global
@@ -224,6 +237,7 @@ fn get_public_key() -> ed25519_compact::PublicKey {
 }
 
 fn load_and_validate_next_stage(
+    _crdyshim: &dyn Crdyshim,
     next_stage_name: &CStr16,
 ) -> Result<ScopedPageAllocation, CrdyshimError> {
     let uefi = &UefiImpl;
@@ -308,7 +322,10 @@ fn load_and_validate_next_stage(
     Ok(raw_exe_alloc)
 }
 
-fn execute_relocated_next_stage(relocated_exe: &[u8]) -> Result<(), CrdyshimError> {
+fn execute_relocated_next_stage(
+    _crdyshim: &dyn Crdyshim,
+    relocated_exe: &[u8],
+) -> Result<(), CrdyshimError> {
     let pe = PeFileForCurrentArch::parse(relocated_exe).map_err(CrdyshimError::InvalidPe)?;
 
     let entry_point_offset = get_primary_entry_point(&pe);
@@ -336,7 +353,10 @@ fn execute_relocated_next_stage(relocated_exe: &[u8]) -> Result<(), CrdyshimErro
 ///
 /// The relocated executable is then launched, and control transfers to
 /// that executable.
-fn load_and_execute_next_stage(revocations: &RevocationSbat) -> Result<(), CrdyshimError> {
+fn load_and_execute_next_stage(
+    crdyshim: &dyn Crdyshim,
+    revocations: &RevocationSbat,
+) -> Result<(), CrdyshimError> {
     // Base file name of the next stage. The actual file name will have
     // an arch suffix and extension, e.g. "crdybootx64.efi".
     let next_stage_name = cstr16!("crdyboot");
@@ -352,13 +372,13 @@ fn load_and_execute_next_stage(revocations: &RevocationSbat) -> Result<(), Crdys
     .map_err(CrdyshimError::Allocation)?;
 
     {
-        let raw_exe_alloc = load_and_validate_next_stage(next_stage_name)?;
+        let raw_exe_alloc = load_and_validate_next_stage(crdyshim, next_stage_name)?;
         let pe = PeFileForCurrentArch::parse(&raw_exe_alloc).map_err(CrdyshimError::InvalidPe)?;
         sbat_revocation::validate_pe(&pe, revocations).map_err(CrdyshimError::NextStageRevoked)?;
         relocate_pe_into(&pe, &mut relocated_exe_alloc).map_err(CrdyshimError::Relocation)?;
     }
 
-    execute_relocated_next_stage(&relocated_exe_alloc)
+    execute_relocated_next_stage(crdyshim, &relocated_exe_alloc)
 }
 
 /// The main application.
@@ -370,7 +390,7 @@ fn load_and_execute_next_stage(revocations: &RevocationSbat) -> Result<(), Crdys
 ///
 /// This is separated out from `efi_main` so that it can return a
 /// `Result` and propagate errors with `?`.
-fn run() -> Result<(), CrdyshimError> {
+fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
     let revocations = sbat_revocation::update_and_get_revocations()
         .map_err(CrdyshimError::RevocationDataError)?;
 
@@ -381,7 +401,7 @@ fn run() -> Result<(), CrdyshimError> {
     // little code as possible prior to this point.
     sbat_revocation::validate_image(&SBAT, &revocations).map_err(CrdyshimError::SelfRevoked)?;
 
-    load_and_execute_next_stage(&revocations)
+    load_and_execute_next_stage(crdyshim, &revocations)
 }
 
 #[entry]
@@ -389,7 +409,7 @@ fn efi_main() -> Status {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level();
 
-    match run() {
+    match run(&CrdyshimImpl) {
         Ok(()) => unreachable!("next stage did not take control"),
         Err(err) => {
             fail_with_fatal_error!(err);
