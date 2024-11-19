@@ -13,7 +13,8 @@ extern crate alloc;
 
 mod fs;
 
-use fs::FsError;
+use alloc::borrow::ToOwned;
+use fs::{FileLoader, FileLoaderImpl, FsError};
 use libcrdy::arch::{Arch, PeFileForCurrentArch};
 use libcrdy::entry_point::get_primary_entry_point;
 use libcrdy::launch::{LaunchError, NextStage};
@@ -27,10 +28,8 @@ use libcrdy::util::mib_to_bytes;
 use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
 use log::{error, info};
 use sbat::RevocationSbat;
-use uefi::boot::{AllocateType, MemoryType, ScopedProtocol};
+use uefi::boot::{AllocateType, MemoryType};
 use uefi::prelude::*;
-use uefi::proto::media::file::Directory;
-use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::runtime::VariableVendor;
 use uefi::{cstr16, CStr16, CString16};
@@ -169,29 +168,24 @@ fn is_secure_boot_enabled(uefi: &dyn Uefi) -> bool {
 /// Provides methods to read the next-stage bootloader's executable and
 /// signature.
 struct NextStageFileLoader {
-    // This field is used to keep the file system protocol open.
-    _file_system: ScopedProtocol<SimpleFileSystem>,
-    boot_dir: Directory,
-    executable_name: CString16,
+    loader: FileLoaderImpl,
+    executable_path: CString16,
 }
 
 impl NextStageFileLoader {
     /// Create a new `NextStageFileLoader` for the given name and arch.
     fn new(name: &CStr16, arch: Arch) -> Result<Self, CrdyshimError> {
-        let mut executable_name = CString16::from(name);
-        executable_name.push_str(match arch {
+        let mut path = cstr16!(r"\efi\boot\").to_owned();
+        path.push_str(name);
+        path.push_str(match arch {
             Arch::Ia32 => cstr16!("ia32.efi"),
             Arch::X86_64 => cstr16!("x64.efi"),
         });
 
-        let mut file_system =
-            fs::open_boot_file_system().map_err(CrdyshimError::BootFileSystemError)?;
-        let boot_dir = fs::open_efi_boot_directory(&mut file_system)
-            .map_err(CrdyshimError::BootFileSystemError)?;
         Ok(Self {
-            _file_system: file_system,
-            boot_dir,
-            executable_name,
+            loader: FileLoaderImpl::open_boot_file_system()
+                .map_err(CrdyshimError::BootFileSystemError)?,
+            executable_path: path,
         })
     }
 
@@ -200,21 +194,27 @@ impl NextStageFileLoader {
         &mut self,
         buffer: &'buf mut [u8],
     ) -> Result<&'buf mut [u8], CrdyshimError> {
-        fs::read_file(&mut self.boot_dir, &self.executable_name, buffer)
-            .map_err(CrdyshimError::ExecutableReadFailed)
+        let size = self
+            .loader
+            .read_file_into(&self.executable_path, buffer)
+            .map_err(CrdyshimError::ExecutableReadFailed)?;
+        // OK to unwrap: if `read_file_into` succeeded, the size it
+        // returns is less than or equal to the `buffer` length.
+        Ok(buffer.get_mut(..size).unwrap())
     }
 
     /// Read and return the raw signature data. Valid signature data has
     /// a fixed size of 64 bytes; an error will be returned if the file
     /// has the wrong length.
     fn read_signature(&mut self) -> Result<[u8; ed25519_compact::Signature::BYTES], CrdyshimError> {
-        let signature_name = fs::replace_final_extension(&self.executable_name, cstr16!("sig"))
+        let signature_path = fs::replace_final_extension(&self.executable_path, cstr16!("sig"))
             .ok_or(CrdyshimError::InvalidSignatureName)?;
 
         let mut signature = [0; ed25519_compact::Signature::BYTES];
-        let read_size = fs::read_file(&mut self.boot_dir, &signature_name, &mut signature)
-            .map_err(CrdyshimError::SignatureReadFailed)?
-            .len();
+        let read_size = self
+            .loader
+            .read_file_into(&signature_path, &mut signature)
+            .map_err(CrdyshimError::SignatureReadFailed)?;
         if read_size == signature.len() {
             Ok(signature)
         } else {

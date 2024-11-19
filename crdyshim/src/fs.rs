@@ -6,9 +6,9 @@ use libcrdy::fs::get_file_size;
 use log::info;
 use uefi::boot::{self, ScopedProtocol};
 use uefi::data_types::chars::NUL_16;
-use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode};
+use uefi::proto::media::file::{File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::{cstr16, CStr16, CString16, Status};
+use uefi::{CStr16, CString16, Status};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FsError {
@@ -42,61 +42,60 @@ pub enum FsError {
     GetFileSizeFailed(#[source] libcrdy::fs::FsError),
 }
 
-/// Open the file system protocol for the partition that the current
-/// executable was booted from.
-pub fn open_boot_file_system() -> Result<ScopedProtocol<SimpleFileSystem>, FsError> {
-    boot::get_image_file_system(boot::image_handle())
-        .map_err(|err| FsError::OpenBootFileSystemFailed(err.status()))
+#[cfg_attr(test, mockall::automock)]
+pub trait FileLoader {
+    /// Read the contents of `path` into `buffer`. On success, the
+    /// number of bytes read is returned.
+    ///
+    /// An error is returned if:
+    /// * The file could not be opened as a regular file
+    /// * The buffer is not large enough to hold the entire file
+    /// * Any error occurs when reading the file's data
+    fn read_file_into(&mut self, path: &CStr16, buffer: &mut [u8]) -> Result<usize, FsError>;
 }
 
-/// Open the `\efi\boot` directory on the file system.
-pub fn open_efi_boot_directory(sfs: &mut SimpleFileSystem) -> Result<Directory, FsError> {
-    let mut root = sfs
-        .open_volume()
-        .map_err(|err| FsError::OpenFailed(err.status()))?;
-    root.open(
-        cstr16!(r"\efi\boot"),
-        FileMode::Read,
-        FileAttribute::empty(),
-    )
-    .map_err(|err| FsError::OpenFailed(err.status()))?
-    .into_directory()
-    .ok_or(FsError::NotADirectory)
+pub struct FileLoaderImpl {
+    file_system: ScopedProtocol<SimpleFileSystem>,
 }
 
-/// Read the contents of a file named `file_name` in directory `dir`
-/// into `buffer`. Returns the subslice of `buffer` into which data was
-/// read.
-///
-/// An error is returned if:
-/// * The file could not be opened as a regular file
-/// * The buffer is not large enough to hold the entire file
-/// * Any error occurs when reading the file's data
-pub fn read_file<'buf>(
-    dir: &mut Directory,
-    file_name: &CStr16,
-    buffer: &'buf mut [u8],
-) -> Result<&'buf mut [u8], FsError> {
-    info!("reading file {file_name}");
-    let mut file = dir
-        .open(file_name, FileMode::Read, FileAttribute::empty())
-        .map_err(|err| FsError::OpenFailed(err.status()))?
-        .into_regular_file()
-        .ok_or(FsError::IsADirectory)?;
+impl FileLoaderImpl {
+    /// Open the file system for the partition that the current
+    /// executable was booted from.
+    pub fn open_boot_file_system() -> Result<Self, FsError> {
+        let file_system = boot::get_image_file_system(boot::image_handle())
+            .map_err(|err| FsError::OpenBootFileSystemFailed(err.status()))?;
 
-    // Get the size of the file.
-    let file_size = get_file_size(&mut file).map_err(FsError::GetFileSizeFailed)?;
+        Ok(Self { file_system })
+    }
+}
 
-    // Read the file data.
-    match file.read(buffer) {
-        Ok(read_size) => {
-            if read_size == file_size {
-                Ok(buffer.get_mut(..file_size).unwrap())
-            } else {
-                Err(FsError::ReadTruncated)
+impl FileLoader for FileLoaderImpl {
+    fn read_file_into(&mut self, path: &CStr16, buffer: &mut [u8]) -> Result<usize, FsError> {
+        info!("reading file {path}");
+        let mut root = self
+            .file_system
+            .open_volume()
+            .map_err(|err| FsError::OpenFailed(err.status()))?;
+        let mut file = root
+            .open(path, FileMode::Read, FileAttribute::empty())
+            .map_err(|err| FsError::OpenFailed(err.status()))?
+            .into_regular_file()
+            .ok_or(FsError::IsADirectory)?;
+
+        // Get the size of the file.
+        let file_size = get_file_size(&mut file).map_err(FsError::GetFileSizeFailed)?;
+
+        // Read the file data.
+        match file.read(buffer) {
+            Ok(read_size) => {
+                if read_size == file_size {
+                    Ok(file_size)
+                } else {
+                    Err(FsError::ReadTruncated)
+                }
             }
+            Err(err) => Err(FsError::ReadFailed(err.status())),
         }
-        Err(err) => Err(FsError::ReadFailed(err.status())),
     }
 }
 
@@ -135,6 +134,7 @@ pub fn replace_final_extension(file_name: &CStr16, new_extension: &CStr16) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uefi::cstr16;
 
     #[test]
     fn test_replace_final_extension() {
