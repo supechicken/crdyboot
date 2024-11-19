@@ -14,7 +14,7 @@ use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::UefiImpl;
 use log::{debug, log_enabled};
-use uefi::table::boot::{AllocateType, MemoryType};
+use uefi::boot::{AllocateType, MemoryType};
 use uefi::CString16;
 
 /// Allocated buffers from AVB to execute the kernel.
