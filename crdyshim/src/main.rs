@@ -92,10 +92,6 @@ pub enum CrdyshimError {
     #[error("signature file has incorrect size: {0}")]
     InvalidSignatureSize(usize),
 
-    /// The contents of the next stage signature file are not valid.
-    #[error("invalid signature file")]
-    InvalidSignature,
-
     /// The next stage did not pass signature validation.
     #[error("signature verification failed")]
     SignatureVerificationFailed,
@@ -372,30 +368,30 @@ fn load_and_validate_next_stage(
     let raw_exe = raw_exe_alloc.get(..exe_size).unwrap();
 
     // Read the next stage signature.
-    let raw_signature = match read_signature(&mut *file_loader, &exe_path) {
-        Ok(raw_signature) => raw_signature,
-        Err(err) => {
-            if is_secure_boot_enabled {
-                // If secure boot is enabled, a missing signature file is a
-                // fatal error.
-                return Err(err);
-            }
+    let raw_signature: [u8; ed25519_compact::Signature::BYTES] =
+        match read_signature(&mut *file_loader, &exe_path) {
+            Ok(raw_signature) => raw_signature,
+            Err(err) => {
+                if is_secure_boot_enabled {
+                    // If secure boot is enabled, a missing signature file is a
+                    // fatal error.
+                    return Err(err);
+                }
 
-            // If secure boot is not enabled, signature verification is
-            // allowed to fail, so allow the signature file to be
-            // missing entirely. Initialize an arbitrary signature value
-            // here.
-            info!("secure boot is not enabled, allow missing signature file");
-            [0xff; ed25519_compact::Signature::BYTES]
-        }
-    };
+                // If secure boot is not enabled, signature verification is
+                // allowed to fail, so allow the signature file to be
+                // missing entirely. Initialize an arbitrary signature value
+                // here.
+                info!("secure boot is not enabled, allow missing signature file");
+                [0xff; ed25519_compact::Signature::BYTES]
+            }
+        };
 
     let public_key = crdyshim.get_public_key();
     info!("embedded public key: {:02x?}", public_key.as_slice());
 
     // Verify the executable's signature.
-    let signature = ed25519_compact::Signature::from_slice(raw_signature.as_slice())
-        .map_err(|_| CrdyshimError::InvalidSignature)?;
+    let signature = ed25519_compact::Signature::new(raw_signature);
     info!("next-stage signature: {:02x?}", signature.as_slice());
     // TODO(nicholasbishop): clippy is incorrectly warning here. Drop
     // this after the next Rust upgrade.
