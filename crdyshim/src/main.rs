@@ -542,6 +542,7 @@ mod tests {
     /// is enabled.
     #[test]
     fn test_is_secure_boot_enabled_true() {
+        log::set_max_level(log::LevelFilter::Info);
         let uefi = create_mock_for_secure_boot(Some(vec![1]));
         assert_eq!(is_secure_boot_enabled(&uefi), true);
     }
@@ -550,6 +551,7 @@ mod tests {
     /// is disabled.
     #[test]
     fn test_is_secure_boot_enabled_false() {
+        log::set_max_level(log::LevelFilter::Info);
         let uefi = create_mock_for_secure_boot(Some(vec![0]));
         assert_eq!(is_secure_boot_enabled(&uefi), false);
     }
@@ -558,6 +560,7 @@ mod tests {
     /// value.
     #[test]
     fn test_is_secure_boot_enabled_invalid_val() {
+        log::set_max_level(log::LevelFilter::Info);
         let uefi = create_mock_for_secure_boot(Some(vec![2]));
         assert_eq!(is_secure_boot_enabled(&uefi), false);
     }
@@ -565,6 +568,7 @@ mod tests {
     /// Test that `is_secure_boot_enabled` returns false for empty data.
     #[test]
     fn test_is_secure_boot_enabled_empty() {
+        log::set_max_level(log::LevelFilter::Info);
         let uefi = create_mock_for_secure_boot(Some(vec![]));
         assert_eq!(is_secure_boot_enabled(&uefi), false);
     }
@@ -573,6 +577,7 @@ mod tests {
     /// boot variable is missing.
     #[test]
     fn test_is_secure_boot_enabled_not_set() {
+        log::set_max_level(log::LevelFilter::Info);
         let uefi = create_mock_for_secure_boot(None);
         assert_eq!(is_secure_boot_enabled(&uefi), false);
     }
