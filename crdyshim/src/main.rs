@@ -426,17 +426,6 @@ fn load_and_validate_next_stage(
     Ok(raw_exe_alloc)
 }
 
-fn execute_relocated_next_stage(
-    crdyshim: &dyn Crdyshim,
-    relocated_exe: &[u8],
-) -> Result<(), CrdyshimError> {
-    let entry_point_offset = crdyshim.get_entry_point_offset(relocated_exe)?;
-
-    crdyshim.update_mem_attrs(relocated_exe)?;
-
-    crdyshim.launch_next_stage(relocated_exe, entry_point_offset)
-}
-
 /// Load, validate, and execute the next stage.
 ///
 /// This loads the next stage executable from a hardcoded path. The
@@ -470,7 +459,11 @@ fn load_and_execute_next_stage(
         crdyshim.relocate_pe_into(&raw_exe_alloc, &mut relocated_exe_alloc)?;
     }
 
-    execute_relocated_next_stage(crdyshim, &relocated_exe_alloc)
+    let entry_point_offset = crdyshim.get_entry_point_offset(&relocated_exe_alloc)?;
+
+    crdyshim.update_mem_attrs(&relocated_exe_alloc)?;
+
+    crdyshim.launch_next_stage(&relocated_exe_alloc, entry_point_offset)
 }
 
 /// The main application.
