@@ -517,6 +517,7 @@ embed_section!(SBAT, ".sbat", "../sbat.csv");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fs::MockFileLoader;
     use libcrdy::uefi::MockUefi;
     use uefi::runtime::VariableAttributes;
     use uefi::Error;
@@ -598,5 +599,290 @@ mod tests {
     fn test_is_secure_boot_enabled_not_set() {
         let uefi = create_mock_for_secure_boot(None);
         assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+
+    /// Get dev Ed25519 public key.
+    ///
+    /// This corresponds to vboot_reference/tests/devkeys/uefi/crdyshim.pub.pem.
+    fn dev_public_key() -> ed25519_compact::PublicKey {
+        let raw = &[
+            0xe0, 0x0c, 0xd0, 0x7d, 0xb6, 0xf6, 0xe4, 0x8f, 0x2e, 0xf8, 0x9b, 0x58, 0xb2, 0xc1,
+            0xa1, 0x65, 0xb4, 0x0f, 0x37, 0x36, 0xba, 0x0f, 0xed, 0x78, 0x55, 0x0d, 0x33, 0x7d,
+            0xf2, 0x34, 0x2d, 0x33,
+        ];
+        ed25519_compact::PublicKey::from_slice(raw).unwrap()
+    }
+
+    /// Arbitrary test data for the next stage executable.
+    const TEST_EXE: &[u8] = &[b'c'; 1024];
+
+    /// Arbitrary test data for the relocated executable.
+    const TEST_EXE_RELOCATED: &[u8] = &[b'd'; 1024];
+
+    /// Arbitrary entry offset for the next stage executable.
+    const TEST_EXE_ENTRY_OFFSET: u32 = 192;
+
+    /// Ed25519 signature for test kernel data.
+    ///
+    /// This is a valid signature for `TEST_EXE` using the `dev_public_key` key.
+    ///
+    /// Generated with:
+    /// openssl pkeyutl -sign -rawin -in input_file -inkey crdyshim.priv.pem | xxd -i
+    const TEST_EXE_SIGNATURE: &[u8] = &[
+        0xb1, 0xd1, 0x61, 0xc9, 0x17, 0xb3, 0x18, 0x91, 0x94, 0xe3, 0x32, 0x84, 0x8d, 0x0a, 0x9a,
+        0x58, 0x1f, 0xff, 0xe8, 0x32, 0xcc, 0x7a, 0x10, 0xc9, 0x1c, 0x65, 0xe6, 0xa2, 0x37, 0x97,
+        0x6c, 0x3e, 0xb9, 0x66, 0xf6, 0x45, 0x1a, 0xfd, 0x22, 0x5c, 0x7d, 0xc4, 0x9b, 0xd0, 0xb2,
+        0x43, 0x39, 0xaa, 0xdf, 0xe8, 0x8f, 0x89, 0x7f, 0x05, 0xe2, 0x3a, 0xb8, 0x94, 0x74, 0x43,
+        0x20, 0x82, 0x72, 0x00,
+    ];
+
+    fn get_test_revocations() -> RevocationSbatOwned {
+        let revocations = b"sbat,1,2023012900\nshim,2\ngrub,3\ngrub.debian,4";
+        RevocationSbatOwned::parse(revocations).unwrap()
+    }
+
+    fn expect_read_file_exe(file_loader: &mut MockFileLoader) {
+        file_loader
+            .expect_read_file_into()
+            .times(1)
+            .withf(|path, _| path == cstr16!(r"\efi\boot\crdybootx64.efi"))
+            .returning(|_, buf| {
+                buf[..TEST_EXE.len()].copy_from_slice(TEST_EXE);
+                Ok(TEST_EXE.len())
+            });
+    }
+
+    fn expect_read_file_sig(file_loader: &mut MockFileLoader, sig: &[u8]) {
+        let sig = sig.to_vec();
+        file_loader
+            .expect_read_file_into()
+            .times(1)
+            .withf(|path, _| path == cstr16!(r"\efi\boot\crdybootx64.sig"))
+            .returning(move |_, buf| {
+                buf[..sig.len()].copy_from_slice(&sig);
+                Ok(sig.len())
+            });
+    }
+
+    fn expect_update_and_get_revocations(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_update_and_get_revocations()
+            .times(1)
+            .returning(|| Ok(get_test_revocations()));
+    }
+
+    fn expect_self_revocation_check(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_self_revocation_check()
+            .times(1)
+            .withf(|r| r == get_test_revocations())
+            .returning(|_| Ok(()));
+    }
+
+    fn expect_allocate_pages(crdyshim: &mut MockCrdyshim) {
+        for expected_ty in [MemoryType::LOADER_CODE, MemoryType::LOADER_DATA] {
+            crdyshim
+                .expect_allocate_pages()
+                .times(1)
+                .withf(move |ty, size| {
+                    (*ty, *size) == (expected_ty, NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES)
+                })
+                .returning(|ty, size| {
+                    Ok(ScopedPageAllocation::new(AllocateType::AnyPages, ty, size).unwrap())
+                });
+        }
+    }
+
+    fn expect_is_secure_boot_enabled(crdyshim: &mut MockCrdyshim, enabled: bool) {
+        crdyshim
+            .expect_is_secure_boot_enabled()
+            .times(1)
+            .return_const(enabled);
+    }
+
+    fn expect_boot_file_loader(crdyshim: &mut MockCrdyshim, sig: &[u8]) {
+        let mut file_loader = MockFileLoader::new();
+        expect_read_file_exe(&mut file_loader);
+        expect_read_file_sig(&mut file_loader, sig);
+
+        crdyshim
+            .expect_boot_file_loader()
+            .times(1)
+            .return_once(|| Ok(Box::new(file_loader)));
+    }
+
+    fn expect_get_public_key(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_get_public_key()
+            .times(1)
+            .returning(|| dev_public_key());
+    }
+
+    fn expect_extend_pcr_and_log(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_extend_pcr_and_log()
+            .times(1)
+            .withf(|buf| buf == TEST_EXE)
+            .return_const(());
+    }
+
+    fn expect_next_stage_revocation_check(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_next_stage_revocation_check()
+            .times(1)
+            .withf(|buf, revocations| {
+                &buf[..TEST_EXE.len()] == TEST_EXE && revocations == get_test_revocations()
+            })
+            .returning(|_, _| Ok(()));
+    }
+
+    fn expect_relocate_pe_into(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_relocate_pe_into()
+            .times(1)
+            .withf(|src, _| &src[..TEST_EXE.len()] == TEST_EXE)
+            .returning(|_, dst| {
+                dst[..TEST_EXE_RELOCATED.len()].copy_from_slice(TEST_EXE_RELOCATED);
+                Ok(())
+            });
+    }
+
+    fn expect_get_entry_point_offset(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_get_entry_point_offset()
+            .times(1)
+            .withf(|buf| &buf[..TEST_EXE_RELOCATED.len()] == TEST_EXE_RELOCATED)
+            .returning(|_| Ok(TEST_EXE_ENTRY_OFFSET));
+    }
+
+    fn expect_update_mem_attrs(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_update_mem_attrs()
+            .times(1)
+            .withf(|buf| &buf[..TEST_EXE_RELOCATED.len()] == TEST_EXE_RELOCATED)
+            .returning(|_| Ok(()));
+    }
+
+    fn expect_launch_next_stage(crdyshim: &mut MockCrdyshim) {
+        crdyshim
+            .expect_launch_next_stage()
+            .times(1)
+            .withf(|buf, entry| {
+                &buf[..TEST_EXE_RELOCATED.len()] == TEST_EXE_RELOCATED
+                    && *entry == TEST_EXE_ENTRY_OFFSET
+            })
+            .returning(|_, _| Ok(()));
+    }
+
+    /// Test that the whole boot flow succeeds with valid data and
+    /// secure boot enabled.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_succesful_boot_with_secure_boot() {
+        log::set_max_level(log::LevelFilter::Info);
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, true);
+        expect_boot_file_loader(&mut crdyshim, TEST_EXE_SIGNATURE);
+        expect_get_public_key(&mut crdyshim);
+        expect_extend_pcr_and_log(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_relocate_pe_into(&mut crdyshim);
+        expect_get_entry_point_offset(&mut crdyshim);
+        expect_update_mem_attrs(&mut crdyshim);
+        expect_launch_next_stage(&mut crdyshim);
+
+        run(&crdyshim).unwrap();
+    }
+
+    /// Test that signature verification fails with an incorrect signature.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_signature_verification_error_with_secure_boot() {
+        let incorrect_signature = &[0; 64];
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, true);
+        expect_boot_file_loader(&mut crdyshim, incorrect_signature);
+        expect_get_public_key(&mut crdyshim);
+
+        assert!(matches!(
+            run(&crdyshim),
+            Err(CrdyshimError::SignatureVerificationFailed)
+        ));
+    }
+
+    /// Test that signature verification fails with a malformed
+    /// signature.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_signature_too_short_error_with_secure_boot() {
+        let invalid_signature = &[];
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, true);
+        expect_boot_file_loader(&mut crdyshim, invalid_signature);
+
+        assert!(matches!(
+            run(&crdyshim),
+            Err(CrdyshimError::InvalidSignatureSize(0))
+        ));
+    }
+
+    /// Test that the whole boot flow succeeds if the signature is
+    /// incorrect but secure boot is disabled.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_incorrect_signature_without_secure_boot() {
+        let incorrect_signature = &[0; 64];
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, false);
+        expect_boot_file_loader(&mut crdyshim, incorrect_signature);
+        expect_get_public_key(&mut crdyshim);
+        expect_extend_pcr_and_log(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_relocate_pe_into(&mut crdyshim);
+        expect_get_entry_point_offset(&mut crdyshim);
+        expect_update_mem_attrs(&mut crdyshim);
+        expect_launch_next_stage(&mut crdyshim);
+
+        run(&crdyshim).unwrap();
+    }
+
+    /// Test that the whole boot flow succeeds if the signature is
+    /// malformed but secure boot is disabled.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_malformed_signature_without_secure_boot() {
+        let invalid_signature = &[];
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, false);
+        expect_boot_file_loader(&mut crdyshim, invalid_signature);
+        expect_get_public_key(&mut crdyshim);
+        expect_extend_pcr_and_log(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_relocate_pe_into(&mut crdyshim);
+        expect_get_entry_point_offset(&mut crdyshim);
+        expect_update_mem_attrs(&mut crdyshim);
+        expect_launch_next_stage(&mut crdyshim);
+
+        run(&crdyshim).unwrap();
     }
 }
