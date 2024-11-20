@@ -418,46 +418,6 @@ fn load_and_validate_next_stage(
     Ok(raw_exe_alloc)
 }
 
-/// Load, validate, and execute the next stage.
-///
-/// This loads the next stage executable from a hardcoded path. The
-/// executable's signature is also loaded from a hardcoded path, and
-/// used to verify that the executable data has been properly signed by
-/// the expected key.
-///
-/// The validated raw executable is then relocated into a new buffer to
-/// move sections to the correct offset and apply relocations from the
-/// .reloc section.
-///
-/// The relocated executable is then launched, and control transfers to
-/// that executable.
-fn load_and_execute_next_stage(
-    crdyshim: &dyn Crdyshim,
-    revocations: &RevocationSbat,
-) -> Result<(), CrdyshimError> {
-    // Base file name of the next stage. The actual file name will have
-    // an arch suffix and extension, e.g. "crdybootx64.efi".
-    let next_stage_name = cstr16!("crdyboot");
-
-    // Allocate space for the relocated next stage executable. This is
-    // the allocation the next stage will actually run from, so it is
-    // allocated as type `LOADER_CODE`.
-    let mut relocated_exe_alloc =
-        crdyshim.allocate_pages(MemoryType::LOADER_CODE, NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES)?;
-
-    {
-        let raw_exe_alloc = load_and_validate_next_stage(crdyshim, next_stage_name)?;
-        crdyshim.next_stage_revocation_check(&raw_exe_alloc, revocations)?;
-        crdyshim.relocate_pe_into(&raw_exe_alloc, &mut relocated_exe_alloc)?;
-    }
-
-    let entry_point_offset = crdyshim.get_entry_point_offset(&relocated_exe_alloc)?;
-
-    crdyshim.update_mem_attrs(&relocated_exe_alloc)?;
-
-    crdyshim.launch_next_stage(&relocated_exe_alloc, entry_point_offset)
-}
-
 /// The main application.
 ///
 /// The following operations are performed:
@@ -477,7 +437,38 @@ fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
     // little code as possible prior to this point.
     crdyshim.self_revocation_check(&revocations)?;
 
-    load_and_execute_next_stage(crdyshim, &revocations)
+    // Base file name of the next stage. The actual file name will have
+    // an arch suffix and extension, e.g. "crdybootx64.efi".
+    let next_stage_name = cstr16!("crdyboot");
+
+    // Allocate space for the relocated next stage executable. This is
+    // the allocation the next stage will actually run from, so it is
+    // allocated as type `LOADER_CODE`.
+    let mut relocated_exe_alloc =
+        crdyshim.allocate_pages(MemoryType::LOADER_CODE, NEXT_STAGE_ALLOCATION_SIZE_IN_BYTES)?;
+
+    {
+        // This loads the next stage executable from a hardcoded path. The
+        // executable's signature is also loaded from a hardcoded path, and
+        // used to verify that the executable data has been properly signed by
+        // the expected key.
+        let raw_exe_alloc = load_and_validate_next_stage(crdyshim, next_stage_name)?;
+
+        // Check that the next-stage executable has not been revoked via SBAT.
+        crdyshim.next_stage_revocation_check(&raw_exe_alloc, &revocations)?;
+
+        // Relocate the validated raw executable into a new buffer to
+        // move sections to the correct offset and apply relocations
+        // from the .reloc section.
+        crdyshim.relocate_pe_into(&raw_exe_alloc, &mut relocated_exe_alloc)?;
+    }
+
+    let entry_point_offset = crdyshim.get_entry_point_offset(&relocated_exe_alloc)?;
+
+    crdyshim.update_mem_attrs(&relocated_exe_alloc)?;
+
+    // Transfer control to the next-stage executable.
+    crdyshim.launch_next_stage(&relocated_exe_alloc, entry_point_offset)
 }
 
 #[entry]
