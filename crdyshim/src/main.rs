@@ -573,6 +573,15 @@ mod tests {
         assert_eq!(is_secure_boot_enabled(&uefi), false);
     }
 
+    /// Test that `is_secure_boot_enabled` returns false for the
+    /// variable is too large.
+    #[test]
+    fn test_is_secure_boot_enabled_too_large() {
+        log::set_max_level(log::LevelFilter::Info);
+        let uefi = create_mock_for_secure_boot(Some(vec![1, 2]));
+        assert_eq!(is_secure_boot_enabled(&uefi), false);
+    }
+
     /// Test that `is_secure_boot_enabled` returns false if the secure
     /// boot variable is missing.
     #[test]
