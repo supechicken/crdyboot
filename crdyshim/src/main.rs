@@ -661,12 +661,15 @@ mod tests {
             .returning(|| Ok(get_test_revocations()));
     }
 
-    fn expect_self_revocation_check(crdyshim: &mut MockCrdyshim) {
+    fn expect_self_revocation_check(
+        crdyshim: &mut MockCrdyshim,
+        result: Result<(), RevocationError>,
+    ) {
         crdyshim
             .expect_self_revocation_check()
             .times(1)
             .withf(|r| r == get_test_revocations())
-            .returning(|_| Ok(()));
+            .return_once(|_| result.map_err(CrdyshimError::SelfRevoked));
     }
 
     fn expect_allocate_pages(crdyshim: &mut MockCrdyshim) {
@@ -776,7 +779,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
         expect_boot_file_loader(&mut crdyshim, TEST_EXE_SIGNATURE);
@@ -791,6 +794,20 @@ mod tests {
         run(&crdyshim).unwrap();
     }
 
+    /// Test that boot fails if the self-revocation check fails.
+    #[test]
+    fn test_self_revoked() {
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Err(RevocationError::Revoked));
+
+        assert!(matches!(
+            run(&crdyshim),
+            Err(CrdyshimError::SelfRevoked(RevocationError::Revoked))
+        ));
+    }
+
     /// Test that signature verification fails with an incorrect signature.
     #[test]
     #[cfg_attr(miri, ignore)]
@@ -799,7 +816,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
         expect_boot_file_loader(&mut crdyshim, incorrect_signature);
@@ -820,7 +837,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
         expect_boot_file_loader(&mut crdyshim, invalid_signature);
@@ -838,7 +855,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
         expect_boot_file_loader(&mut crdyshim, TEST_EXE_SIGNATURE);
@@ -861,7 +878,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, false);
         expect_boot_file_loader(&mut crdyshim, incorrect_signature);
@@ -885,7 +902,7 @@ mod tests {
         let mut crdyshim = MockCrdyshim::new();
 
         expect_update_and_get_revocations(&mut crdyshim);
-        expect_self_revocation_check(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, false);
         expect_boot_file_loader(&mut crdyshim, invalid_signature);
