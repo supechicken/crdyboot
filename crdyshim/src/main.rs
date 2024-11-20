@@ -654,11 +654,14 @@ mod tests {
             });
     }
 
-    fn expect_update_and_get_revocations(crdyshim: &mut MockCrdyshim) {
+    fn expect_update_and_get_revocations(
+        crdyshim: &mut MockCrdyshim,
+        result: Result<RevocationSbatOwned, RevocationError>,
+    ) {
         crdyshim
             .expect_update_and_get_revocations()
             .times(1)
-            .returning(|| Ok(get_test_revocations()));
+            .return_once(|| result.map_err(CrdyshimError::RevocationDataError));
     }
 
     fn expect_self_revocation_check(
@@ -778,7 +781,7 @@ mod tests {
         log::set_max_level(log::LevelFilter::Info);
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
@@ -794,12 +797,30 @@ mod tests {
         run(&crdyshim).unwrap();
     }
 
+    /// Test that boot fails if the getting/updating revocations fails.
+    #[test]
+    fn test_get_revocation_error() {
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(
+            &mut crdyshim,
+            Err(RevocationError::UndatedEmbeddedRevocations),
+        );
+
+        assert!(matches!(
+            run(&crdyshim),
+            Err(CrdyshimError::RevocationDataError(
+                RevocationError::UndatedEmbeddedRevocations
+            ))
+        ));
+    }
+
     /// Test that boot fails if the self-revocation check fails.
     #[test]
     fn test_self_revoked() {
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Err(RevocationError::Revoked));
 
         assert!(matches!(
@@ -815,7 +836,7 @@ mod tests {
         let incorrect_signature = &[0; 64];
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
@@ -836,7 +857,7 @@ mod tests {
         let invalid_signature = &[];
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
@@ -854,7 +875,7 @@ mod tests {
     fn test_next_stage_revoked() {
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, true);
@@ -877,7 +898,7 @@ mod tests {
         let incorrect_signature = &[0; 64];
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, false);
@@ -901,7 +922,7 @@ mod tests {
         let invalid_signature = &[];
         let mut crdyshim = MockCrdyshim::new();
 
-        expect_update_and_get_revocations(&mut crdyshim);
+        expect_update_and_get_revocations(&mut crdyshim, Ok(get_test_revocations()));
         expect_self_revocation_check(&mut crdyshim, Ok(()));
         expect_allocate_pages(&mut crdyshim);
         expect_is_secure_boot_enabled(&mut crdyshim, false);
