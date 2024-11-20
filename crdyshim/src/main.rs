@@ -716,14 +716,17 @@ mod tests {
             .return_const(());
     }
 
-    fn expect_next_stage_revocation_check(crdyshim: &mut MockCrdyshim) {
+    fn expect_next_stage_revocation_check(
+        crdyshim: &mut MockCrdyshim,
+        result: Result<(), RevocationError>,
+    ) {
         crdyshim
             .expect_next_stage_revocation_check()
             .times(1)
             .withf(|buf, revocations| {
                 &buf[..TEST_EXE.len()] == TEST_EXE && revocations == get_test_revocations()
             })
-            .returning(|_, _| Ok(()));
+            .return_once(|_, _| result.map_err(CrdyshimError::NextStageRevoked));
     }
 
     fn expect_relocate_pe_into(crdyshim: &mut MockCrdyshim) {
@@ -779,7 +782,7 @@ mod tests {
         expect_boot_file_loader(&mut crdyshim, TEST_EXE_SIGNATURE);
         expect_get_public_key(&mut crdyshim);
         expect_extend_pcr_and_log(&mut crdyshim);
-        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim, Ok(()));
         expect_relocate_pe_into(&mut crdyshim);
         expect_get_entry_point_offset(&mut crdyshim);
         expect_update_mem_attrs(&mut crdyshim);
@@ -828,6 +831,27 @@ mod tests {
         ));
     }
 
+    /// Test that boot fails if the next stage has been revoked.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_next_stage_revoked() {
+        let mut crdyshim = MockCrdyshim::new();
+
+        expect_update_and_get_revocations(&mut crdyshim);
+        expect_self_revocation_check(&mut crdyshim);
+        expect_allocate_pages(&mut crdyshim);
+        expect_is_secure_boot_enabled(&mut crdyshim, true);
+        expect_boot_file_loader(&mut crdyshim, TEST_EXE_SIGNATURE);
+        expect_get_public_key(&mut crdyshim);
+        expect_extend_pcr_and_log(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim, Err(RevocationError::Revoked));
+
+        assert!(matches!(
+            run(&crdyshim),
+            Err(CrdyshimError::NextStageRevoked(RevocationError::Revoked))
+        ));
+    }
+
     /// Test that the whole boot flow succeeds if the signature is
     /// incorrect but secure boot is disabled.
     #[test]
@@ -843,7 +867,7 @@ mod tests {
         expect_boot_file_loader(&mut crdyshim, incorrect_signature);
         expect_get_public_key(&mut crdyshim);
         expect_extend_pcr_and_log(&mut crdyshim);
-        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim, Ok(()));
         expect_relocate_pe_into(&mut crdyshim);
         expect_get_entry_point_offset(&mut crdyshim);
         expect_update_mem_attrs(&mut crdyshim);
@@ -867,7 +891,7 @@ mod tests {
         expect_boot_file_loader(&mut crdyshim, invalid_signature);
         expect_get_public_key(&mut crdyshim);
         expect_extend_pcr_and_log(&mut crdyshim);
-        expect_next_stage_revocation_check(&mut crdyshim);
+        expect_next_stage_revocation_check(&mut crdyshim, Ok(()));
         expect_relocate_pe_into(&mut crdyshim);
         expect_get_entry_point_offset(&mut crdyshim);
         expect_update_mem_attrs(&mut crdyshim);
