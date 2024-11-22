@@ -30,9 +30,6 @@ use revocation::self_revocation_check;
 use uefi::prelude::*;
 
 fn run() -> Result<(), CrdybootError> {
-    uefi::helpers::init().expect("failed to initialize uefi::helpers");
-    set_log_level();
-
     // The self-revocation check should happen as early as possible, so
     // do it right after setting the log level.
     self_revocation_check().map_err(CrdybootError::Revocation)?;
@@ -56,6 +53,9 @@ fn run() -> Result<(), CrdybootError> {
 
 #[entry]
 fn efi_main() -> Status {
+    uefi::helpers::init().expect("failed to initialize uefi::helpers");
+    set_log_level();
+
     match run() {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
