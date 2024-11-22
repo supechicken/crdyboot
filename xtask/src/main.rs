@@ -434,6 +434,13 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
         .add_arg("--features")
         .add_arg(CHECK_FEATURES.join(","))
         .run()?;
+    // TODO(nicholasbishop): some tests don't run if the android feature
+    // is enabled. For now, run a second `cargo test` to cover these.
+    Command::new("cargo")
+        .add_arg("test")
+        .add_arg("--features")
+        .add_arg("flexor,firmware_update")
+        .run()?;
 
     if !action.no_miri {
         Command::new("cargo").add_args(["miri", "test"]).run()?;
