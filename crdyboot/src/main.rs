@@ -23,32 +23,75 @@ mod sbat;
 mod vbpubk;
 
 use firmware::update_firmware;
-use libcrdy::{embed_section, fail_with_fatal_error, sbat_revocation, set_log_level};
+use libcrdy::sbat_revocation::{self, RevocationError};
+use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
 use log::info;
 use revocation::self_revocation_check;
 use uefi::prelude::*;
 
-fn run() -> Result<(), CrdybootError> {
-    // The self-revocation check should happen as early as possible, so
-    // do it right after setting the log level.
-    self_revocation_check().map_err(CrdybootError::Revocation)?;
+/// Represents the high-level flow of the crdyboot application. Crdyboot
+/// has a very linear flow, so control just goes through these methods
+/// in order.
+///
+/// This is implemented as a trait to allow for mocking.
+#[cfg_attr(test, mockall::automock)]
+trait Crdyboot {
+    fn self_revocation_check(&self) -> Result<(), CrdybootError>;
+
+    fn update_sbat_revocations(&self) -> Result<(), RevocationError>;
+
+    fn maybe_copy_sbat_revocations(&self);
+
+    fn update_firmware(&self);
+
+    fn load_and_execute_kernel(&self) -> Result<(), CrdybootError>;
+}
+
+/// The real implementation of the `Crdyboot` trait used at runtime.
+struct CrdybootImpl;
+
+impl Crdyboot for CrdybootImpl {
+    fn self_revocation_check(&self) -> Result<(), CrdybootError> {
+        self_revocation_check().map_err(CrdybootError::Revocation)
+    }
+
+    fn update_sbat_revocations(&self) -> Result<(), RevocationError> {
+        sbat_revocation::update_and_get_revocations().map(|_| ())
+    }
+
+    fn maybe_copy_sbat_revocations(&self) {
+        sbat::maybe_copy_sbat_revocations();
+    }
+
+    fn update_firmware(&self) {
+        update_firmware();
+    }
+
+    fn load_and_execute_kernel(&self) -> Result<(), CrdybootError> {
+        load_and_execute_kernel()
+    }
+}
+
+fn run(crdyboot: &dyn Crdyboot) -> Result<(), CrdybootError> {
+    // The self-revocation must happen as early as possible.
+    crdyboot.self_revocation_check()?;
 
     // Update SBAT revocations if necessary.
-    if let Err(err) = sbat_revocation::update_and_get_revocations() {
+    if let Err(err) = crdyboot.update_sbat_revocations() {
         // Log the error but otherwise ignore it.
         info!("failed to update SBAT revocations: {err:?}");
     }
 
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.
-    sbat::maybe_copy_sbat_revocations();
+    crdyboot.maybe_copy_sbat_revocations();
 
     // Install firmware update capsules if needed. This may reset the
     // system.
-    update_firmware();
+    crdyboot.update_firmware();
 
-    load_and_execute_kernel()
+    crdyboot.load_and_execute_kernel()
 }
 
 #[entry]
@@ -56,7 +99,7 @@ fn efi_main() -> Status {
     uefi::helpers::init().expect("failed to initialize uefi::helpers");
     set_log_level();
 
-    match run() {
+    match run(&CrdybootImpl) {
         Ok(()) => unreachable!("kernel did not take control"),
         Err(err) => {
             fail_with_fatal_error!(err);
