@@ -434,6 +434,9 @@ pub(crate) mod tests {
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
+    static VBOOT_TEST_DISK: &[u8] =
+        include_bytes!("../../workspace/crdyboot_test_data/vboot_test_disk.bin");
+
     static STATEFUL_TEST_PARTITION: &[u8] =
         include_bytes!("../../workspace/crdyboot_test_data/stateful_test_partition.bin");
 
@@ -649,7 +652,7 @@ pub(crate) mod tests {
             write_caching: false,
             block_size: 512,
             io_align: 0,
-            last_block: 9999,
+            last_block: usize_to_u64((VBOOT_TEST_DISK.len() / 512) - 1),
             lowest_aligned_lba: 0,
             logical_blocks_per_physical_block: 1,
             optimal_transfer_length_granularity: 1,
@@ -673,11 +676,13 @@ pub(crate) mod tests {
                 return uefi_raw::Status::INVALID_PARAMETER;
             }
 
-            let buffer: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
-            assert_eq!(buffer.len() % 8, 0);
-            for chunk in buffer.chunks_mut(8) {
-                chunk.copy_from_slice(&lba.to_le_bytes());
-            }
+            let dst: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
+
+            let offset = usize::try_from(lba * 512).unwrap();
+            let src = &VBOOT_TEST_DISK[offset..offset + dst.len()];
+
+            dst.copy_from_slice(src);
+
             uefi_raw::Status::SUCCESS
         }
 
@@ -1061,7 +1066,7 @@ pub(crate) mod tests {
         let uefi = create_mock_uefi(BootDrive::Hd1);
         let disk = GptDisk::new(&uefi).unwrap();
         assert_eq!(disk.bytes_per_lba().get(), 512);
-        assert_eq!(disk.lba_count(), 10_000);
+        assert_eq!(disk.lba_count(), usize_to_u64(VBOOT_TEST_DISK.len() / 512));
     }
 
     /// Test that `GptDisk` can read via the Block IO protocol.
@@ -1071,26 +1076,16 @@ pub(crate) mod tests {
 
         let disk = GptDisk::new(&uefi).unwrap();
 
-        fn check_block(block: &[u8], block_num: u64) {
-            assert_eq!(block.len(), 512);
-            let mut expected = Vec::new();
-            for _ in 0..(512 / 8) {
-                expected.extend(block_num.to_le_bytes());
-            }
-            assert_eq!(block, expected, "bad block: {block_num}");
-        }
-
-        // Valid reads.
-        let mut block = vec![0; 512];
-        assert_eq!(disk.read(0, &mut block), ReturnCode::VB2_SUCCESS);
-        check_block(&block, 0);
-        assert_eq!(disk.read(1, &mut block), ReturnCode::VB2_SUCCESS);
-        check_block(&block, 1);
-        assert_eq!(disk.read(9999, &mut block), ReturnCode::VB2_SUCCESS);
-        check_block(&block, 9999);
+        // Valid read.
+        let mut blocks = vec![0; 512 * 3];
+        assert_eq!(disk.read(1, &mut blocks), ReturnCode::VB2_SUCCESS);
+        assert_eq!(blocks, VBOOT_TEST_DISK[512..512 * 4]);
 
         // Out of range starting block.
-        assert_eq!(disk.read(10_000, &mut block), ReturnCode::VB2_ERROR_UNKNOWN);
+        assert_eq!(
+            disk.read(100_000_000, &mut blocks),
+            ReturnCode::VB2_ERROR_UNKNOWN
+        );
     }
 
     /// Test that `GptDisk` can write via the Block IO protocol.
@@ -1105,7 +1100,10 @@ pub(crate) mod tests {
         assert_eq!(disk.write(0, &block), ReturnCode::VB2_SUCCESS);
 
         // Out of range starting block.
-        assert_eq!(disk.write(10_000, &block), ReturnCode::VB2_ERROR_UNKNOWN);
+        assert_eq!(
+            disk.write(100_000_000, &block),
+            ReturnCode::VB2_ERROR_UNKNOWN
+        );
     }
 
     /// Initialize a type matching the `partition_name` field of
