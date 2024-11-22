@@ -143,10 +143,10 @@ impl UefiVarAccess for UefiVarAccessImpl {
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub struct RevocationError {
     /// Revocation level of the executable.
-    executable_level: Level,
+    pub executable_level: Level,
 
     /// Revocation level in the UEFI variable.
-    stored_minimum_level: Level,
+    pub stored_minimum_level: Level,
 }
 
 impl fmt::Display for RevocationError {
