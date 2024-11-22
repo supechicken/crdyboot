@@ -50,6 +50,10 @@ const FLEXOR_KERNEL_MAX_SIZE: usize = mib_to_bytes(32);
 /// List of valid `flexor_vmlinuz` SHA256 hashes.
 const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
 
+/// Size (in bytes) of the buffer into which vboot loads the kernel
+/// data. 64MiB is the current size of the kernel partitions on reven.
+const VBOOT_KERNEL_ALLOC_SIZE: usize = mib_to_bytes(64);
+
 #[derive(Debug, thiserror::Error)]
 pub enum CrdybootError {
     /// Failed to allocate memory.
@@ -230,15 +234,14 @@ fn vboot_load_kernel() -> Result<(), CrdybootError> {
     .map_err(CrdybootError::Allocation)?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
-    // hold the kernel data loaded by vboot. Allocating 64MiB should be
-    // more than enough for the forseeable future.
+    // hold the kernel data loaded by vboot.
     let mut kernel_buffer = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         // Use `LOADER_DATA` because this buffer will not be used
         // for code execution. The executable will be relocated in a
         // separate buffer.
         MemoryType::LOADER_DATA,
-        mib_to_bytes(64),
+        VBOOT_KERNEL_ALLOC_SIZE,
     )
     .map_err(CrdybootError::Allocation)?;
 
