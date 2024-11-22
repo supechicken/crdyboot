@@ -19,7 +19,7 @@ use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
 use libcrdy::tpm::extend_pcr_and_log;
-use libcrdy::uefi::UefiImpl;
+use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
@@ -153,6 +153,18 @@ pub enum CrdybootError {
     AndroidLoadFailure(#[source] AvbError),
 }
 
+/// Represents the high-level flow of loading, verifying, and launching
+/// the kernel.
+///
+/// This is implemented as a trait to allow for mocking.
+#[cfg_attr(test, mockall::automock)]
+trait RunKernel {}
+
+/// The real implementation of the `RunKernel` trait used at runtime.
+struct RunKernelImpl;
+
+impl RunKernel for RunKernelImpl {}
+
 /// Get the kernel command line as a UCS-2 string.
 fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootError> {
     let cmdline = kernel
@@ -182,7 +194,11 @@ fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootE
 /// would be an unnecessary verification.
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
-fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), CrdybootError> {
+fn execute_linux_kernel(
+    _rk: &dyn RunKernel,
+    kernel_data: &[u8],
+    cmdline: &CStr16,
+) -> Result<(), CrdybootError> {
     let pe = PeFile64::parse(kernel_data).map_err(CrdybootError::InvalidPe)?;
 
     nx::update_mem_attrs(&pe).map_err(CrdybootError::MemoryProtection)?;
@@ -203,7 +219,7 @@ fn execute_linux_kernel(kernel_data: &[u8], cmdline: &CStr16) -> Result<(), Crdy
 }
 
 #[cfg(feature = "android")]
-fn avb_load_kernel() -> Result<(), CrdybootError> {
+fn avb_load_kernel(rk: &dyn RunKernel) -> Result<(), CrdybootError> {
     let buffers = do_avb_verify().map_err(CrdybootError::AndroidLoadFailure)?;
 
     // Measure the kernel into the TPM.
@@ -213,19 +229,19 @@ fn avb_load_kernel() -> Result<(), CrdybootError> {
     // TODO: it is known what the size of the kernel is from avb_load, it
     // can be used instead.
     let relocate_size = mib_to_bytes(24);
-    let kernel_reloc_buffer = relocate_kernel(&buffers.kernel_buffer, relocate_size)?;
+    let kernel_reloc_buffer = relocate_kernel(rk, &buffers.kernel_buffer, relocate_size)?;
 
     // Initialize the linux uefi initramfs loader protocol
     // when an initramfs is present.
     // This must stay in scope until after the kernel is loaded.
     let _lf2 = set_up_loadfile_protocol(buffers.initramfs_buffer);
 
-    execute_linux_kernel(&kernel_reloc_buffer, &buffers.cmdline)
+    execute_linux_kernel(rk, &kernel_reloc_buffer, &buffers.cmdline)
 }
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-fn vboot_load_kernel() -> Result<(), CrdybootError> {
+fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
@@ -262,7 +278,7 @@ fn vboot_load_kernel() -> Result<(), CrdybootError> {
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new(&UefiImpl).map_err(CrdybootError::GptDisk)?,
+        &mut GptDisk::new(uefi).map_err(CrdybootError::GptDisk)?,
     ) {
         Ok(loaded_kernel) => {
             vboot_kernel = loaded_kernel;
@@ -304,15 +320,19 @@ fn vboot_load_kernel() -> Result<(), CrdybootError> {
     // kernels with different config options may be slightly larger,
     // so add some extra space. The flexor kernel is about 27.1 MiB, so to
     // accommodate either of these, buffer of 32MiB should be sufficient.
-    let kernel_reloc_buffer = relocate_kernel(kernel_data, mib_to_bytes(32))?;
+    let kernel_reloc_buffer = relocate_kernel(rk, kernel_data, mib_to_bytes(32))?;
 
     // Drop the original kernel buffer, not needed anymore.
     drop(kernel_buffer);
 
-    execute_linux_kernel(&kernel_reloc_buffer, &kernel_cmdline)
+    execute_linux_kernel(rk, &kernel_reloc_buffer, &kernel_cmdline)
 }
 
-fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocation, CrdybootError> {
+fn relocate_kernel(
+    _rk: &dyn RunKernel,
+    data: &[u8],
+    reloc_size: usize,
+) -> Result<ScopedPageAllocation, CrdybootError> {
     // Allocate a buffer to relocate the kernel into.
     let mut kernel_reloc_buffer =
         ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, reloc_size)
@@ -335,12 +355,16 @@ fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocatio
     Ok(kernel_reloc_buffer)
 }
 
+fn load_and_execute_kernel_impl(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), CrdybootError> {
+    #[cfg(feature = "android")]
+    avb_load_kernel(rk)?;
+    vboot_load_kernel(rk, uefi)
+}
+
 /// Load the kernel from the appropriate kernel partition then execute it.
 /// If successful, this function will never return.
 pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
-    #[cfg(feature = "android")]
-    avb_load_kernel()?;
-    vboot_load_kernel()
+    load_and_execute_kernel_impl(&RunKernelImpl, &UefiImpl)
 }
 
 /// Load the flexor kernel.
