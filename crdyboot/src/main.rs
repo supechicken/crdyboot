@@ -126,3 +126,98 @@ embed_section!(
     ".vbpubk",
     concat!(env!("OUT_DIR"), "/padded_vbpubk")
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expect_self_revocation_check(
+        crdyboot: &mut MockCrdyboot,
+        result: Result<(), revocation::RevocationError>,
+    ) {
+        crdyboot
+            .expect_self_revocation_check()
+            .times(1)
+            .return_once(|| result.map_err(CrdybootError::Revocation));
+    }
+
+    fn expect_update_sbat_revocations(
+        crdyboot: &mut MockCrdyboot,
+        result: Result<(), RevocationError>,
+    ) {
+        crdyboot
+            .expect_update_sbat_revocations()
+            .times(1)
+            .return_once(|| result);
+    }
+
+    fn expect_maybe_copy_sbat_revocations(crdyboot: &mut MockCrdyboot) {
+        crdyboot
+            .expect_maybe_copy_sbat_revocations()
+            .times(1)
+            .return_once(|| ());
+    }
+
+    fn expect_update_firmware(crdyboot: &mut MockCrdyboot) {
+        crdyboot
+            .expect_update_firmware()
+            .times(1)
+            .return_once(|| ());
+    }
+
+    fn expect_load_and_execute_kernel(crdyboot: &mut MockCrdyboot) {
+        crdyboot
+            .expect_load_and_execute_kernel()
+            .times(1)
+            .return_once(|| Ok(()));
+    }
+
+    /// Test that `run` succeeds if no errors occur.
+    #[test]
+    fn test_successful_boot() {
+        let mut crdyboot = MockCrdyboot::new();
+
+        expect_self_revocation_check(&mut crdyboot, Ok(()));
+        expect_update_sbat_revocations(&mut crdyboot, Ok(()));
+        expect_maybe_copy_sbat_revocations(&mut crdyboot);
+        expect_update_firmware(&mut crdyboot);
+        expect_load_and_execute_kernel(&mut crdyboot);
+
+        run(&crdyboot).unwrap();
+    }
+
+    /// Test that `run` stops immediately if the self-revocation check
+    /// fails.
+    #[test]
+    fn test_self_revocation_error() {
+        let mut crdyboot = MockCrdyboot::new();
+
+        expect_self_revocation_check(
+            &mut crdyboot,
+            Err(revocation::RevocationError {
+                executable_level: 1,
+                stored_minimum_level: 2,
+            }),
+        );
+
+        assert!(matches!(run(&crdyboot), Err(CrdybootError::Revocation(_))));
+    }
+
+    /// Test that failing to update SBAT revocations is not fatal.
+    #[test]
+    fn test_update_sbat_error() {
+        log::set_max_level(log::LevelFilter::Info);
+        let mut crdyboot = MockCrdyboot::new();
+
+        expect_self_revocation_check(&mut crdyboot, Ok(()));
+        expect_update_sbat_revocations(
+            &mut crdyboot,
+            Err(RevocationError::UndatedEmbeddedRevocations),
+        );
+        expect_maybe_copy_sbat_revocations(&mut crdyboot);
+        expect_update_firmware(&mut crdyboot);
+        expect_load_and_execute_kernel(&mut crdyboot);
+
+        run(&crdyboot).unwrap();
+    }
+}
