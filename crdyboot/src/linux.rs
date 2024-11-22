@@ -43,10 +43,11 @@ use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 /// <https://uapi-group.org/specifications/specs/linux_tpm_pcr_registry/>
 const PCR_INDEX: PcrIndex = PcrIndex(8);
 
-// Max size (32 MiB) for the flexor kernel image, for safety reasons.
-const FLEXOR_KERNEL_MAX_SIZE: usize = 33_554_432;
+/// Maximum size in bytes for the flexor kernel image. If the file is
+/// larger than this limit it will not be loaded.
+const FLEXOR_KERNEL_MAX_SIZE: usize = mib_to_bytes(32);
 
-// List of valid `flexor_vmlinuz` SHA256 hashes.
+/// List of valid `flexor_vmlinuz` SHA256 hashes.
 const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
 
 #[derive(Debug, thiserror::Error)]
