@@ -418,6 +418,7 @@ pub(crate) mod tests {
     use core::ffi::c_void;
     use core::{mem, slice};
     use libcrdy::uefi::MockUefi;
+    use libcrdy::util::usize_to_u64;
     use uefi::data_types::chars::NUL_16;
     use uefi::proto::device_path::build::acpi::Acpi;
     use uefi::proto::device_path::build::hardware::Pci;
@@ -639,7 +640,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn create_mock_uefi(boot_drive: BootDrive) -> MockUefi {
-        static MEDIA: BlockIoMedia = BlockIoMedia {
+        static HD1_MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 123,
             removable_media: false,
             media_present: true,
@@ -653,14 +654,21 @@ pub(crate) mod tests {
             logical_blocks_per_physical_block: 1,
             optimal_transfer_length_granularity: 1,
         };
+        static HD1_STATE_MEDIA: BlockIoMedia = BlockIoMedia {
+            media_id: 456,
+            last_block: usize_to_u64((STATEFUL_TEST_PARTITION.len() / 512) - 1),
+            ..HD1_MEDIA
+        };
 
         unsafe extern "efiapi" fn read_blocks(
             this: *const BlockIoProtocol,
-            _media_id: u32,
+            media_id: u32,
             lba: u64,
             buffer_size: usize,
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
+            assert_eq!(media_id, HD1_MEDIA.media_id);
+
             if lba > (*(*this).media).last_block {
                 return uefi_raw::Status::INVALID_PARAMETER;
             }
@@ -675,11 +683,13 @@ pub(crate) mod tests {
 
         unsafe extern "efiapi" fn write_blocks(
             this: *mut BlockIoProtocol,
-            _media_id: u32,
+            media_id: u32,
             lba: u64,
             _buffer_size: usize,
             _buffer: *const c_void,
         ) -> uefi_raw::Status {
+            assert_eq!(media_id, HD1_MEDIA.media_id);
+
             if lba > (*(*this).media).last_block {
                 return uefi_raw::Status::INVALID_PARAMETER;
             }
@@ -697,11 +707,13 @@ pub(crate) mod tests {
 
         unsafe extern "efiapi" fn read_disk(
             _: *const DiskIoProtocol,
-            _media_id: u32,
+            media_id: u32,
             offset: u64,
             buffer_size: usize,
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
+            assert_eq!(media_id, HD1_STATE_MEDIA.media_id);
+
             let offset = usize::try_from(offset).unwrap();
             let Some(src) = STATEFUL_TEST_PARTITION.get(offset..offset + buffer_size) else {
                 return uefi_raw::Status::INVALID_PARAMETER;
@@ -752,10 +764,17 @@ pub(crate) mod tests {
         });
         uefi.expect_partition_info_for_handle()
             .returning(|handle| Ok(DeviceKind::from_handle(handle).partition_info().unwrap()));
-        uefi.expect_open_block_io().returning(|_| {
+        uefi.expect_open_block_io().returning(|handle| {
+            let media = if handle == DeviceKind::Hd1.handle() {
+                &HD1_MEDIA
+            } else {
+                assert_eq!(handle, DeviceKind::Hd1State.handle());
+                &HD1_STATE_MEDIA
+            };
+
             let bio = BlockIoProtocol {
                 revision: 0,
-                media: &MEDIA,
+                media,
                 reset,
                 read_blocks,
                 write_blocks,
