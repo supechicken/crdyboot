@@ -158,12 +158,52 @@ pub enum CrdybootError {
 ///
 /// This is implemented as a trait to allow for mocking.
 #[cfg_attr(test, mockall::automock)]
-trait RunKernel {}
+// Named lifetimes are required by automock.
+#[allow(clippy::needless_lifetimes)]
+trait RunKernel {
+    fn allocate_pages(
+        &self,
+        memory_type: MemoryType,
+        num_bytes: usize,
+    ) -> Result<ScopedPageAllocation, PageAllocationError>;
+
+    fn get_vbpubk_from_image(&self) -> Result<&'static [u8], VbpubkError>;
+
+    fn extend_pcr_and_log(&self, data: &[u8]);
+
+    fn update_mem_attrs<'a>(&self, pe: &PeFile64<'a>) -> Result<(), NxError>;
+
+    unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
+}
 
 /// The real implementation of the `RunKernel` trait used at runtime.
 struct RunKernelImpl;
 
-impl RunKernel for RunKernelImpl {}
+impl RunKernel for RunKernelImpl {
+    fn allocate_pages(
+        &self,
+        memory_type: MemoryType,
+        num_bytes: usize,
+    ) -> Result<ScopedPageAllocation, PageAllocationError> {
+        ScopedPageAllocation::new(AllocateType::AnyPages, memory_type, num_bytes)
+    }
+
+    fn get_vbpubk_from_image(&self) -> Result<&'static [u8], VbpubkError> {
+        get_vbpubk_from_image()
+    }
+
+    fn extend_pcr_and_log(&self, data: &[u8]) {
+        extend_pcr_and_log(PCR_INDEX, data);
+    }
+
+    fn update_mem_attrs(&self, pe: &PeFile64) -> Result<(), NxError> {
+        nx::update_mem_attrs(pe)
+    }
+
+    unsafe fn launch_next_stage(&self, next_stage: NextStage) -> Result<(), LaunchError> {
+        unsafe { next_stage.launch() }
+    }
+}
 
 /// Get the kernel command line as a UCS-2 string.
 fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootError> {
@@ -195,13 +235,14 @@ fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootE
 ///
 /// [1]: kernel.org/doc/html/latest/x86/boot.html#efi-handover-protocol-deprecated
 fn execute_linux_kernel(
-    _rk: &dyn RunKernel,
+    rk: &dyn RunKernel,
     kernel_data: &[u8],
     cmdline: &CStr16,
 ) -> Result<(), CrdybootError> {
     let pe = PeFile64::parse(kernel_data).map_err(CrdybootError::InvalidPe)?;
 
-    nx::update_mem_attrs(&pe).map_err(CrdybootError::MemoryProtection)?;
+    rk.update_mem_attrs(&pe)
+        .map_err(CrdybootError::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
         Arch::X86_64 => get_primary_entry_point(&pe),
@@ -215,7 +256,7 @@ fn execute_linux_kernel(
         load_options: cmdline.as_bytes(),
         entry_point_offset,
     };
-    unsafe { next_stage.launch() }.map_err(CrdybootError::Launch)
+    unsafe { rk.launch_next_stage(next_stage) }.map_err(CrdybootError::Launch)
 }
 
 #[cfg(feature = "android")]
@@ -242,26 +283,26 @@ fn avb_load_kernel(rk: &dyn RunKernel) -> Result<(), CrdybootError> {
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
 fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), CrdybootError> {
-    let mut workbuf = ScopedPageAllocation::new(
-        AllocateType::AnyPages,
-        MemoryType::LOADER_DATA,
-        LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
-    )
-    .map_err(CrdybootError::Allocation)?;
+    let mut workbuf = rk
+        .allocate_pages(
+            MemoryType::LOADER_DATA,
+            LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
+        )
+        .map_err(CrdybootError::Allocation)?;
 
     // Allocate a fairly large buffer. This buffer must be big enough to
     // hold the kernel data loaded by vboot.
-    let mut kernel_buffer = ScopedPageAllocation::new(
-        AllocateType::AnyPages,
-        // Use `LOADER_DATA` because this buffer will not be used
-        // for code execution. The executable will be relocated in a
-        // separate buffer.
-        MemoryType::LOADER_DATA,
-        VBOOT_KERNEL_ALLOC_SIZE,
-    )
-    .map_err(CrdybootError::Allocation)?;
+    let mut kernel_buffer = rk
+        .allocate_pages(
+            // Use `LOADER_DATA` because this buffer will not be used
+            // for code execution. The executable will be relocated in a
+            // separate buffer.
+            MemoryType::LOADER_DATA,
+            VBOOT_KERNEL_ALLOC_SIZE,
+        )
+        .map_err(CrdybootError::Allocation)?;
 
-    let kernel_verification_key = get_vbpubk_from_image().map_err(CrdybootError::Vbpubk)?;
+    let kernel_verification_key = rk.get_vbpubk_from_image().map_err(CrdybootError::Vbpubk)?;
     info!(
         "kernel_verification_key len={}",
         kernel_verification_key.len()
@@ -310,7 +351,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
     drop(workbuf);
 
     // Measure the kernel into the TPM.
-    extend_pcr_and_log(PCR_INDEX, kernel_data);
+    rk.extend_pcr_and_log(kernel_data);
 
     // Relocate the kernel into an allocated buffer.
     // This buffer will never be freed, unless loading or executing the
