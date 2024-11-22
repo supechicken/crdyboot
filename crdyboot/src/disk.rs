@@ -433,6 +433,9 @@ pub(crate) mod tests {
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
+    static STATEFUL_TEST_PARTITION: &[u8] =
+        include_bytes!("../../workspace/crdyboot_test_data/stateful_test_partition.bin");
+
     pub(crate) enum BootDrive {
         Hd1,
         Hd2,
@@ -699,11 +702,8 @@ pub(crate) mod tests {
             buffer_size: usize,
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
-            static DATA: &[u8] =
-                include_bytes!("../../workspace/crdyboot_test_data/stateful_test_partition.bin");
-
             let offset = usize::try_from(offset).unwrap();
-            let Some(src) = DATA.get(offset..offset + buffer_size) else {
+            let Some(src) = STATEFUL_TEST_PARTITION.get(offset..offset + buffer_size) else {
                 return uefi_raw::Status::INVALID_PARAMETER;
             };
 
