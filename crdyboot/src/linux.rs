@@ -482,12 +482,16 @@ fn validate_flexor_kernel(buffer: &[u8], valid_hashes: &[&str]) -> Result<(), Cr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::disk::tests::{create_mock_uefi, BootDrive};
 
     const TEST_DATA: &[u8] = &[1, 2, 3];
     const FLEXOR_SHA256_TEST_HASHES: &[&str] = &[
         // SHA256 hash for `TEST_DATA`
         "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
     ];
+
+    const TEST_KEY_VBPUBK: &[u8] =
+        include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk");
 
     /// Test that validate_flexor_kernel fails with an invalid kernel image.
     #[test]
@@ -502,5 +506,82 @@ mod tests {
     #[test]
     fn test_validate_flexor_kernel_success() {
         assert!(validate_flexor_kernel(TEST_DATA, FLEXOR_SHA256_TEST_HASHES).is_ok());
+    }
+
+    /// Return true if `data` looks like a valid kernel buffer, false otherwise.
+    fn looks_like_a_kernel(data: &[u8]) -> bool {
+        // Length is a multiple of a kibibyte.
+        (data.len() % 1024) == 0 &&
+            // Fairly big.
+            data.len() > mib_to_bytes(10) &&
+            // Starts with the MZ magic bytes.
+            data[..2] == *b"MZ"
+    }
+
+    fn expect_allocate_pages(rk: &mut MockRunKernel) {
+        for expected_size in [
+            LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
+            VBOOT_KERNEL_ALLOC_SIZE,
+        ] {
+            rk.expect_allocate_pages()
+                .times(1)
+                .withf(move |ty, size| (*ty, *size) == (MemoryType::LOADER_DATA, expected_size))
+                .returning(|ty, size| {
+                    Ok(ScopedPageAllocation::new(AllocateType::AnyPages, ty, size).unwrap())
+                });
+        }
+    }
+
+    fn expect_get_vbpubk_from_image(rk: &mut MockRunKernel) {
+        rk.expect_get_vbpubk_from_image()
+            .times(1)
+            .return_const(Ok(TEST_KEY_VBPUBK));
+    }
+
+    fn expect_extend_pcr_and_log(rk: &mut MockRunKernel) {
+        rk.expect_extend_pcr_and_log()
+            .times(1)
+            .withf(looks_like_a_kernel)
+            .return_const(());
+    }
+
+    fn expect_update_mem_attrs(rk: &mut MockRunKernel) {
+        rk.expect_update_mem_attrs()
+            .times(1)
+            .return_once(|_| Ok(()));
+    }
+
+    fn expect_launch_next_stage(rk: &mut MockRunKernel) {
+        rk.expect_launch_next_stage()
+            .times(1)
+            .withf(|next_stage| {
+                let cmdline = unsafe { CStr16::from_ptr(next_stage.load_options.as_ptr().cast()) };
+                looks_like_a_kernel(next_stage.image_data) &&
+                    // Check for a string that should always be in the
+                    // command line.
+                    cmdline.to_string().contains("cros_efi") &&
+                    // The entry point should be somewhere fairly far
+                    // into the buffer.
+                    next_stage.entry_point_offset > 1024
+            })
+            .return_once(|_| Ok(()));
+    }
+
+    /// Test that `load_and_execute_kernel_impl` succeeds with a valid
+    /// kernel partition loaded by vboot.
+    #[test]
+    #[cfg_attr(any(miri, feature = "android"), ignore)]
+    fn test_vboot_success() {
+        let mut rk = MockRunKernel::new();
+
+        expect_allocate_pages(&mut rk);
+        expect_get_vbpubk_from_image(&mut rk);
+        expect_extend_pcr_and_log(&mut rk);
+        expect_update_mem_attrs(&mut rk);
+        expect_launch_next_stage(&mut rk);
+
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+
+        load_and_execute_kernel_impl(&rk, &uefi).unwrap();
     }
 }
