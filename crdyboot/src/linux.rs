@@ -221,7 +221,7 @@ fn avb_load_kernel() -> Result<(), CrdybootError> {
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
-pub fn vboot_load_kernel() -> Result<(), CrdybootError> {
+fn vboot_load_kernel() -> Result<(), CrdybootError> {
     let mut workbuf = ScopedPageAllocation::new(
         AllocateType::AnyPages,
         MemoryType::LOADER_DATA,
