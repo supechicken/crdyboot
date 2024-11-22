@@ -8,19 +8,19 @@ use uefi::data_types::PhysicalAddress;
 /// Convert a `u32` to a `usize`.
 ///
 /// On the targets we care about, `usize` is always at least as large as `u32`.
-#[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn u32_to_usize(v: u32) -> usize {
-    v.try_into().expect("size of usize is smaller than u32")
+pub const fn u32_to_usize(v: u32) -> usize {
+    assert!(size_of::<u32>() <= size_of::<usize>());
+    v as usize
 }
 
 /// Convert a `usize` to a `u64`.
 ///
 /// On the targets we care about, `u64` is always at least as large as `usize`.
-#[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn usize_to_u64(v: usize) -> u64 {
-    v.try_into().expect("size of u64 is smaller than usize")
+pub const fn usize_to_u64(v: usize) -> u64 {
+    assert!(size_of::<usize>() <= size_of::<u64>());
+    v as u64
 }
 
 /// Embed data in a section of the executable.
