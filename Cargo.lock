@@ -58,6 +58,7 @@ name = "avb"
 version = "1.0.0"
 dependencies = [
  "bindgen",
+ "buildutil",
  "cmem",
  "log",
  "printf-compat",
@@ -134,6 +135,10 @@ version = "1.0.0"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "buildutil"
+version = "0.1.0"
 
 [[package]]
 name = "byteorder"

@@ -3,6 +3,7 @@
 # sync with `src_prepare` in `crdyboot-9999.ebuild`.
 members = [
     "avb",
+    "buildutil",
     "bootimg",
     "cmem",
     "crdyboot",
@@ -22,6 +23,7 @@ repository = "https://chromium.googlesource.com/chromiumos/platform/crdyboot"
 
 [workspace.dependencies]
 bindgen = "0.69.4"
+buildutil = { path = "buildutil" }
 cmem = { path = "cmem" }
 ed25519-compact = { version = "1.0.0", default-features = false }
 libcrdy = { path = "libcrdy" }
