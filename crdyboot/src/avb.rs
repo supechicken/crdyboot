@@ -20,10 +20,8 @@ use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
-use uefi::proto::device_path::acpi::Acpi;
-use uefi::proto::device_path::hardware::Pci;
 use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
-use uefi::proto::device_path::DevicePath;
+use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
 use uefi::{cstr16, CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
@@ -739,10 +737,13 @@ fn get_root_device_linux_path(device_path: &DevicePath) -> Option<CString16> {
     let mut slot_function: Option<(u8, u8)> = None;
 
     for node in device_path.node_iter() {
-        if let Ok(acpi) = <&Acpi>::try_from(node) {
-            domain = acpi.uid();
-        } else if let Ok(pci) = <&Pci>::try_from(node) {
-            slot_function = Some((pci.device(), pci.function()));
+        match DevicePathNodeEnum::try_from(node) {
+            Ok(DevicePathNodeEnum::AcpiAcpi(node)) => domain = node.uid(),
+            Ok(DevicePathNodeEnum::HardwarePci(node)) => {
+                slot_function = Some((node.device(), node.function()));
+                break;
+            }
+            _ => continue,
         }
     }
     let (slot, function) = slot_function?;
@@ -780,6 +781,8 @@ mod tests {
     use uefi::proto::device_path::build;
 
     #[test]
+    /// Test that a common Acpi/Pci/Scsi path generates
+    /// the expected path.
     fn test_android_bootdevice() {
         let mut vec = Vec::new();
         let path = ScopedDevicePath::for_test(
@@ -806,7 +809,83 @@ mod tests {
 
         assert_eq!(
             get_root_device_linux_path(&path),
-            Some(CString16::try_from("pci001d:00/001d:00:2f.e").unwrap())
+            Some(cstr16!("pci001d:00/001d:00:2f.e").to_owned())
         );
+    }
+
+    #[test]
+    /// Test that the first Pci node in a path
+    /// with multiple Pci nodes is used for
+    /// the path.
+    fn test_android_bootdevice_first_pci() {
+        let mut vec = Vec::new();
+        let path = ScopedDevicePath::for_test(
+            build::DevicePathBuilder::with_vec(&mut vec)
+                .push(&build::acpi::Acpi {
+                    hid: 0xefef_010b,
+                    uid: 0x0000_001d,
+                })
+                .unwrap()
+                .push(&build::hardware::Pci {
+                    function: 0xe,
+                    device: 0x2f,
+                })
+                .unwrap()
+                .push(&build::messaging::Usb {
+                    parent_port_number: 0x3,
+                    interface: 0x9,
+                })
+                .unwrap()
+                .push(&build::hardware::Pci {
+                    function: 0x6,
+                    device: 0x41,
+                })
+                .unwrap()
+                .push(&build::messaging::Scsi {
+                    target_id: 50,
+                    logical_unit_number: 60,
+                })
+                .unwrap()
+                .finalize()
+                .unwrap()
+                .to_boxed(),
+        );
+
+        assert_eq!(
+            get_root_device_linux_path(&path),
+            Some(cstr16!("pci001d:00/001d:00:2f.e").to_owned())
+        );
+    }
+
+    #[test]
+    /// Test that a path without a Pci node does not
+    /// generate a path.
+    /// Additionally, test that a Usb node is not
+    /// mistaken as a Pci node.
+    fn test_android_bootdevice_no_pci() {
+        let mut vec = Vec::new();
+        let path = ScopedDevicePath::for_test(
+            build::DevicePathBuilder::with_vec(&mut vec)
+                .push(&build::acpi::Acpi {
+                    hid: 0xefef_010b,
+                    uid: 0x0000_001d,
+                })
+                .unwrap()
+                .push(&build::messaging::Usb {
+                    parent_port_number: 0x3,
+                    interface: 0x9,
+                })
+                .unwrap()
+                .push(&build::messaging::Scsi {
+                    target_id: 50,
+                    logical_unit_number: 60,
+                })
+                .unwrap()
+                .finalize()
+                .unwrap()
+                .to_boxed(),
+        );
+
+        assert_eq!(get_root_device_linux_path(&path), None);
     }
 }
