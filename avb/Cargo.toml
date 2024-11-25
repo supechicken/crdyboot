@@ -14,3 +14,4 @@ printf-compat.workspace = true
 
 [build-dependencies]
 bindgen.workspace = true
+buildutil.workspace = true
