@@ -2,82 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use buildutil::{path_to_str, rerun_if_changed, Target};
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Target {
-    UefiI686,
-    UefiX86_64,
-    Host,
-}
-
-impl Target {
-    /// Read the target from the `TARGET` env var.
-    fn from_env() -> Target {
-        let target = env::var("TARGET").unwrap();
-        match target.as_str() {
-            "i686-unknown-uefi" => Self::UefiI686,
-            "x86_64-unknown-uefi" => Self::UefiX86_64,
-            // For everything else, assume it's a host build
-            // (e.g. "cargo test").
-            _ => Self::Host,
-        }
-    }
-
-    /// True if this is a UEFI target, false if it's a host target.
-    fn is_uefi(self) -> bool {
-        match self {
-            Self::UefiI686 | Self::UefiX86_64 => true,
-            Self::Host => false,
-        }
-    }
-
-    /// Get a target triple to override the default C compiler
-    /// target. Returns None if this is a host build so that the default
-    /// target is used in that case.
-    ///
-    /// The targets chosen here match those in the `cc` crate:
-    /// https://github.com/rust-lang/cc-rs/pull/623/files
-    fn c_target_override(self) -> Option<&'static str> {
-        match self {
-            Self::UefiI686 => Some("i686-unknown-windows-gnu"),
-            Self::UefiX86_64 => Some("x86_64-unknown-windows-gnu"),
-            Self::Host => None,
-        }
-    }
-
-    fn vboot_build_subdir(self) -> &'static str {
-        self.c_target_override().unwrap_or("host")
-    }
-
-    fn fw_arch(self) -> &'static str {
-        match self {
-            Self::UefiI686 => "i386",
-            Self::UefiX86_64 | Self::Host => "amd64",
-        }
-    }
-}
-
-/// Convert a `Path` to a `str`, or panic if the path isn't UTF-8.
-fn path_to_str(path: &Path) -> &str {
-    if let Some(s) = path.to_str() {
-        s
-    } else {
-        panic!("{} is not a UTF-8 path", path.display());
-    }
-}
-
-fn rerun_if_changed<P: AsRef<Path>>(path: P) {
-    println!("cargo:rerun-if-changed={}", path_to_str(path.as_ref()));
-}
 
 /// Build vboot_reference's fwlib.
 fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let vboot_build_dir = out_dir
-        .join("vboot_fw_build")
-        .join(target.vboot_build_subdir());
+    let vboot_build_dir = out_dir.join("vboot_fw_build").join(target.build_subdir());
 
     // Delete the output directory if it already exists, to ensure a
     // clean build. This is useful because makefiles are never 100%
