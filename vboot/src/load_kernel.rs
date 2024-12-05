@@ -106,6 +106,13 @@ unsafe fn init_vb2_context(
 ) -> Result<*mut vboot_sys::vb2_context, LoadKernelError> {
     let mut ctx_ptr = ptr::null_mut();
 
+    // A slice created from an empty array will not have a valid address
+    // in memory, so return early to avoid passing an invalid pointer to
+    // the C API.
+    if packed_pubkey.is_empty() {
+        return Err(LoadKernelError::PubkeyTooSmall(0));
+    }
+
     let packed_pubkey_len = u32::try_from(packed_pubkey.len())
         .map_err(|_| LoadKernelError::BadNumericConversion("pubkey length"))?;
 
@@ -403,6 +410,36 @@ mod tests {
                 LoadKernelError::LoadKernelFailed(ReturnCode::VB2_ERROR_LK_NO_KERNEL_FOUND)
             ),
             expected
+        );
+    }
+
+    /// Test that `init_vb2_context` fails with an invalid key.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_init_vb2_context_invalid_key() {
+        let invalid_key = &[1, 2, 3];
+        let mut workbuf = vec![0; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
+        assert_eq!(
+            unsafe { init_vb2_context(invalid_key, &mut workbuf) },
+            Err(LoadKernelError::InjectKernelSubkeyFailed(
+                ReturnCode::VB2_ERROR_INSIDE_MEMBER_OUTSIDE
+            ))
+        );
+    }
+
+    /// Test that `init_vb2_context` fails with an empty key.
+    ///
+    /// Rust does not allocate memory for an empty array. Calling
+    /// `.as_ptr()` on the empty slice returns `0x1`. This is not safe
+    /// to pass to the C API, since it will try to dereference the
+    /// invalid address.
+    #[test]
+    fn test_init_vb2_context_empty_key() {
+        let invalid_key = &[];
+        let mut workbuf = vec![0; LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE];
+        assert_eq!(
+            unsafe { init_vb2_context(invalid_key, &mut workbuf) },
+            Err(LoadKernelError::PubkeyTooSmall(0))
         );
     }
 
