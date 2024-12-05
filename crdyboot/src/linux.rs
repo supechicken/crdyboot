@@ -460,6 +460,9 @@ fn validate_flexor_kernel(buffer: &[u8], valid_hashes: &[&str]) -> Result<(), Cr
 mod tests {
     use super::*;
     use crate::disk::tests::{create_mock_uefi, BootDrive};
+    use crate::vbpubk::tests::create_test_pe;
+    use core::ptr;
+    use libcrdy::fs::MockFileLoader;
 
     const TEST_DATA: &[u8] = &[1, 2, 3];
     const FLEXOR_SHA256_TEST_HASHES: &[&str] = &[
@@ -489,10 +492,13 @@ mod tests {
     fn looks_like_a_kernel(data: &[u8]) -> bool {
         // Length is a multiple of a kibibyte.
         (data.len() % 1024) == 0 &&
-            // Fairly big.
-            data.len() > mib_to_bytes(10) &&
             // Starts with the MZ magic bytes.
             data[..2] == *b"MZ"
+    }
+
+    fn get_sfs_handle() -> Handle {
+        static IMAGE_HANDLE: u8 = 234u8;
+        unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
     }
 
     fn expect_allocate_pages(rk: &mut MockRunKernel) {
@@ -509,10 +515,10 @@ mod tests {
         }
     }
 
-    fn expect_get_vbpubk_from_image(rk: &mut MockRunKernel) {
+    fn expect_get_vbpubk_from_image(rk: &mut MockRunKernel, vbpubk: &'static [u8]) {
         rk.expect_get_vbpubk_from_image()
             .times(1)
-            .return_const(Ok(TEST_KEY_VBPUBK));
+            .return_const(Ok(vbpubk));
     }
 
     fn expect_extend_pcr_and_log(rk: &mut MockRunKernel) {
@@ -544,6 +550,39 @@ mod tests {
             .return_once(|_| Ok(()));
     }
 
+    fn expect_is_flexor_enabled(rk: &mut MockRunKernel) {
+        rk.expect_is_flexor_enabled().times(1).return_const(true);
+    }
+
+    fn expect_get_valid_flexor_sha256_hashes(rk: &mut MockRunKernel) {
+        rk.expect_get_valid_flexor_sha256_hashes()
+            .times(1)
+            .return_const(
+                [
+                    // Hash of `create_test_pe(1)`.
+                    "83935b989fca584b6123b6d45586a31b92968bcc5a5a46e2b940c9d731d8915b",
+                ]
+                .as_slice(),
+            );
+    }
+
+    fn expect_open_file_loader(rk: &mut MockRunKernel) {
+        rk.expect_open_file_loader()
+            .times(1)
+            .withf(|handle| *handle == get_sfs_handle())
+            .returning(|_| {
+                let mut loader = MockFileLoader::new();
+                loader
+                    .expect_read_file_to_vec()
+                    .times(1)
+                    .withf(|path, max_size| {
+                        path == cstr16!(r"flexor_vmlinuz") && *max_size == FLEXOR_KERNEL_MAX_SIZE
+                    })
+                    .returning(|_, _| Ok(create_test_pe(1)));
+                Ok(Box::new(loader))
+            });
+    }
+
     /// Test that `load_and_execute_kernel_impl` succeeds with a valid
     /// kernel partition loaded by vboot.
     #[test]
@@ -552,12 +591,36 @@ mod tests {
         let mut rk = MockRunKernel::new();
 
         expect_allocate_pages(&mut rk);
-        expect_get_vbpubk_from_image(&mut rk);
+        expect_get_vbpubk_from_image(&mut rk, TEST_KEY_VBPUBK);
         expect_extend_pcr_and_log(&mut rk);
         expect_update_mem_attrs(&mut rk);
         expect_launch_next_stage(&mut rk);
 
         let uefi = create_mock_uefi(BootDrive::Hd1);
+
+        load_and_execute_kernel_impl(&rk, &uefi).unwrap();
+    }
+
+    /// Test that `load_and_execute_kernel_impl` successfully loads a
+    /// flexor kernel after failing to load via vboot.
+    #[test]
+    #[cfg_attr(any(miri, feature = "android"), ignore)]
+    fn test_flexor_success() {
+        let mut rk = MockRunKernel::new();
+
+        expect_allocate_pages(&mut rk);
+        expect_get_vbpubk_from_image(&mut rk, &[1, 2, 3]);
+        expect_extend_pcr_and_log(&mut rk);
+        expect_update_mem_attrs(&mut rk);
+        expect_launch_next_stage(&mut rk);
+        expect_is_flexor_enabled(&mut rk);
+        expect_get_valid_flexor_sha256_hashes(&mut rk);
+        expect_open_file_loader(&mut rk);
+
+        let mut uefi = create_mock_uefi(BootDrive::Hd1);
+        uefi.expect_find_simple_file_system_handles()
+            .times(1)
+            .returning(|| Ok(vec![get_sfs_handle()]));
 
         load_and_execute_kernel_impl(&rk, &uefi).unwrap();
     }
