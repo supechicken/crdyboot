@@ -125,16 +125,12 @@ pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
 /// is updated with raw data from the file.
 ///
 /// An error is returned when:
-///  * The file could not be fully read
+///  * The amount of data read does not match the buffer size
 ///  * An error occurs when reading the file data
-pub fn read_regular_file(
-    file: &mut RegularFile,
-    file_size: usize,
-    buffer: &mut [u8],
-) -> Result<(), FsError> {
+pub fn read_regular_file(file: &mut RegularFile, buffer: &mut [u8]) -> Result<(), FsError> {
     match file.read(buffer) {
         Ok(read_size) => {
-            if read_size == file_size {
+            if read_size == buffer.len() {
                 return Ok(());
             }
             Err(FsError::ReadTruncated)

@@ -446,8 +446,7 @@ fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
         let mut buffer: Vec<u8> = vec![0; file_size];
 
         // Read file contents into a buffer.
-        read_regular_file(&mut file, file_size, &mut buffer)
-            .map_err(CrdybootError::ReadFileFailed)?;
+        read_regular_file(&mut file, &mut buffer).map_err(CrdybootError::ReadFileFailed)?;
 
         // Continue looking for other valid flexor images.
         if validate_flexor_kernel(&buffer, VALID_FLEXOR_SHA256_HASHES).is_err() {
