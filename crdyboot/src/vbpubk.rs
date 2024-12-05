@@ -134,7 +134,6 @@ mod tests {
             characteristics: object::pe::IMAGE_FILE_EXECUTABLE_IMAGE,
             major_linker_version: 0,
             minor_linker_version: 0,
-            // TODO?
             address_of_entry_point: 0,
             image_base: 0,
             major_operating_system_version: 0,

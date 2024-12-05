@@ -11,8 +11,8 @@ extern "C" fn vb2ex_abort() {
 
 #[no_mangle]
 extern "C" fn vb2ex_mtime() -> u32 {
-    // TODO: I think this is only used for timing how long stuff takes, in
-    // which case it's fine to keep this as a stub.
+    // This is only used to time how long operations take. We don't use
+    // that functionality, so no need to return a real value.
     0
 }
 
