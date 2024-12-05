@@ -269,7 +269,12 @@ fn run_cargo_deny() -> Result<()> {
 /// Generate a code coverage report.
 fn run_coverage(action: &CoverageAction) -> Result<()> {
     let mut cmd = Command::with_args("cargo", ["llvm-cov", "--html"]);
-    for pkg in [Package::Crdyboot, Package::Crdyshim, Package::Libcrdy] {
+    for pkg in [
+        Package::Crdyboot,
+        Package::Crdyshim,
+        Package::Libcrdy,
+        Package::Vboot,
+    ] {
         cmd.add_arg_pair("-p", pkg.name());
     }
     if action.open {

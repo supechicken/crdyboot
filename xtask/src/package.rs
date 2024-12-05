@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 /// Packages in the root workspace.
-#[expect(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Package {
     Crdyboot,
