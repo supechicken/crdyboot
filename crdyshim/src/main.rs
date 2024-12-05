@@ -5,7 +5,6 @@
 #![deny(clippy::arithmetic_side_effects)]
 #![deny(clippy::indexing_slicing)]
 #![deny(clippy::pedantic)]
-#![expect(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 
@@ -15,9 +14,9 @@ mod fs;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use fs::{FileLoader, FileLoaderImpl, FsError};
 use libcrdy::arch::{Arch, PeFileForCurrentArch};
 use libcrdy::entry_point::get_primary_entry_point;
+use libcrdy::fs::{FileLoader, FileLoaderImpl, FsError};
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
@@ -493,7 +492,7 @@ embed_section!(SBAT, ".sbat", "../sbat.csv");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fs::MockFileLoader;
+    use libcrdy::fs::MockFileLoader;
     use libcrdy::uefi::MockUefi;
     use uefi::runtime::VariableAttributes;
     use uefi::Error;
