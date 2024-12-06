@@ -154,6 +154,8 @@ trait RunKernel {
 
     unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
 
+    fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str];
+
     fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError>;
 }
 
@@ -183,6 +185,10 @@ impl RunKernel for RunKernelImpl {
 
     unsafe fn launch_next_stage(&self, next_stage: NextStage) -> Result<(), LaunchError> {
         unsafe { next_stage.launch() }
+    }
+
+    fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str] {
+        VALID_FLEXOR_SHA256_HASHES
     }
 
     fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError> {
@@ -407,6 +413,8 @@ fn load_flexor_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<Vec<u8>, Cr
         .find_simple_file_system_handles()
         .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
 
+    let valid_hashes = rk.get_valid_flexor_sha256_hashes();
+
     // Iterate over all the file system handles.
     for handle in handles_buffer {
         let mut file_loader = rk.open_file_loader(handle)?;
@@ -416,7 +424,7 @@ fn load_flexor_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<Vec<u8>, Cr
             continue;
         };
 
-        if validate_flexor_kernel(&buffer, VALID_FLEXOR_SHA256_HASHES).is_err() {
+        if validate_flexor_kernel(&buffer, valid_hashes).is_err() {
             // Continue looking for other valid flexor images.
             info!("flexor kernel validation failed.");
             continue;
