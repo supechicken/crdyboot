@@ -154,6 +154,8 @@ trait RunKernel {
 
     unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
 
+    fn is_flexor_enabled(&self) -> bool;
+
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str];
 
     fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError>;
@@ -185,6 +187,10 @@ impl RunKernel for RunKernelImpl {
 
     unsafe fn launch_next_stage(&self, next_stage: NextStage) -> Result<(), LaunchError> {
         unsafe { next_stage.launch() }
+    }
+
+    fn is_flexor_enabled(&self) -> bool {
+        cfg!(feature = "flexor")
     }
 
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str] {
@@ -323,7 +329,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
         Err(err) => {
             // When load kernel fails, fallback to load flexor if the feature is
             // enabled.
-            if cfg!(feature = "flexor") {
+            if rk.is_flexor_enabled() {
                 flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = CString16::try_from(
