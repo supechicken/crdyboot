@@ -93,16 +93,7 @@ impl FileLoaderImpl {
 
 impl FileLoader for FileLoaderImpl {
     fn read_file_into(&mut self, path: &CStr16, buffer: &mut [u8]) -> Result<usize, FsError> {
-        info!("reading file {path}");
-        let mut root = self
-            .file_system
-            .open_volume()
-            .map_err(|err| FsError::OpenFailed(err.status()))?;
-        let mut file = root
-            .open(path, FileMode::Read, FileAttribute::empty())
-            .map_err(|err| FsError::OpenFailed(err.status()))?
-            .into_regular_file()
-            .ok_or(FsError::IsADirectory)?;
+        let mut file = self.open_file(path)?;
 
         // Get the size of the file.
         let file_size = get_file_size(&mut file)?;
@@ -119,6 +110,24 @@ impl FileLoader for FileLoaderImpl {
         read_regular_file(&mut file, buffer)?;
 
         Ok(buffer.len())
+    }
+}
+
+impl FileLoaderImpl {
+    /// Open `path` as a regular file.
+    ///
+    /// Returns an error if the file does not exist, cannot be opened,
+    /// or is a directory.
+    fn open_file(&mut self, path: &CStr16) -> Result<RegularFile, FsError> {
+        info!("reading file {path}");
+        let mut root = self
+            .file_system
+            .open_volume()
+            .map_err(|err| FsError::OpenFailed(err.status()))?;
+        root.open(path, FileMode::Read, FileAttribute::empty())
+            .map_err(|err| FsError::OpenFailed(err.status()))?
+            .into_regular_file()
+            .ok_or(FsError::IsADirectory)
     }
 }
 
