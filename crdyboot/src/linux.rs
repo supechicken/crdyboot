@@ -9,11 +9,11 @@ use crate::disk::{GptDisk, GptDiskError};
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
+use alloc::format;
 use alloc::vec::Vec;
-use alloc::{format, vec};
 use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
-use libcrdy::fs::{get_file_size, read_regular_file, FsError};
+use libcrdy::fs::{FileLoader, FileLoaderImpl};
 use libcrdy::launch::{LaunchError, NextStage};
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
@@ -25,7 +25,6 @@ use log::info;
 use object::read::pe::PeFile64;
 use sha2::{Digest, Sha256};
 use uefi::boot::{self, AllocateType, MemoryType};
-use uefi::proto::media::file::{File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::{cstr16, CStr16, CString16, Status};
@@ -117,26 +116,6 @@ pub enum CrdybootError {
     /// Failed to open the `SimpleFileSystem` protocol.
     #[error("failed to open protocol: {0}")]
     OpenSimpleFileSystemProtocolFailed(Status),
-
-    /// Failed to open a Volume.
-    #[error("failed to open volume: {0}")]
-    OpenVolumeFailed(Status),
-
-    /// Failed to convert to a regular file.
-    #[error("failed to convert to a regular file")]
-    RegularFileConversionFailed,
-
-    /// Failed to get the size of a file.
-    #[error("failed to get the file size")]
-    GetFileSizeFailed(#[source] FsError),
-
-    /// Flexor kernel image size is too big.
-    #[error("flexor kernel image size is too big: {0}")]
-    FlexorKernelSizeTooBig(usize),
-
-    /// Failed to read file.
-    #[error("failed to read file")]
-    ReadFileFailed(#[source] FsError),
 
     /// Failed to load the flexor kernel.
     #[error("failed to load the flexor kernel")]
@@ -421,34 +400,18 @@ fn load_flexor_kernel(uefi: &dyn Uefi) -> Result<Vec<u8>, CrdybootError> {
     // Iterate over all the file system handles.
     for handle in &*handles_buffer {
         // Open SimpleFileSystemProtocol for each handle.
-        let mut scoped_proto = boot::open_protocol_exclusive::<SimpleFileSystem>(*handle)
+        let scoped_proto = boot::open_protocol_exclusive::<SimpleFileSystem>(*handle)
             .map_err(|err| CrdybootError::OpenSimpleFileSystemProtocolFailed(err.status()))?;
 
-        let mut root = scoped_proto
-            .open_volume()
-            .map_err(|err| CrdybootError::OpenVolumeFailed(err.status()))?;
+        let mut file_loader = FileLoaderImpl::new(scoped_proto);
 
-        // Read from the filesystem to check if it contains flexor_vmlinuz.
-        let Ok(file_handle) = root.open(FILE_NAME, FileMode::Read, FileAttribute::empty()) else {
-            // Continue and look in the next handle if the file is not found.
+        let Ok(buffer) = file_loader.read_file_to_vec(FILE_NAME, FLEXOR_KERNEL_MAX_SIZE) else {
+            // Continue looking for other valid flexor images.
             continue;
         };
 
-        let mut file = file_handle
-            .into_regular_file()
-            .ok_or(CrdybootError::RegularFileConversionFailed)?;
-        let file_size = get_file_size(&mut file).map_err(CrdybootError::GetFileSizeFailed)?;
-        // Check to make sure the flexor kernel image size is not too big.
-        if file_size > FLEXOR_KERNEL_MAX_SIZE {
-            return Err(CrdybootError::FlexorKernelSizeTooBig(file_size));
-        }
-        let mut buffer: Vec<u8> = vec![0; file_size];
-
-        // Read file contents into a buffer.
-        read_regular_file(&mut file, &mut buffer).map_err(CrdybootError::ReadFileFailed)?;
-
-        // Continue looking for other valid flexor images.
         if validate_flexor_kernel(&buffer, VALID_FLEXOR_SHA256_HASHES).is_err() {
+            // Continue looking for other valid flexor images.
             info!("flexor kernel validation failed.");
             continue;
         }
