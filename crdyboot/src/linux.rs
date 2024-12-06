@@ -9,6 +9,7 @@ use crate::disk::{GptDisk, GptDiskError};
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::vec::Vec;
@@ -71,11 +72,6 @@ pub enum CrdybootError {
     /// UCS-2.
     #[error("failed to convert kernel command line to UCS-2")]
     CommandLineUcs2ConversionFailed,
-
-    /// The flexor command line contains characters that cannot be encoded as
-    /// UCS-2.
-    #[error("failed to convert flexor command line to UCS-2")]
-    FlexorCommandLineUcs2ConversionFailed,
 
     /// Failed to get the current executable's vbpubk section.
     #[error("failed to get packed public key")]
@@ -332,15 +328,15 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             if rk.is_flexor_enabled() {
                 flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
-                kernel_cmdline = CString16::try_from(
+                kernel_cmdline = cstr16!(
                     "earlycon=efifb keep_bootcon init=/sbin/init \
                 cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
                 dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
                 dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
                 kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
-                kvm-intel.vmentry_l1d_flush=always",
+                kvm-intel.vmentry_l1d_flush=always"
                 )
-                .map_err(|_| CrdybootError::FlexorCommandLineUcs2ConversionFailed)?;
+                .to_owned();
             } else {
                 return Err(CrdybootError::LoadKernelFailed(err));
             }
