@@ -110,17 +110,9 @@ impl FileLoader for FileLoaderImpl {
             });
         };
 
-        // Read the file data.
-        match file.read(buffer) {
-            Ok(read_size) => {
-                if read_size == file_size {
-                    Ok(file_size)
-                } else {
-                    Err(FsError::ReadTruncated)
-                }
-            }
-            Err(err) => Err(FsError::ReadFileFailed(err.status())),
-        }
+        read_regular_file(&mut file, buffer)?;
+
+        Ok(buffer.len())
     }
 }
 
