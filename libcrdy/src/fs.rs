@@ -101,6 +101,12 @@ pub struct FileLoaderImpl {
 }
 
 impl FileLoaderImpl {
+    /// Create a `FileLoaderImpl` from an open `SimpleFileSystem`.
+    #[must_use]
+    pub fn new(file_system: ScopedProtocol<SimpleFileSystem>) -> Self {
+        Self { file_system }
+    }
+
     /// Open the file system for the partition that the current
     /// executable was booted from.
     pub fn open_boot_file_system() -> Result<Self, FsError> {
