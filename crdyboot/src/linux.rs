@@ -270,7 +270,7 @@ fn avb_load_kernel(rk: &dyn RunKernel) -> Result<(), CrdybootError> {
     // TODO: it is known what the size of the kernel is from avb_load, it
     // can be used instead.
     let relocate_size = mib_to_bytes(24);
-    let kernel_reloc_buffer = relocate_kernel(rk, &buffers.kernel_buffer, relocate_size)?;
+    let kernel_reloc_buffer = relocate_kernel(&buffers.kernel_buffer, relocate_size)?;
 
     // Initialize the linux uefi initramfs loader protocol
     // when an initramfs is present.
@@ -361,7 +361,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
     // kernels with different config options may be slightly larger,
     // so add some extra space. The flexor kernel is about 27.1 MiB, so to
     // accommodate either of these, buffer of 32MiB should be sufficient.
-    let kernel_reloc_buffer = relocate_kernel(rk, kernel_data, mib_to_bytes(32))?;
+    let kernel_reloc_buffer = relocate_kernel(kernel_data, mib_to_bytes(32))?;
 
     // Drop the original kernel buffer, not needed anymore.
     drop(kernel_buffer);
@@ -369,11 +369,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
     execute_linux_kernel(rk, &kernel_reloc_buffer, &kernel_cmdline)
 }
 
-fn relocate_kernel(
-    _rk: &dyn RunKernel,
-    data: &[u8],
-    reloc_size: usize,
-) -> Result<ScopedPageAllocation, CrdybootError> {
+fn relocate_kernel(data: &[u8], reloc_size: usize) -> Result<ScopedPageAllocation, CrdybootError> {
     // Allocate a buffer to relocate the kernel into.
     let mut kernel_reloc_buffer =
         ScopedPageAllocation::new(AllocateType::AnyPages, MemoryType::LOADER_CODE, reloc_size)
