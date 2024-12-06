@@ -32,10 +32,12 @@ pub enum FsError {
     #[error("failed to get the file position: {0}")]
     GetPositionFailed(Status),
 
-    /// The file size is too big to fit in usize. The `u64` value is the size
-    /// of the file.
+    /// The file size is larger than a `usize`.
     #[error("file size too big to fit in usize: {0}")]
-    FileSizeTooBig(u64),
+    FileLargerThanUsize(
+        /// Size of the file in bytes.
+        u64,
+    ),
 
     /// Failed to read the file.
     #[error("failed to read file: {0}")]
@@ -103,7 +105,7 @@ impl FileLoader for FileLoaderImpl {
     }
 }
 
-/// Return the size of a file when a regular file handle is passed.
+/// Return the size (in bytes) of a regular file.
 pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
     file.set_position(RegularFile::END_OF_FILE)
         .map_err(|err| FsError::SetPositionFailed(err.status()))?;
@@ -116,7 +118,7 @@ pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
         .map_err(|err| FsError::SetPositionFailed(err.status()))?;
 
     let file_size =
-        usize::try_from(file_size_u64).map_err(|_| FsError::FileSizeTooBig(file_size_u64))?;
+        usize::try_from(file_size_u64).map_err(|_| FsError::FileLargerThanUsize(file_size_u64))?;
 
     Ok(file_size)
 }
