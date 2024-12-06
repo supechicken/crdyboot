@@ -177,7 +177,7 @@ impl FileLoaderImpl {
 }
 
 /// Return the size (in bytes) of a regular file.
-pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
+fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
     file.set_position(RegularFile::END_OF_FILE)
         .map_err(|err| FsError::SetPositionFailed(err.status()))?;
     let file_size_u64 = file
@@ -199,7 +199,7 @@ pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
 /// An error is returned when:
 ///  * The amount of data read does not match the buffer size.
 ///  * An error occurs when reading the file data.
-pub fn read_regular_file(file: &mut RegularFile, buffer: &mut [u8]) -> Result<(), FsError> {
+fn read_regular_file(file: &mut RegularFile, buffer: &mut [u8]) -> Result<(), FsError> {
     match file.read(buffer) {
         Ok(read_size) =>
         {
