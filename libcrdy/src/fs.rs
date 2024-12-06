@@ -24,10 +24,6 @@ pub enum FsError {
     #[error("file is a directory")]
     IsADirectory,
 
-    /// Reading a file did not return the expected amount of data.
-    #[error("failed to read the entire file")]
-    ReadTruncated,
-
     /// Failed to get the position of a file handle.
     #[error("failed to get the file position: {0}")]
     GetPositionFailed(Status),
@@ -42,6 +38,16 @@ pub enum FsError {
     /// The file size is too big to fit in the buffer.
     #[error("file size {file_size} is larger than buffer size {buffer_size}")]
     FileLargerThanBuffer {
+        /// Size of the file in bytes.
+        file_size: usize,
+
+        /// Size of the buffer in bytes.
+        buffer_size: usize,
+    },
+
+    /// The file size is too small to fill the buffer.
+    #[error("file size {file_size} is smaller than buffer size {buffer_size}")]
+    FileSmallerThanBuffer {
         /// Size of the file in bytes.
         file_size: usize,
 
@@ -134,19 +140,29 @@ pub fn get_file_size(file: &mut RegularFile) -> Result<usize, FsError> {
     Ok(file_size)
 }
 
-/// Read the contents of a file when a regular file handle is passed. The buffer
-/// is updated with raw data from the file.
+/// Read the contents of a regular `file` into `buffer`.
 ///
 /// An error is returned when:
-///  * The amount of data read does not match the buffer size
-///  * An error occurs when reading the file data
+///  * The amount of data read does not match the buffer size.
+///  * An error occurs when reading the file data.
 pub fn read_regular_file(file: &mut RegularFile, buffer: &mut [u8]) -> Result<(), FsError> {
     match file.read(buffer) {
-        Ok(read_size) => {
+        Ok(read_size) =>
+        {
+            #[expect(clippy::comparison_chain)]
             if read_size == buffer.len() {
-                return Ok(());
+                Ok(())
+            } else if read_size < buffer.len() {
+                Err(FsError::FileSmallerThanBuffer {
+                    file_size: read_size,
+                    buffer_size: buffer.len(),
+                })
+            } else {
+                Err(FsError::FileLargerThanBuffer {
+                    file_size: read_size,
+                    buffer_size: buffer.len(),
+                })
             }
-            Err(FsError::ReadTruncated)
         }
         Err(err) => Err(FsError::ReadFileFailed(err.status())),
     }
