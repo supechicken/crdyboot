@@ -10,6 +10,7 @@ use uefi::proto::device_path::DevicePath;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
+use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::proto::Protocol;
 use uefi::runtime::{
@@ -83,6 +84,8 @@ pub trait Uefi {
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
+
+    fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
 
@@ -185,6 +188,10 @@ impl Uefi for UefiImpl {
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<BlockIO>()
+    }
+
+    fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<SimpleFileSystem>()
     }
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath> {

@@ -24,8 +24,7 @@ use libcrdy::util::mib_to_bytes;
 use log::info;
 use object::read::pe::PeFile64;
 use sha2::{Digest, Sha256};
-use uefi::boot::{self, AllocateType, MemoryType, SearchType};
-use uefi::data_types::Identify;
+use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
@@ -330,7 +329,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             // When load kernel fails, fallback to load flexor if the feature is
             // enabled.
             if cfg!(feature = "flexor") {
-                flexor_kernel = load_flexor_kernel()?;
+                flexor_kernel = load_flexor_kernel(uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = CString16::try_from(
                     "earlycon=efifb keep_bootcon init=/sbin/init \
@@ -413,11 +412,11 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
 ///  * `flexor_vmlinuz` file is not found.
 ///  * Any error occurs when reading the file data.
 ///  * A valid flexor kernel image is not found.
-fn load_flexor_kernel() -> Result<Vec<u8>, CrdybootError> {
+fn load_flexor_kernel(uefi: &dyn Uefi) -> Result<Vec<u8>, CrdybootError> {
     const FILE_NAME: &CStr16 = cstr16!(r"flexor_vmlinuz");
-    let handles_buffer =
-        boot::locate_handle_buffer(SearchType::ByProtocol(&SimpleFileSystem::GUID))
-            .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
+    let handles_buffer = uefi
+        .find_simple_file_system_handles()
+        .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
 
     // Iterate over all the file system handles.
     for handle in &*handles_buffer {
