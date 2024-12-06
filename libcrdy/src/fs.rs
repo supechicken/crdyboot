@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use log::info;
 use uefi::boot::{self, ScopedProtocol};
 use uefi::proto::media::file::RegularFile;
@@ -55,6 +57,16 @@ pub enum FsError {
         buffer_size: usize,
     },
 
+    /// The file size is larger than the allowed maximum.
+    #[error("file size {file_size} is larger than the {max} byte limit")]
+    FileLargerThanMax {
+        /// Size of the file in bytes.
+        file_size: usize,
+
+        /// Maximum size.
+        max: usize,
+    },
+
     /// Failed to read the file.
     #[error("failed to read file: {0}")]
     ReadFileFailed(Status),
@@ -74,6 +86,14 @@ pub trait FileLoader {
     /// * The buffer is not large enough to hold the entire file
     /// * Any error occurs when reading the file's data
     fn read_file_into(&mut self, path: &CStr16, buffer: &mut [u8]) -> Result<usize, FsError>;
+
+    /// Read the contents of `path` into a `Vec`.
+    ///
+    /// An error is returned if:
+    /// * The file could not be opened as a regular file
+    /// * The file is larger than `max_size`
+    /// * Any error occurs when reading the file's data
+    fn read_file_to_vec(&mut self, path: &CStr16, max_size: usize) -> Result<Vec<u8>, FsError>;
 }
 
 pub struct FileLoaderImpl {
@@ -110,6 +130,25 @@ impl FileLoader for FileLoaderImpl {
         read_regular_file(&mut file, buffer)?;
 
         Ok(buffer.len())
+    }
+
+    fn read_file_to_vec(&mut self, path: &CStr16, max_size: usize) -> Result<Vec<u8>, FsError> {
+        let mut file = self.open_file(path)?;
+
+        // Get the size of the file. Return an error if it exceeds `max_size`.
+        let file_size = get_file_size(&mut file)?;
+        if file_size > max_size {
+            return Err(FsError::FileLargerThanMax {
+                file_size,
+                max: max_size,
+            });
+        }
+
+        let mut buffer = vec![0; file_size];
+
+        read_regular_file(&mut file, &mut buffer)?;
+
+        Ok(buffer)
     }
 }
 
