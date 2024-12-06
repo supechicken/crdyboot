@@ -9,6 +9,7 @@ use crate::disk::{GptDisk, GptDiskError};
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::vec::Vec;
 use libcrdy::arch::Arch;
@@ -27,7 +28,7 @@ use sha2::{Digest, Sha256};
 use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
-use uefi::{cstr16, CStr16, CString16, Status};
+use uefi::{cstr16, CStr16, CString16, Handle, Status};
 use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
 
 /// TPM PCR to measure into.
@@ -152,6 +153,8 @@ trait RunKernel {
     fn update_mem_attrs<'a>(&self, pe: &PeFile64<'a>) -> Result<(), NxError>;
 
     unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
+
+    fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError>;
 }
 
 /// The real implementation of the `RunKernel` trait used at runtime.
@@ -180,6 +183,13 @@ impl RunKernel for RunKernelImpl {
 
     unsafe fn launch_next_stage(&self, next_stage: NextStage) -> Result<(), LaunchError> {
         unsafe { next_stage.launch() }
+    }
+
+    fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError> {
+        let sfs = boot::open_protocol_exclusive::<SimpleFileSystem>(handle)
+            .map_err(|err| CrdybootError::OpenSimpleFileSystemProtocolFailed(err.status()))?;
+
+        Ok(Box::new(FileLoaderImpl::new(sfs)))
     }
 }
 
@@ -308,7 +318,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             // When load kernel fails, fallback to load flexor if the feature is
             // enabled.
             if cfg!(feature = "flexor") {
-                flexor_kernel = load_flexor_kernel(uefi)?;
+                flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = CString16::try_from(
                     "earlycon=efifb keep_bootcon init=/sbin/init \
@@ -391,19 +401,15 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
 ///  * `flexor_vmlinuz` file is not found.
 ///  * Any error occurs when reading the file data.
 ///  * A valid flexor kernel image is not found.
-fn load_flexor_kernel(uefi: &dyn Uefi) -> Result<Vec<u8>, CrdybootError> {
+fn load_flexor_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<Vec<u8>, CrdybootError> {
     const FILE_NAME: &CStr16 = cstr16!(r"flexor_vmlinuz");
     let handles_buffer = uefi
         .find_simple_file_system_handles()
         .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
 
     // Iterate over all the file system handles.
-    for handle in &*handles_buffer {
-        // Open SimpleFileSystemProtocol for each handle.
-        let scoped_proto = boot::open_protocol_exclusive::<SimpleFileSystem>(*handle)
-            .map_err(|err| CrdybootError::OpenSimpleFileSystemProtocolFailed(err.status()))?;
-
-        let mut file_loader = FileLoaderImpl::new(scoped_proto);
+    for handle in handles_buffer {
+        let mut file_loader = rk.open_file_loader(handle)?;
 
         let Ok(buffer) = file_loader.read_file_to_vec(FILE_NAME, FLEXOR_KERNEL_MAX_SIZE) else {
             // Continue looking for other valid flexor images.
