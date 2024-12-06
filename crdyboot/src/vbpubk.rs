@@ -99,12 +99,12 @@ pub fn get_vbpubk_from_image() -> Result<&'static [u8], VbpubkError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     const TEST_VBPUBK_SECTION_DATA: &[u8] = b"some test data";
 
-    fn create_test_pe(num_vbpubk_sections: u16) -> Vec<u8> {
+    pub(crate) fn create_test_pe(num_vbpubk_sections: u16) -> Vec<u8> {
         let mut image_data = Vec::new();
         let mut writer = object::write::pe::Writer::new(
             /*is_64=*/ true,
@@ -134,7 +134,7 @@ mod tests {
             characteristics: object::pe::IMAGE_FILE_EXECUTABLE_IMAGE,
             major_linker_version: 0,
             minor_linker_version: 0,
-            address_of_entry_point: 0,
+            address_of_entry_point: 2048,
             image_base: 0,
             major_operating_system_version: 0,
             minor_operating_system_version: 0,
