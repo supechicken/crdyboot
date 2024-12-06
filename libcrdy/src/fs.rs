@@ -39,6 +39,16 @@ pub enum FsError {
         u64,
     ),
 
+    /// The file size is too big to fit in the buffer.
+    #[error("file size {file_size} is larger than buffer size {buffer_size}")]
+    FileLargerThanBuffer {
+        /// Size of the file in bytes.
+        file_size: usize,
+
+        /// Size of the buffer in bytes.
+        buffer_size: usize,
+    },
+
     /// Failed to read the file.
     #[error("failed to read file: {0}")]
     ReadFileFailed(Status),
@@ -90,6 +100,15 @@ impl FileLoader for FileLoaderImpl {
 
         // Get the size of the file.
         let file_size = get_file_size(&mut file)?;
+
+        // Shrink the buffer to exactly the file size, or return an
+        // error if the buffer is not large enough.
+        let Some(buffer) = buffer.get_mut(..file_size) else {
+            return Err(FsError::FileLargerThanBuffer {
+                file_size,
+                buffer_size: buffer.len(),
+            });
+        };
 
         // Read the file data.
         match file.read(buffer) {
