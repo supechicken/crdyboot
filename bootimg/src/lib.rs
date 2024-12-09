@@ -21,8 +21,10 @@
 // Include the public interface for bootimg structs.
 include!(concat!(env!("OUT_DIR"), "/bootimg.rs"));
 
-// Private implementation details requried by the public bootimg.rs file included
-// above.
+/// Generated bindings required to be in the module `bootimg_private` for
+/// `bootimg.rs` included above.
 mod bootimg_private {
     include!("../../third_party/mkbootimg/rust/bootimg_priv.rs");
 }
+// Subset of the generated items that are required externally.
+pub use bootimg_private::{vendor_ramdisk_table_entry_v4, VENDOR_RAMDISK_TYPE_PLATFORM};
