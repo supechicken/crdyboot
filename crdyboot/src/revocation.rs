@@ -49,9 +49,10 @@
 
 use core::cmp::Ordering;
 use core::{fmt, mem};
+use libcrdy::uefi::{Uefi, UefiImpl};
 use log::{error, info};
 use uefi::prelude::*;
-use uefi::runtime::{self, VariableAttributes, VariableVendor};
+use uefi::runtime::{VariableAttributes, VariableVendor};
 use uefi::{guid, CStr16};
 
 /// Revocation level.
@@ -91,53 +92,6 @@ const REVOCATION_VAR_ATTRS: VariableAttributes =
 /// security vulnerability to prevent rollback to older versions.
 const CRDYBOOT_EXECUTABLE_LEVEL: Level = 1;
 
-/// Trait for reading and writing UEFI variables. The two methods are
-/// identical to the interface provided by `RuntimeServices`. This trait
-/// is used to allow mocking in unit tests.
-trait UefiVarAccess {
-    /// Get the value and attributes of a UEFI variable.
-    fn get_variable<'a>(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        buf: &'a mut [u8],
-    ) -> uefi::Result<(&'a [u8], VariableAttributes)>;
-
-    /// Set a UEFI variable, or delete it if `data` is empty.
-    fn set_variable(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        attributes: VariableAttributes,
-        data: &[u8],
-    ) -> uefi::Result;
-}
-
-struct UefiVarAccessImpl;
-
-impl UefiVarAccess for UefiVarAccessImpl {
-    fn get_variable<'a>(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        buf: &'a mut [u8],
-    ) -> uefi::Result<(&'a [u8], VariableAttributes)> {
-        runtime::get_variable(name, vendor, buf)
-            .discard_errdata()
-            .map(|(data, attrs)| (&*data, attrs))
-    }
-
-    fn set_variable(
-        &self,
-        name: &CStr16,
-        vendor: &VariableVendor,
-        attributes: VariableAttributes,
-        data: &[u8],
-    ) -> uefi::Result {
-        runtime::set_variable(name, vendor, attributes, data)
-    }
-}
-
 /// Error indicating that the currently-running executable has been
 /// revoked.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -160,7 +114,7 @@ impl fmt::Display for RevocationError {
 }
 
 struct Revocation<'a> {
-    var_access: &'a dyn UefiVarAccess,
+    var_access: &'a dyn Uefi,
 
     var_vendor: &'a VariableVendor,
     var_name: &'a CStr16,
@@ -171,7 +125,7 @@ struct Revocation<'a> {
 }
 
 impl<'a> Revocation<'a> {
-    fn new(var_access: &'a dyn UefiVarAccess) -> Self {
+    fn new(var_access: &'a dyn Uefi) -> Self {
         Self {
             var_access,
 
@@ -263,8 +217,13 @@ impl<'a> Revocation<'a> {
         &self,
         buf: &'b mut [u8; 4],
     ) -> uefi::Result<(&'b [u8], VariableAttributes)> {
-        self.var_access
+        let (size, attrs) = self
+            .var_access
             .get_variable(self.var_name, self.var_vendor, buf)
+            .discard_errdata()?;
+        // OK to unwrap: `size` never exceeds the input buffer length.
+        let data = buf.get(..size).unwrap();
+        Ok((data, attrs))
     }
 
     /// Update the revocation variable. Errors are logged but otherwise
@@ -300,199 +259,171 @@ impl<'a> Revocation<'a> {
 
 /// Check if the currently-running executable has been revoked.
 pub fn self_revocation_check() -> Result<(), RevocationError> {
-    Revocation::new(&UefiVarAccessImpl).check_revocation()
+    Revocation::new(&UefiImpl).check_revocation()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use libcrdy::uefi::MockUefi;
 
-    struct MockVarAccess<'a> {
-        test: &'a RevocationTest,
-        set_variable_calls: Rc<RefCell<Vec<Vec<u8>>>>,
+    fn expect_get_variable<const N: usize>(
+        uefi: &mut MockUefi,
+        data: [u8; N],
+        attrs: VariableAttributes,
+    ) {
+        uefi.expect_get_variable()
+            .times(1)
+            .withf(|name, vendor, buf| {
+                name == REVOCATION_VAR_NAME && *vendor == REVOCATION_VAR_VENDOR && buf.len() == 4
+            })
+            .return_once(move |_, _, buf| {
+                buf[..data.len()].copy_from_slice(&data);
+                Ok((data.len(), attrs))
+            });
     }
 
-    impl<'a> UefiVarAccess for MockVarAccess<'a> {
-        fn get_variable<'b>(
-            &self,
-            name: &CStr16,
-            vendor: &VariableVendor,
-            buf: &'b mut [u8],
-        ) -> uefi::Result<(&'b [u8], VariableAttributes)> {
-            assert_eq!(name, REVOCATION_VAR_NAME);
-            assert_eq!(vendor, &REVOCATION_VAR_VENDOR);
-            let data = &mut buf[0..self.test.get_variable_data.len()];
-            data.copy_from_slice(&self.test.get_variable_data);
-            self.test
-                .get_variable_status
-                .to_result_with_val(|| (&*data, self.test.get_variable_attrs))
-        }
-
-        fn set_variable(
-            &self,
-            name: &CStr16,
-            vendor: &VariableVendor,
-            attributes: VariableAttributes,
-            data: &[u8],
-        ) -> uefi::Result {
-            assert_eq!(name, REVOCATION_VAR_NAME);
-            assert_eq!(vendor, &REVOCATION_VAR_VENDOR);
-            assert_eq!(
-                attributes,
-                VariableAttributes::NON_VOLATILE | VariableAttributes::BOOTSERVICE_ACCESS
-            );
-            self.set_variable_calls.borrow_mut().push(data.to_vec());
-            Ok(())
-        }
+    fn expect_get_variable_err(uefi: &mut MockUefi, err: uefi::Error<Option<usize>>) {
+        uefi.expect_get_variable()
+            .times(1)
+            .withf(|name, vendor, buf| {
+                name == REVOCATION_VAR_NAME && *vendor == REVOCATION_VAR_VENDOR && buf.len() == 4
+            })
+            .return_once(move |_, _, _| Err(err));
     }
 
-    /// Inputs and expected outputs for a single revocation test.
-    struct RevocationTest {
-        executable_level: Level,
-
-        get_variable_data: Vec<u8>,
-        get_variable_attrs: VariableAttributes,
-        get_variable_status: Status,
-
-        expected_revocation_result: core::result::Result<(), RevocationError>,
-        expected_set_variable_calls: Vec<Vec<u8>>,
+    fn expect_set_variable(uefi: &mut MockUefi, level: Level) {
+        uefi.expect_set_variable()
+            .times(1)
+            .withf(move |name, vendor, attrs, data| {
+                name == REVOCATION_VAR_NAME
+                    && *vendor == REVOCATION_VAR_VENDOR
+                    && *attrs == REVOCATION_VAR_ATTRS
+                    && data == level.to_le_bytes()
+            })
+            .return_const(Ok(()));
     }
 
-    impl RevocationTest {
-        #[track_caller]
-        fn run(&self) {
-            // Initialize the test inputs.
-            let var_access = MockVarAccess {
-                test: self,
-                set_variable_calls: Rc::default(),
-            };
-            let mut r = Revocation::new(&var_access);
-            r.executable_level = self.executable_level;
-
-            // Check the actual results against expectations.
-            assert_eq!(r.check_revocation(), self.expected_revocation_result);
-            assert_eq!(
-                *var_access.set_variable_calls.borrow(),
-                self.expected_set_variable_calls
-            );
-        }
+    fn expect_set_variable_empty(uefi: &mut MockUefi) {
+        uefi.expect_set_variable()
+            .times(1)
+            .withf(move |name, vendor, attrs, data| {
+                name == REVOCATION_VAR_NAME
+                    && *vendor == REVOCATION_VAR_VENDOR
+                    && *attrs == REVOCATION_VAR_ATTRS
+                    && data.is_empty()
+            })
+            .return_const(Ok(()));
     }
 
     /// Test no revocation.
     #[test]
     fn test_no_revocation() {
-        RevocationTest {
-            executable_level: 1,
+        let stored_level = 1u32;
+        let executable_level = 1u32;
 
-            get_variable_data: 1u32.to_le_bytes().to_vec(),
-            get_variable_attrs: REVOCATION_VAR_ATTRS,
-            get_variable_status: Status::SUCCESS,
+        let mut uefi = MockUefi::new();
+        expect_get_variable(&mut uefi, stored_level.to_le_bytes(), REVOCATION_VAR_ATTRS);
 
-            // Executable level is 1 and the stored minimum level is 1,
-            // so we are not revoked.
-            expected_revocation_result: Ok(()),
-            // The minimum level is 1 which is already stored in the
-            // variable, so no change is made.
-            expected_set_variable_calls: vec![],
-        }
-        .run()
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        r.check_revocation().unwrap();
     }
 
     /// Test no revocation, but stored minimum needs update.
     #[test]
     fn test_no_revocation_increase_minimum() {
-        RevocationTest {
-            executable_level: 2,
+        let stored_level = 1u32;
+        let executable_level = 2u32;
 
-            get_variable_data: 1u32.to_le_bytes().to_vec(),
-            get_variable_attrs: REVOCATION_VAR_ATTRS,
-            get_variable_status: Status::SUCCESS,
+        let mut uefi = MockUefi::new();
+        expect_get_variable(&mut uefi, stored_level.to_le_bytes(), REVOCATION_VAR_ATTRS);
+        expect_set_variable(&mut uefi, executable_level);
 
-            // Executable level is 2 and the stored minimum level is 1,
-            // so we are not revoked.
-            expected_revocation_result: Ok(()),
-            // The stored minimum level is 1 so it needs an update.
-            expected_set_variable_calls: vec![2u32.to_le_bytes().to_vec()],
-        }
-        .run()
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        r.check_revocation().unwrap();
     }
 
     /// Test revocation.
     #[test]
     fn test_revocation() {
-        RevocationTest {
-            executable_level: 1,
+        let stored_level = 2u32;
+        let executable_level = 1u32;
 
-            get_variable_data: 2u32.to_le_bytes().to_vec(),
-            get_variable_attrs: REVOCATION_VAR_ATTRS,
-            get_variable_status: Status::SUCCESS,
+        let mut uefi = MockUefi::new();
+        expect_get_variable(&mut uefi, stored_level.to_le_bytes(), REVOCATION_VAR_ATTRS);
 
-            // Executable level is 1 but the stored minimum level is 2,
-            // so we are revoked.
-            expected_revocation_result: Err(RevocationError {
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        // Executable level is 1 but the stored minimum level is 2,
+        // so we are revoked.
+        assert_eq!(
+            r.check_revocation(),
+            Err(RevocationError {
                 executable_level: 1,
                 stored_minimum_level: 2,
-            }),
-            // Minimum level is 1 but the stored minimum level is 2, so no
-            // change to the stored value is made.
-            expected_set_variable_calls: vec![],
-        }
-        .run()
+            })
+        );
     }
 
     /// Test variable read error.
     #[test]
     fn test_read_error() {
-        RevocationTest {
-            executable_level: 1,
+        let executable_level = 2u32;
 
-            get_variable_data: 1u32.to_le_bytes().to_vec(),
-            get_variable_attrs: REVOCATION_VAR_ATTRS,
-            get_variable_status: Status::NOT_FOUND,
+        let mut uefi = MockUefi::new();
+        expect_get_variable_err(&mut uefi, uefi::Error::new(Status::NOT_FOUND, None));
+        expect_set_variable(&mut uefi, executable_level);
 
-            expected_revocation_result: Ok(()),
-            expected_set_variable_calls: vec![1u32.to_le_bytes().to_vec()],
-        }
-        .run()
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        r.check_revocation().unwrap();
     }
 
     /// Test handling of unexpected variable attributes.
     #[test]
     fn test_unexpected_variable_attrs() {
-        RevocationTest {
-            executable_level: 1,
+        let stored_level = 1u32;
+        let executable_level = 2u32;
 
-            get_variable_data: 1u32.to_le_bytes().to_vec(),
-            get_variable_attrs: VariableAttributes::empty(),
-            get_variable_status: Status::SUCCESS,
+        let mut uefi = MockUefi::new();
+        expect_get_variable(
+            &mut uefi,
+            stored_level.to_le_bytes(),
+            VariableAttributes::empty(),
+        );
+        expect_set_variable_empty(&mut uefi);
+        expect_set_variable(&mut uefi, executable_level);
 
-            expected_revocation_result: Ok(()),
-            expected_set_variable_calls: vec![
-                // Call to delete, then properly set the variable.
-                vec![],
-                1u32.to_le_bytes().to_vec(),
-            ],
-        }
-        .run()
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        r.check_revocation().unwrap();
     }
 
     /// Test handling of unexpected variable data.
     #[test]
     fn test_unexpected_variable_data() {
-        RevocationTest {
-            executable_level: 1,
+        let executable_level = 2u32;
 
-            // Wrong length of data.
-            get_variable_data: vec![1, 2, 3],
-            get_variable_attrs: REVOCATION_VAR_ATTRS,
-            get_variable_status: Status::SUCCESS,
+        let mut uefi = MockUefi::new();
+        expect_get_variable(
+            &mut uefi,
+            // Invalid data; not a u32:
+            [1, 2, 3],
+            REVOCATION_VAR_ATTRS,
+        );
+        expect_set_variable(&mut uefi, executable_level);
 
-            expected_revocation_result: Ok(()),
-            expected_set_variable_calls: vec![1u32.to_le_bytes().to_vec()],
-        }
-        .run()
+        let mut r = Revocation::new(&uefi);
+        r.executable_level = executable_level;
+
+        r.check_revocation().unwrap();
     }
 
     /// Test that `CRDYBOOT_EXECUTABLE_LEVEL` matches the crdyboot SBAT
