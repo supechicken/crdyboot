@@ -375,7 +375,7 @@ impl<'a> VendorData<'a> {
             .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk table"))?;
 
         // Expect a zero dtb on an x86 image, warn otherwise.
-        if dtb_section_bytes == 0 {
+        if dtb_section_bytes != 0 {
             warn!("vendor dtb section is non-zero and ignored.");
         }
 
