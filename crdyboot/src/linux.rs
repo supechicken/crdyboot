@@ -48,7 +48,9 @@ const PCR_INDEX: PcrIndex = PcrIndex(8);
 const FLEXOR_KERNEL_MAX_SIZE: usize = mib_to_bytes(32);
 
 /// List of valid `flexor_vmlinuz` SHA256 hashes.
-const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[];
+const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[
+    "2e7f43d5cd03a3dd9c23d9adca64095b8b5e7dc088d2f9b222f07a0291e9d4aa", // frd-0.4-15886.53.0
+];
 
 /// Size (in bytes) of the buffer into which vboot loads the kernel
 /// data. 64MiB is the current size of the kernel partitions on reven.
