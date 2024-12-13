@@ -459,6 +459,7 @@ mod tests {
     use crate::vbpubk::tests::create_test_pe;
     use core::ptr;
     use libcrdy::fs::MockFileLoader;
+    use vboot::{LoadKernelError, ReturnCode};
 
     const TEST_DATA: &[u8] = &[1, 2, 3];
     const FLEXOR_SHA256_TEST_HASHES: &[&str] = &[
@@ -468,6 +469,12 @@ mod tests {
 
     const TEST_KEY_VBPUBK: &[u8] =
         include_bytes!("../../third_party/vboot_reference/tests/devkeys/kernel_subkey.vbpubk");
+
+    const INVALID_VBPUBK: &[u8] = &[1, 2, 3];
+
+    /// SHA-256 of `create_test_pe(1)`.
+    const SHA_256_OF_TEST_PE: &str =
+        "83935b989fca584b6123b6d45586a31b92968bcc5a5a46e2b940c9d731d8915b";
 
     /// Test that validate_flexor_kernel fails with an invalid kernel image.
     #[test]
@@ -546,20 +553,17 @@ mod tests {
             .return_once(|_| Ok(()));
     }
 
-    fn expect_is_flexor_enabled(rk: &mut MockRunKernel) {
-        rk.expect_is_flexor_enabled().times(1).return_const(true);
+    fn expect_is_flexor_enabled(rk: &mut MockRunKernel, enabled: bool) {
+        rk.expect_is_flexor_enabled().times(1).return_const(enabled);
     }
 
-    fn expect_get_valid_flexor_sha256_hashes(rk: &mut MockRunKernel) {
+    fn expect_get_valid_flexor_sha256_hashes(
+        rk: &mut MockRunKernel,
+        hashes: &'static [&'static str],
+    ) {
         rk.expect_get_valid_flexor_sha256_hashes()
             .times(1)
-            .return_const(
-                [
-                    // Hash of `create_test_pe(1)`.
-                    "83935b989fca584b6123b6d45586a31b92968bcc5a5a46e2b940c9d731d8915b",
-                ]
-                .as_slice(),
-            );
+            .return_const(hashes);
     }
 
     fn expect_open_file_loader(rk: &mut MockRunKernel) {
@@ -597,6 +601,29 @@ mod tests {
         load_and_execute_kernel_impl(&rk, &uefi).unwrap();
     }
 
+    /// Test that `load_and_execute_kernel_impl` correctly fails if
+    /// flexor is disabled and vboot fails to load a kernel.
+    #[test]
+    #[cfg_attr(any(miri, feature = "android"), ignore)]
+    fn test_vboot_no_valid_kernels() {
+        let mut rk = MockRunKernel::new();
+
+        expect_allocate_pages(&mut rk);
+        expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
+        expect_is_flexor_enabled(&mut rk, false);
+
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+
+        assert!(matches!(
+            load_and_execute_kernel_impl(&rk, &uefi),
+            Err(CrdybootError::LoadKernelFailed(
+                LoadKernelError::InjectKernelSubkeyFailed(
+                    ReturnCode::VB2_ERROR_INSIDE_MEMBER_OUTSIDE
+                )
+            ))
+        ));
+    }
+
     /// Test that `load_and_execute_kernel_impl` successfully loads a
     /// flexor kernel after failing to load via vboot.
     #[test]
@@ -605,12 +632,12 @@ mod tests {
         let mut rk = MockRunKernel::new();
 
         expect_allocate_pages(&mut rk);
-        expect_get_vbpubk_from_image(&mut rk, &[1, 2, 3]);
+        expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
         expect_extend_pcr_and_log(&mut rk);
         expect_update_mem_attrs(&mut rk);
         expect_launch_next_stage(&mut rk);
-        expect_is_flexor_enabled(&mut rk);
-        expect_get_valid_flexor_sha256_hashes(&mut rk);
+        expect_is_flexor_enabled(&mut rk, true);
+        expect_get_valid_flexor_sha256_hashes(&mut rk, &[SHA_256_OF_TEST_PE]);
         expect_open_file_loader(&mut rk);
 
         let mut uefi = create_mock_uefi(BootDrive::Hd1);
@@ -619,5 +646,30 @@ mod tests {
             .returning(|| Ok(vec![get_sfs_handle()]));
 
         load_and_execute_kernel_impl(&rk, &uefi).unwrap();
+    }
+
+    /// Test that `load_and_execute_kernel_impl` correctly fails if
+    /// flexor is enabled, and both vboot and flexor and fail to load a
+    /// kernel.
+    #[test]
+    #[cfg_attr(any(miri, feature = "android"), ignore)]
+    fn test_flexor_no_valid_kernels() {
+        let mut rk = MockRunKernel::new();
+
+        expect_allocate_pages(&mut rk);
+        expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
+        expect_is_flexor_enabled(&mut rk, true);
+        expect_get_valid_flexor_sha256_hashes(&mut rk, &[]);
+        expect_open_file_loader(&mut rk);
+
+        let mut uefi = create_mock_uefi(BootDrive::Hd1);
+        uefi.expect_find_simple_file_system_handles()
+            .times(1)
+            .returning(|| Ok(vec![get_sfs_handle()]));
+
+        assert!(matches!(
+            load_and_execute_kernel_impl(&rk, &uefi),
+            Err(CrdybootError::LoadFlexorKernelFailed)
+        ));
     }
 }
