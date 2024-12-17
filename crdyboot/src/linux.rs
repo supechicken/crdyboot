@@ -331,7 +331,8 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
                 flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = cstr16!(
-                    "earlycon=efifb keep_bootcon init=/sbin/init \
+                    "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
+                console=tty1 loglevel=1 init=/sbin/init \
                 cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
                 dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
                 dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
