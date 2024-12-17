@@ -181,17 +181,6 @@ fn download_pinned_public_reven(conf: &Config) -> Result<()> {
     download_and_extract_disk_image(conf, test_image_resource, Some(hash))
 }
 
-/// Fix build errors caused by a vboot upgrade.
-fn clean_futility_build(conf: &Config) -> Result<()> {
-    Command::with_args(
-        "make",
-        ["-C", conf.vboot_reference_path().as_str(), "clean"],
-    )
-    .run()?;
-
-    Ok(())
-}
-
 /// Build futility, the firmware utility executable that is part of
 /// vboot_reference.
 fn build_futility(conf: &Config) -> Result<()> {
@@ -356,10 +345,6 @@ pub(super) fn rerun_setup_if_needed(action: &Action, conf: &Config) -> Result<()
     println!("Re-running setup: upgrading from {existing_version} to {SETUP_VERSION}");
 
     // Put any version-specific cleanup operations here.
-
-    if conf.read_setup_version() < 4 {
-        clean_futility_build(conf)?;
-    }
 
     // End version-specific cleanup operations.
 
