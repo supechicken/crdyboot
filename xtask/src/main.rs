@@ -64,6 +64,7 @@ enum Action {
     Writedisk(WritediskAction),
     GenTestDataTarball(GenTestDataTarballAction),
     GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
+    GenEsp(GenEspAction),
 }
 
 /// Build crdyboot.
@@ -225,6 +226,10 @@ struct GenTestDataTarballAction {}
 #[derive(Parser)]
 struct GenVbootReturnCodeStringsAction {}
 
+/// Build an ESP from the last built bootx64.efi binary.
+#[derive(Parser)]
+struct GenEspAction {}
+
 /// Optional features that are selected when doing unit tests
 /// and lint checks.
 /// They are not built into the target executables by default.
@@ -350,6 +355,11 @@ fn run_bootloader_build(
 
     // Update the disk image with the new executables.
     gen_disk::sign_and_copy_bootloaders(conf)?;
+
+    // If android generate an ESP blob as well.
+    if android.0 {
+        gen_disk::gen_trivial_esp_image(conf, &verbose)?;
+    }
 
     // Add or remove the `crdyboot_verbose` file.
     gen_disk::update_verbose_boot_file(conf, verbose)
@@ -579,5 +589,6 @@ fn main() -> Result<()> {
         Action::Writedisk(_) => run_writedisk(&conf),
         Action::GenTestDataTarball(_) => gen_test_data_tarball(&conf),
         Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),
+        Action::GenEsp(_) => gen_disk::gen_trivial_esp_image(&conf, &VerboseRuntimeLogs(false)),
     }
 }

@@ -908,6 +908,43 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
     Ok(())
 }
 
+/// Size in MiB of the trivial esp that is generated.
+// This must be smaller than 64MiB which is the current partition size
+// in the reven layout. It must be larger than the typical bootloader
+// and filesystem overhead.
+// 2MiB is sufficient with a bit of slack for any dev work.
+// This can be removed when the ESP is able to be generated
+// at build time (b/388905930).
+const TRIVIAL_ESP_MIB: u64 = 2;
+
+/// Generate a data file `esp.img` containing a trivial ESP filesystem
+/// with just the bootx86.efi binary.
+pub fn gen_trivial_esp_image(conf: &Config, verbose: &VerboseRuntimeLogs) -> Result<()> {
+    let mut data = gen_base_esp_fs(TRIVIAL_ESP_MIB)?;
+
+    modify_filesystem(&mut data, |root_dir| {
+        let efi_dir = root_dir.open_dir("EFI")?;
+        let boot_dir = efi_dir.open_dir("BOOT")?;
+
+        if verbose.0 {
+            boot_dir.create_file("crdyboot_verbose")?;
+        }
+        // Force x64 for now as 32 bit EFI devices aren't used.
+        let arch = Arch::X64;
+        let src_path = conf.target_exec_path(arch, EfiExe::Crdyboot);
+        let src_data = fs::read(src_path)?;
+        fat_write_file(&boot_dir, &arch.efi_file_name("boot"), &src_data)
+    })
+    .context("failed to update boot files")?;
+
+    let path = conf.workspace_path().join("esp.img");
+    let mut outfile = File::create(path)?;
+    if outfile.write(data.as_slice())? != data.len() {
+        bail!("did not write the full ESP data");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
