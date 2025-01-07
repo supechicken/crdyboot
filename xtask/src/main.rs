@@ -76,10 +76,6 @@ struct BuildAction {
     /// build with android enabled
     #[arg(long)]
     android: bool,
-
-    /// build with flexor enabled
-    #[arg(long)]
-    flexor: bool,
 }
 
 impl BuildAction {
@@ -89,10 +85,6 @@ impl BuildAction {
 
     fn is_android(&self) -> BuildAndroid {
         BuildAndroid(self.android)
-    }
-
-    fn is_flexor(&self) -> BuildFlexor {
-        BuildFlexor(self.flexor)
     }
 }
 
@@ -573,7 +565,7 @@ fn main() -> Result<()> {
         Action::Build(action) => run_bootloader_build(
             &conf,
             action.is_android(),
-            action.is_flexor(),
+            BuildFlexor(true),
             action.verbose(),
         ),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
