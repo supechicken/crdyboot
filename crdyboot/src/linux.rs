@@ -9,7 +9,6 @@ use crate::disk::{GptDisk, GptDiskError};
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
@@ -18,6 +17,7 @@ use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
 use libcrdy::fs::{FileLoader, FileLoaderImpl};
 use libcrdy::launch::{LaunchError, NextStage};
+use libcrdy::logging::does_verbose_file_exist;
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
@@ -155,6 +155,8 @@ trait RunKernel {
 
     fn is_flexor_enabled(&self) -> bool;
 
+    fn verbose_logging(&self) -> bool;
+
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str];
 
     fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError>;
@@ -190,6 +192,10 @@ impl RunKernel for RunKernelImpl {
 
     fn is_flexor_enabled(&self) -> bool {
         cfg!(feature = "flexor")
+    }
+
+    fn verbose_logging(&self) -> bool {
+        does_verbose_file_exist()
     }
 
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str] {
@@ -267,6 +273,20 @@ fn avb_load_kernel(rk: &dyn RunKernel) -> Result<(), CrdybootError> {
     execute_linux_kernel(rk, &kernel_reloc_buffer, &buffers.cmdline)
 }
 
+fn get_flexor_cmdline(verbose: bool) -> String {
+    let base = "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
+     console=tty1 init=/sbin/init \
+     cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
+     dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
+     dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
+     kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
+     kvm-intel.vmentry_l1d_flush=always";
+
+    let loglevel = if verbose { 7 } else { 1 };
+
+    format!("{base} loglevel={loglevel}")
+}
+
 /// Use vboot to load the kernel from the appropriate kernel partition,
 /// then execute it. If successful, this function will never return.
 fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), CrdybootError> {
@@ -321,14 +341,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             if rk.is_flexor_enabled() {
                 flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
-                kernel_cmdline = "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
-                console=tty1 loglevel=1 init=/sbin/init \
-                cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
-                dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
-                dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
-                kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
-                kvm-intel.vmentry_l1d_flush=always"
-                    .to_owned();
+                kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
             } else {
                 return Err(CrdybootError::LoadKernelFailed(err));
             }
@@ -488,6 +501,15 @@ mod tests {
         assert!(validate_flexor_kernel(TEST_DATA, FLEXOR_SHA256_TEST_HASHES).is_ok());
     }
 
+    /// Test that get_flexor_cmdline adds the appropriate log level.
+    #[test]
+    fn test_get_flexor_cmdline() {
+        let verbose = false;
+        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=1"));
+        let verbose = true;
+        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=7"));
+    }
+
     /// Return true if `data` looks like a valid kernel buffer, false otherwise.
     fn looks_like_a_kernel(data: &[u8]) -> bool {
         // Length is a multiple of a kibibyte.
@@ -552,6 +574,10 @@ mod tests {
 
     fn expect_is_flexor_enabled(rk: &mut MockRunKernel, enabled: bool) {
         rk.expect_is_flexor_enabled().times(1).return_const(enabled);
+    }
+
+    fn expect_verbose_logging(rk: &mut MockRunKernel) {
+        rk.expect_verbose_logging().times(1).return_const(false);
     }
 
     fn expect_get_valid_flexor_sha256_hashes(
@@ -634,6 +660,7 @@ mod tests {
         expect_update_mem_attrs(&mut rk);
         expect_launch_next_stage(&mut rk);
         expect_is_flexor_enabled(&mut rk, true);
+        expect_verbose_logging(&mut rk);
         expect_get_valid_flexor_sha256_hashes(&mut rk, &[SHA_256_OF_TEST_PE]);
         expect_open_file_loader(&mut rk);
 

@@ -13,5 +13,10 @@ To alter the log level at runtime, create an empty file called
 `crdyboot_verbose` in the same directory as the bootloader
 (`/efi/boot`).
 
+## Flexor
+
+When booting flexor, the kernel log level will be increased if
+`crdyboot_verbose` exists.
+
 [`log`]: https://docs.rs/log
 [`uefi::helpers`]: https://docs.rs/uefi/latest/uefi/helpers/index.html
