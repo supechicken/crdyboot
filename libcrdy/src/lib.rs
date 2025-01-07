@@ -16,7 +16,7 @@ pub mod entry_point;
 mod error;
 pub mod fs;
 pub mod launch;
-mod logging;
+pub mod logging;
 pub mod nx;
 pub mod page_alloc;
 pub mod relocation;

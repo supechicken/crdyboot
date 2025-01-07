@@ -10,7 +10,8 @@ use uefi::{boot, CStr16, Status};
 /// Check if `efi\boot\crdyboot_verbose` exists on the boot
 /// filesystem. If any error occurs when checking for this file, `false`
 /// is returned.
-fn does_verbose_file_exist() -> bool {
+#[must_use]
+pub fn does_verbose_file_exist() -> bool {
     let mut sfs = match boot::get_image_file_system(boot::image_handle()) {
         Ok(sfs) => sfs,
         Err(err) => {
