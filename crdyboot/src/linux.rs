@@ -12,6 +12,7 @@ use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 use libcrdy::arch::Arch;
 use libcrdy::entry_point::{get_ia32_compat_entry_point, get_primary_entry_point};
@@ -30,7 +31,7 @@ use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::{cstr16, CStr16, CString16, Handle, Status};
-use vboot::{LoadKernelError, LoadKernelInputs, LoadedKernel};
+use vboot::{LoadKernelError, LoadKernelInputs};
 
 /// TPM PCR to measure into.
 ///
@@ -203,18 +204,6 @@ impl RunKernel for RunKernelImpl {
     }
 }
 
-/// Get the kernel command line as a UCS-2 string.
-fn get_kernel_command_line(kernel: &LoadedKernel) -> Result<CString16, CrdybootError> {
-    let cmdline = kernel
-        .command_line()
-        .ok_or(CrdybootError::GetCommandLineFailed)?;
-    info!("command line: {cmdline}");
-
-    // Convert the command-line to UCS-2.
-    CString16::try_from(cmdline.as_str())
-        .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)
-}
-
 /// Hand off control to the Linux EFI stub.
 ///
 /// As mentioned in [1], the preferred method for loading the kernel
@@ -309,7 +298,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
     let vboot_kernel;
     let flexor_kernel;
     let kernel_data: &[u8];
-    let kernel_cmdline: CString16;
+    let kernel_cmdline: String;
 
     match vboot::load_kernel(
         LoadKernelInputs {
@@ -322,7 +311,9 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
         Ok(loaded_kernel) => {
             vboot_kernel = loaded_kernel;
             kernel_data = vboot_kernel.data();
-            kernel_cmdline = get_kernel_command_line(&vboot_kernel)?;
+            kernel_cmdline = vboot_kernel
+                .command_line()
+                .ok_or(CrdybootError::GetCommandLineFailed)?;
         }
         Err(err) => {
             // When load kernel fails, fallback to load flexor if the feature is
@@ -330,21 +321,24 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             if rk.is_flexor_enabled() {
                 flexor_kernel = load_flexor_kernel(rk, uefi)?;
                 kernel_data = &flexor_kernel;
-                kernel_cmdline = cstr16!(
-                    "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
+                kernel_cmdline = "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
                 console=tty1 loglevel=1 init=/sbin/init \
                 cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
                 dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
                 dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
                 kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
                 kvm-intel.vmentry_l1d_flush=always"
-                )
-                .to_owned();
+                    .to_owned();
             } else {
                 return Err(CrdybootError::LoadKernelFailed(err));
             }
         }
     }
+
+    // Convert kernel command line to UCS-2.
+    let kernel_cmdline = CString16::try_from(kernel_cmdline.as_str())
+        .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)?;
+    info!("command line: {kernel_cmdline}");
 
     // Go ahead and free the workbuf, not needed anymore.
     drop(workbuf);
