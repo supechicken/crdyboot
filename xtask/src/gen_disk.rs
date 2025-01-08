@@ -244,10 +244,10 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
     disk.create()
 }
 
-/// Generate the EFI system partition FAT file system containing the
-/// EFI/BOOT directories, for the flexor disk image.
-fn gen_flexor_esp_fs() -> Result<Vec<u8>> {
-    let mut esp_part_data = vec![0; mib_to_byte(90).try_into().unwrap()];
+/// Generate a simple EFI system partition FAT file system
+/// of size `mib_size` with the EFI/BOOT directories created.
+fn gen_base_esp_fs(mib_size: u64) -> Result<Vec<u8>> {
+    let mut esp_part_data = vec![0; mib_to_byte(mib_size).try_into().unwrap()];
 
     {
         let esp_part_cursor = Cursor::new(&mut esp_part_data);
@@ -270,7 +270,7 @@ fn gen_flexor_esp_fs() -> Result<Vec<u8>> {
 // * Basic Data Partition - to hold flexor_vmlinuz, ChromeOS flex image.
 // Note: This function only creates the partitions and the `EFI/BOOT` directories.
 pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
-    let esp_part_data = gen_flexor_esp_fs()?;
+    let esp_part_data = gen_base_esp_fs(90)?;
 
     // Generate FAT file system for the basic data partition.
     let mut basic_part_data = vec![0; mib_to_byte(108).try_into().unwrap()];
