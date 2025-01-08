@@ -417,6 +417,19 @@ fn read_file_from_esp(disk_path: &Utf8Path, file_path: &str) -> Result<Vec<u8>> 
     Ok(buffer)
 }
 
+type FatDirOnVec<'a, 'b> = fatfs::Dir<'a, Cursor<&'b mut Vec<u8>>>;
+
+/// Modify a fat filesystem stored in the backing vector.
+fn modify_filesystem<F>(data: &mut Vec<u8>, mut modify: F) -> Result<()>
+where
+    F: FnMut(FatDirOnVec) -> Result<()>,
+{
+    let sys_part_cursor = Cursor::new(data);
+    let sys_part_fs = FileSystem::new(sys_part_cursor, FsOptions::new())?;
+    let root_dir = sys_part_fs.root_dir();
+    modify(root_dir)
+}
+
 /// Modify data in the EFI system partition FAT file system.
 ///
 /// This loads the partition into memory and opens it with `fatfs`. The
@@ -425,7 +438,7 @@ fn read_file_from_esp(disk_path: &Utf8Path, file_path: &str) -> Result<Vec<u8>> 
 /// written back out to disk.
 fn modify_system_partition<F>(disk_path: &Utf8Path, mut modify: F) -> Result<()>
 where
-    F: FnMut(fatfs::Dir<Cursor<&mut Vec<u8>>>) -> Result<()>,
+    F: FnMut(FatDirOnVec) -> Result<()>,
 {
     let mut disk_file = open_rw(disk_path)?;
     let gpt = GPT::read_from(&mut disk_file, SECTOR_SIZE)?;
@@ -440,12 +453,7 @@ where
     // Load the entire partition into memory.
     let mut sys_part_data = sys_data_range.read_bytes_from_file(&mut disk_file)?;
 
-    {
-        let sys_part_cursor = Cursor::new(&mut sys_part_data);
-        let sys_part_fs = FileSystem::new(sys_part_cursor, FsOptions::new())?;
-        let root_dir = sys_part_fs.root_dir();
-        modify(root_dir)?;
-    }
+    modify_filesystem(&mut sys_part_data, &mut modify)?;
 
     // Write the entire partition back out.
     sys_data_range.write_bytes_to_file(&mut disk_file, &sys_part_data)
