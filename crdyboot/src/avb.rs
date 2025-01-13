@@ -770,6 +770,8 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     cmdline.push_str(cstr16!(" androidboot.boot_device="));
     cmdline.push_str(&boot_path);
 
+    cmdline.push_str(cstr16!(" androidboot.verifiedbootstate=orange"));
+
     // At this point the cmdline, kernel and initramfs buffers
     // are allocated locally to this function.
     // The slot_verify_data can now be freed.
