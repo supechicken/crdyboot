@@ -284,7 +284,11 @@ fn get_flexor_cmdline(verbose: bool) -> String {
 
     let loglevel = if verbose { 7 } else { 1 };
 
-    format!("{base} loglevel={loglevel}")
+    // When verbose logging is enabled, turn off ratelimiting for kmsg:
+    // https://docs.kernel.org/admin-guide/sysctl/kernel.html#printk-devkmsg
+    let devkmsg = if verbose { "on" } else { "ratelimit" };
+
+    format!("{base} loglevel={loglevel} printk.devkmsg={devkmsg}")
 }
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
@@ -505,9 +509,9 @@ mod tests {
     #[test]
     fn test_get_flexor_cmdline() {
         let verbose = false;
-        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=1"));
+        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=1 printk.devkmsg=ratelimit"));
         let verbose = true;
-        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=7"));
+        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=7 printk.devkmsg=on"));
     }
 
     /// Return true if `data` looks like a valid kernel buffer, false otherwise.
