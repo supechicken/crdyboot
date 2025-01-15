@@ -343,7 +343,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             // When load kernel fails, fallback to load flexor if the feature is
             // enabled.
             if rk.is_flexor_enabled() {
-                flexor_kernel = load_flexor_kernel(rk, uefi)?;
+                flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
             } else {
@@ -414,6 +414,50 @@ pub fn load_and_execute_kernel() -> Result<(), CrdybootError> {
     load_and_execute_kernel_impl(&RunKernelImpl, &UefiImpl)
 }
 
+/// Load the flexor kernel with a retry on failure.
+///
+/// See `connect_nvme_handles` for details of the bug this works around.
+fn load_flexor_kernel_with_retry(
+    rk: &dyn RunKernel,
+    uefi: &dyn Uefi,
+) -> Result<Vec<u8>, CrdybootError> {
+    match load_flexor_kernel(rk, uefi) {
+        Ok(flexor_kernel) => Ok(flexor_kernel),
+        Err(err) => {
+            info!("failed to load flexor kernel: {err}");
+
+            // Connect nvme controllers and try again.
+            connect_nvme_handles(uefi);
+            load_flexor_kernel(rk, uefi)
+        }
+    }
+}
+
+/// Attempt to recursively connect a driver to NVME handles.
+///
+/// In b/388506108, it was found that on the HP Probook 445 fails to
+/// boot flexor because the `SimpleFileSystem` protocol is not loaded
+/// for the Flexor data partition.
+///
+/// Recursively connecting controllers for handles supporting the NVME
+/// express passthrough protocol fixes the issue.
+fn connect_nvme_handles(uefi: &dyn Uefi) {
+    info!("connecting nvme handles...");
+    let nvme_handles = match uefi.find_nvme_express_pass_through_handles() {
+        Ok(handles) => handles,
+        Err(err) => {
+            info!("failed to get nvme handles: {err}");
+            return;
+        }
+    };
+
+    for handle in nvme_handles {
+        // This will fail if no new controllers are connected, so ignore
+        // the result.
+        let _ = uefi.connect_controller_recursive(handle);
+    }
+}
+
 /// Load the flexor kernel.
 ///
 /// Iterate over all the file system handles that support the simple file system
@@ -428,6 +472,7 @@ fn load_flexor_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<Vec<u8>, Cr
     let handles_buffer = uefi
         .find_simple_file_system_handles()
         .map_err(|err| CrdybootError::GetFileSystemHandlesFailed(err.status()))?;
+    info!("found {} SimpleFileSystem handles", handles_buffer.len());
 
     let valid_hashes = rk.get_valid_flexor_sha256_hashes();
 
@@ -446,6 +491,7 @@ fn load_flexor_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<Vec<u8>, Cr
             continue;
         }
 
+        info!("successfully loaded a {} byte flexor kernel", buffer.len());
         return Ok(buffer);
     }
     Err(CrdybootError::LoadFlexorKernelFailed)
@@ -525,6 +571,11 @@ mod tests {
 
     fn get_sfs_handle() -> Handle {
         static IMAGE_HANDLE: u8 = 234u8;
+        unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
+    }
+
+    fn get_nvme_handle() -> Handle {
+        static IMAGE_HANDLE: u8 = 235u8;
         unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
     }
 
@@ -617,6 +668,19 @@ mod tests {
             .returning(|| Ok(vec![get_sfs_handle()]));
     }
 
+    fn expect_find_nvme_express_pass_through_handles(uefi: &mut MockUefi) {
+        uefi.expect_find_nvme_express_pass_through_handles()
+            .times(1)
+            .returning(|| Ok(vec![get_nvme_handle()]));
+    }
+
+    fn expect_connect_nvme_controller(uefi: &mut MockUefi) {
+        uefi.expect_connect_controller_recursive()
+            .times(1)
+            .withf(|h| *h == get_nvme_handle())
+            .returning(|_| Ok(()));
+    }
+
     /// Test that `load_and_execute_kernel_impl` succeeds with a valid
     /// kernel partition loaded by vboot.
     #[test]
@@ -688,15 +752,20 @@ mod tests {
     #[cfg_attr(any(miri, feature = "android"), ignore)]
     fn test_flexor_no_valid_kernels() {
         let mut rk = MockRunKernel::new();
+        let mut uefi = create_mock_uefi(BootDrive::Hd1);
 
         expect_allocate_pages(&mut rk);
         expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
         expect_is_flexor_enabled(&mut rk, true);
-        expect_get_valid_flexor_sha256_hashes(&mut rk, &[]);
-        expect_open_file_loader(&mut rk);
+        expect_find_nvme_express_pass_through_handles(&mut uefi);
+        expect_connect_nvme_controller(&mut uefi);
 
-        let mut uefi = create_mock_uefi(BootDrive::Hd1);
-        expect_find_simple_file_system_handles(&mut uefi);
+        // Called twice due to `load_flexor_kernel_with_retry`.
+        for _ in 0..2 {
+            expect_get_valid_flexor_sha256_hashes(&mut rk, &[]);
+            expect_open_file_loader(&mut rk);
+            expect_find_simple_file_system_handles(&mut uefi);
+        }
 
         assert!(matches!(
             load_and_execute_kernel_impl(&rk, &uefi),
