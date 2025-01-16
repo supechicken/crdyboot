@@ -12,7 +12,7 @@ use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
-use uefi::proto::Protocol;
+use uefi::proto::{unsafe_protocol, Protocol};
 use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
     VariableKey, VariableVendor,
@@ -83,6 +83,8 @@ pub trait Uefi {
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
+    fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
+
     fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>>;
@@ -115,6 +117,11 @@ pub trait Uefi {
 
     /// Open the `LoadedImage` protocol for handle in exclusive mode.
     fn open_loaded_image(&self, handle: Handle) -> uefi::Result<ScopedLoadedImage>;
+
+    /// Connect one or more drivers to a controller.
+    ///
+    /// This sets the `recursive` parameter of `connect_controller` to true.
+    fn connect_controller_recursive(&self, controller: Handle) -> uefi::Result;
 }
 
 pub struct UefiImpl;
@@ -188,6 +195,10 @@ impl Uefi for UefiImpl {
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<BlockIO>()
+    }
+
+    fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<NvmeExpressPassThrough>()
     }
 
     fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>> {
@@ -272,6 +283,18 @@ impl Uefi for UefiImpl {
 
     fn open_loaded_image(&self, handle: Handle) -> uefi::Result<ScopedLoadedImage> {
         boot::open_protocol_exclusive::<LoadedImage>(handle).map(ScopedLoadedImage::new)
+    }
+
+    fn connect_controller_recursive(&self, controller: Handle) -> uefi::Result {
+        let driver_image_handle = None;
+        let remaining_device_path = None;
+        let recursive = true;
+        boot::connect_controller(
+            controller,
+            driver_image_handle,
+            remaining_device_path,
+            recursive,
+        )
     }
 }
 
@@ -386,4 +409,12 @@ impl Iterator for VariableKeys {
             }
         }
     }
+}
+
+/// Stub definition for the NVME express pass through since it's not
+/// defined in uefi-rs.
+#[unsafe_protocol("52c78312-8edc-4233-98f2-1a1aa5e388a5")]
+#[repr(C)]
+struct NvmeExpressPassThrough {
+    _data: [usize; 5],
 }
