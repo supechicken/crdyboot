@@ -1,6 +1,18 @@
 # Crdyboot Changelog
 
+## 1.0.5
+
 ## 1.0.4
+* Update to uefi-0.33. <https://crrev.com/c/6022537>
+* Error handling improvements. <https://crrev.com/c/6004480>,
+  <https://crrev.com/c/6011942>, <https://crrev.com/c/6011944>
+* Enable Flexor. <https://crrev.com/c/5998837>,
+  <https://crrev.com/c/6093628>, <https://crrev.com/c/6096549>
+* When verbose logging is enabled, also enable verbose logging for
+  Flexor. <https://crrev.com/c/6154248>,
+  <https://crrev.com/c/6169099>
+* Fix a Flexor boot failure on the HP
+  Probook 445. <https://crrev.com/c/6178005>
 
 ## 1.0.3
 * Update to uefi-0.31. <https://crrev.com/c/5808421>
