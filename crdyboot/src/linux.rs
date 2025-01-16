@@ -473,6 +473,7 @@ mod tests {
     use crate::vbpubk::tests::create_test_pe;
     use core::ptr;
     use libcrdy::fs::MockFileLoader;
+    use libcrdy::uefi::MockUefi;
     use vboot::{LoadKernelError, ReturnCode};
 
     const TEST_DATA: &[u8] = &[1, 2, 3];
@@ -610,6 +611,12 @@ mod tests {
             });
     }
 
+    fn expect_find_simple_file_system_handles(uefi: &mut MockUefi) {
+        uefi.expect_find_simple_file_system_handles()
+            .times(1)
+            .returning(|| Ok(vec![get_sfs_handle()]));
+    }
+
     /// Test that `load_and_execute_kernel_impl` succeeds with a valid
     /// kernel partition loaded by vboot.
     #[test]
@@ -669,9 +676,7 @@ mod tests {
         expect_open_file_loader(&mut rk);
 
         let mut uefi = create_mock_uefi(BootDrive::Hd1);
-        uefi.expect_find_simple_file_system_handles()
-            .times(1)
-            .returning(|| Ok(vec![get_sfs_handle()]));
+        expect_find_simple_file_system_handles(&mut uefi);
 
         load_and_execute_kernel_impl(&rk, &uefi).unwrap();
     }
@@ -691,9 +696,7 @@ mod tests {
         expect_open_file_loader(&mut rk);
 
         let mut uefi = create_mock_uefi(BootDrive::Hd1);
-        uefi.expect_find_simple_file_system_handles()
-            .times(1)
-            .returning(|| Ok(vec![get_sfs_handle()]));
+        expect_find_simple_file_system_handles(&mut uefi);
 
         assert!(matches!(
             load_and_execute_kernel_impl(&rk, &uefi),
