@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::alloc::string::ToString;
 use crate::disk;
 use crate::disk::GptDiskError;
-use alloc::format;
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_data_free, avb_slot_verify_result_to_string,
@@ -22,9 +22,7 @@ use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
-use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
-use uefi::proto::device_path::{DevicePath, DevicePathNodeEnum};
-use uefi::{cstr16, CString16, Char16};
+use uefi::{cstr16, CStr16, CString16, Char16};
 
 /// Allocated buffers from AVB to execute the kernel.
 pub struct LoadedBuffersAvb {
@@ -102,13 +100,9 @@ pub enum AvbError {
     #[error("initramfs is too large")]
     InitramfsTooLarge,
 
-    /// Failed looking up UEFI information for the ESP.
-    #[error("failed reading UEFI information for the ESP: {0}")]
-    FailedEspInfo(GptDiskError),
-
-    /// Unable to generate a boot path for the ESP.
-    #[error("unable to generate a sys boot path for the ESP: {0}")]
-    FailedEspPathGeneration(CString16),
+    /// Failed looking up the boot partition uuid.
+    #[error("failed reading the boot partition UUID: {0}")]
+    FailedBootPartUuid(GptDiskError),
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -763,12 +757,12 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     // TODO: have this be part of bootconfig once this handles bootconfig.
     cmdline.push_str(cstr16!(" androidboot.slot_suffix=_a"));
 
-    // Add the boot device needed for the second stage to discover
-    // the dynamic partitions.
+    // Add the UUID of the boot partition needed for the second stage to
+    // load the file system.
     // TODO: Put as bootconfig once it is supported.
-    let boot_path = get_android_boot_path(&UefiImpl)?;
-    cmdline.push_str(cstr16!(" androidboot.boot_device="));
-    cmdline.push_str(&boot_path);
+    let boot_part_uuid = get_android_boot_part_uuid(&UefiImpl)?;
+    cmdline.push_str(cstr16!(" androidboot.boot_part_uuid="));
+    cmdline.push_str(&boot_part_uuid);
 
     cmdline.push_str(cstr16!(" androidboot.verifiedbootstate=orange"));
 
@@ -786,183 +780,14 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     })
 }
 
-/// Create a linux sysfs device path string representation
-/// for `device_path`.
-///
-/// Returns None if the path does not have the necessary information
-/// to generate the path.
-///
-/// The path to the booted image is typically something as such:
-/// PciRoot(0x0)/Pci(0x4,0x0)/Scsi(0x0,0x0)/\
-/// HD(12,GPT,9513F9E9-AFD5-498B-BF79-0F2FDCCFDC7E,0x43000,0x20000)
-///
-/// The second stage bootloader wants something such as:
-/// pci0000:1d/0000:1d:2f.e
-///
-/// This is of the format: `pci{domain}:{bus_number}/{domain}:{bus_number}:{slot}.{function}`
-///
-/// For now assume the domain is 0000 or the uid from the ACPI device.
-/// TODO: Check the domain assumption.
-/// The slot and function are from the PCI device in the path.
-/// TODO: The `bus_number` is unlikely available from the path. It is going to need
-/// to be queried from something such as [EFI_PCI_IO_PROTOCOL.GetLocation()].
-///
-/// [EFI_PCI_IO_PROTOCOL.GetLocation()]: https://uefi.org/specs/UEFI/2.10/14_Protocols_PCI_Bus_Support.html#efi-pci-io-protocol-getlocation
-fn get_root_device_linux_path(device_path: &DevicePath) -> Option<CString16> {
-    let mut domain: u32 = 0;
-    let bus_number: u8 = 0;
-    let mut slot_function: Option<(u8, u8)> = None;
+// Name of the boot partition passed to the stage 2 of booting
+const BOOT_PARTITION_NAME: &CStr16 = cstr16!("boot_a");
 
-    for node in device_path.node_iter() {
-        match DevicePathNodeEnum::try_from(node) {
-            Ok(DevicePathNodeEnum::AcpiAcpi(node)) => domain = node.uid(),
-            Ok(DevicePathNodeEnum::HardwarePci(node)) => {
-                slot_function = Some((node.device(), node.function()));
-                break;
-            }
-            _ => continue,
-        }
-    }
-    let (slot, function) = slot_function?;
-    let sys_path = format!(
-        "pci{domain:04x}:{bus_number:02x}/{domain:04x}:\
-        {bus_number:02x}:{slot:02x}.{function:01x}"
-    );
-    // Unwrap OK: The format above will always result in a valid CString16.
-    Some(CString16::try_from(sys_path.as_str()).unwrap())
-}
-
-/// Look up the ESP partition handle and generate a sysfs device
-/// path for its boot device.
-///
-/// Returns None if there was an issue looking it up.
-fn get_android_boot_path(uefi: &dyn Uefi) -> Result<CString16, AvbError> {
-    let esp_handle = disk::find_esp_partition_handle(uefi).map_err(AvbError::FailedEspInfo)?;
-    let device_path =
-        disk::device_path_for_handle(uefi, esp_handle).map_err(AvbError::FailedEspInfo)?;
-    let Some(sys_path) = get_root_device_linux_path(&device_path) else {
-        // Attempt to make a readable version of the boot partition
-        // for the error log.
-        let st = device_path
-            .to_string(DisplayOnly(true), AllowShortcuts(false))
-            .unwrap_or_else(|_| CString16::try_from("No Path Text").unwrap());
-        return Err(AvbError::FailedEspPathGeneration(st));
-    };
-    Ok(sys_path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use libcrdy::uefi::ScopedDevicePath;
-    use uefi::proto::device_path::build;
-
-    #[test]
-    /// Test that a common Acpi/Pci/Scsi path generates
-    /// the expected path.
-    fn test_android_bootdevice() {
-        let mut vec = Vec::new();
-        let path = ScopedDevicePath::for_test(
-            build::DevicePathBuilder::with_vec(&mut vec)
-                .push(&build::acpi::Acpi {
-                    hid: 0xefef_010b,
-                    uid: 0x0000_001d,
-                })
-                .unwrap()
-                .push(&build::hardware::Pci {
-                    function: 0xe,
-                    device: 0x2f,
-                })
-                .unwrap()
-                .push(&build::messaging::Scsi {
-                    target_id: 50,
-                    logical_unit_number: 60,
-                })
-                .unwrap()
-                .finalize()
-                .unwrap()
-                .to_boxed(),
-        );
-
-        assert_eq!(
-            get_root_device_linux_path(&path),
-            Some(cstr16!("pci001d:00/001d:00:2f.e").to_owned())
-        );
-    }
-
-    #[test]
-    /// Test that the first Pci node in a path
-    /// with multiple Pci nodes is used for
-    /// the path.
-    fn test_android_bootdevice_first_pci() {
-        let mut vec = Vec::new();
-        let path = ScopedDevicePath::for_test(
-            build::DevicePathBuilder::with_vec(&mut vec)
-                .push(&build::acpi::Acpi {
-                    hid: 0xefef_010b,
-                    uid: 0x0000_001d,
-                })
-                .unwrap()
-                .push(&build::hardware::Pci {
-                    function: 0xe,
-                    device: 0x2f,
-                })
-                .unwrap()
-                .push(&build::messaging::Usb {
-                    parent_port_number: 0x3,
-                    interface: 0x9,
-                })
-                .unwrap()
-                .push(&build::hardware::Pci {
-                    function: 0x6,
-                    device: 0x41,
-                })
-                .unwrap()
-                .push(&build::messaging::Scsi {
-                    target_id: 50,
-                    logical_unit_number: 60,
-                })
-                .unwrap()
-                .finalize()
-                .unwrap()
-                .to_boxed(),
-        );
-
-        assert_eq!(
-            get_root_device_linux_path(&path),
-            Some(cstr16!("pci001d:00/001d:00:2f.e").to_owned())
-        );
-    }
-
-    #[test]
-    /// Test that a path without a Pci node does not
-    /// generate a path.
-    /// Additionally, test that a Usb node is not
-    /// mistaken as a Pci node.
-    fn test_android_bootdevice_no_pci() {
-        let mut vec = Vec::new();
-        let path = ScopedDevicePath::for_test(
-            build::DevicePathBuilder::with_vec(&mut vec)
-                .push(&build::acpi::Acpi {
-                    hid: 0xefef_010b,
-                    uid: 0x0000_001d,
-                })
-                .unwrap()
-                .push(&build::messaging::Usb {
-                    parent_port_number: 0x3,
-                    interface: 0x9,
-                })
-                .unwrap()
-                .push(&build::messaging::Scsi {
-                    target_id: 50,
-                    logical_unit_number: 60,
-                })
-                .unwrap()
-                .finalize()
-                .unwrap()
-                .to_boxed(),
-        );
-
-        assert_eq!(get_root_device_linux_path(&path), None);
-    }
+/// Look up the UUID of the boot partition and return as a `CString16`.
+/// Return Err if there was an issue looking it up.
+fn get_android_boot_part_uuid(uefi: &dyn Uefi) -> Result<CString16, AvbError> {
+    let guid = disk::get_partition_unique_guid(uefi, BOOT_PARTITION_NAME)
+        .map_err(AvbError::FailedBootPartUuid)?;
+    let boot_part_string = guid.to_string();
+    Ok(CString16::try_from(boot_part_string.as_str()).unwrap())
 }
