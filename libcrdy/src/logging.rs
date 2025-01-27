@@ -77,7 +77,7 @@ impl Logger {
     /// This will panic if `f` calls any function that would recursively
     /// lead to `with_inner` being called again. In particular, `f` must
     /// not do any logging through the `log` crate (e.g. calling `info!`
-    /// or `error!` macros).
+    /// or `error!` macros), or call `write_log_history`.
     fn with_inner<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut LoggerInner) -> R,
@@ -159,6 +159,14 @@ impl LogHistory {
         self.lines.push_back(line);
         assert!(self.lines.len() <= self.max_lines);
     }
+}
+
+pub(crate) fn write_log_history(writer: &mut dyn Write) {
+    LOGGER.with_inner(|inner| {
+        for line in &inner.history.lines {
+            let _ = writeln!(writer, "{line}");
+        }
+    });
 }
 
 /// Initialize logging at the specified level.

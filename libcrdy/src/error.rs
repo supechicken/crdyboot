@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::logging::{does_verbose_file_exist, write_log_history};
 use core::error::Error;
 use core::fmt::{self, Write};
 use log::error;
@@ -23,6 +24,13 @@ pub fn fail_with_fatal_error_impl(exe: &str, version: &str, err: &dyn Error) -> 
             // If printing the error fails, use the logger to make one
             // last-ditch effort to output something.
             error!("fatal error");
+        }
+
+        // If verbose logging is not enabled, print recent log lines to
+        // help debug the problem.
+        if !does_verbose_file_exist() {
+            let _ = writeln!(stdout, "\nRecent logs:");
+            write_log_history(stdout);
         }
     });
 

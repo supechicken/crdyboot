@@ -471,6 +471,27 @@ fn test_no_verbose_logs(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Test that if verbose logs are disabled, a failed boot prints recent logs.
+fn test_fatal_error_logs(conf: &Config) -> Result<()> {
+    println!("test that log history is printed after a fatal error");
+
+    update_verbose_boot_file(&conf.test_disk_path(), VerboseRuntimeLogs(false))?;
+    delete_crdyboot_signatures(&conf.test_disk_path())?;
+
+    let expected_output = &[
+        "Boot error in crdyshim-.*: failed to read the next stage signature",
+        "",
+        "Caused by:",
+        "    file open failed: NOT_FOUND",
+        "",
+        "Recent logs:",
+        // Additional logs are printed, but keep this minimal to make
+        // the test less brittle.
+        "INFO: .* embedded revocations date: .*",
+    ];
+    launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(
         conf,
@@ -483,6 +504,7 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     create_test_disk(conf)?;
 
     let tests = [
+        test_fatal_error_logs,
         test_no_verbose_logs,
         test_tpm1_deactivated_success,
         test_tpm1_extend_error_success,
