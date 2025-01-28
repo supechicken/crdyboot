@@ -40,23 +40,13 @@ pub fn does_verbose_file_exist() -> bool {
     }
 }
 
-/// Set the log level. By default it's set to `Warn` so that only
-/// warnings and errors are shown. In a normal boot, this will result in
-/// no output. If a file named `crdyboot_verbose` exists in the same
+/// Initialize logging.
+///
+/// By default the log level is set to `Warn` so that only warnings and
+/// errors are shown. In a normal boot, this will result in no
+/// output. If a file named `crdyboot_verbose` exists in the same
 /// directory as the bootloader executable, the log level will be set to
 /// `Debug`.
-pub fn set_log_level() {
-    // Default to only warnings and errors. Set this before calling
-    // `does_verbose_file_exist` to guard against any early verbose
-    // logs.
-    log::set_max_level(LevelFilter::Warn);
-
-    if does_verbose_file_exist() {
-        log::set_max_level(LevelFilter::Debug);
-    }
-}
-
-/// Initialize logging.
 ///
 /// # Panics
 ///
@@ -65,4 +55,11 @@ pub fn initialize_logging() {
     // Note: despite the generic name of 'helpers', this call is just
     // initializing the logger.
     uefi::helpers::init().expect("must not be called more than once");
+
+    let level = if does_verbose_file_exist() {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Warn
+    };
+    log::set_max_level(level);
 }

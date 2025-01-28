@@ -26,4 +26,3 @@ pub mod uefi;
 pub mod util;
 
 pub use error::fail_with_fatal_error_impl;
-pub use logging::set_log_level;

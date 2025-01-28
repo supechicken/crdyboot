@@ -25,7 +25,7 @@ mod vbpubk;
 use firmware::update_firmware;
 use libcrdy::logging::initialize_logging;
 use libcrdy::sbat_revocation::{self, RevocationError};
-use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
+use libcrdy::{embed_section, fail_with_fatal_error};
 use linux::{load_and_execute_kernel, CrdybootError};
 use log::info;
 use revocation::self_revocation_check;
@@ -98,7 +98,6 @@ fn run(crdyboot: &dyn Crdyboot) -> Result<(), CrdybootError> {
 #[entry]
 fn efi_main() -> Status {
     initialize_logging();
-    set_log_level();
 
     match run(&CrdybootImpl) {
         Ok(()) => unreachable!("kernel did not take control"),

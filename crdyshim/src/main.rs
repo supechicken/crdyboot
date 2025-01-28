@@ -26,7 +26,7 @@ use libcrdy::sbat_revocation::{self, RevocationError};
 use libcrdy::tpm::extend_pcr_and_log;
 use libcrdy::uefi::{Uefi, UefiImpl};
 use libcrdy::util::mib_to_bytes;
-use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
+use libcrdy::{embed_section, fail_with_fatal_error};
 use log::{error, info};
 use sbat::{RevocationSbat, RevocationSbatOwned};
 use uefi::boot::{AllocateType, MemoryType};
@@ -474,7 +474,6 @@ fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
 #[entry]
 fn efi_main() -> Status {
     initialize_logging();
-    set_log_level();
 
     match run(&CrdyshimImpl) {
         Ok(()) => unreachable!("next stage did not take control"),
