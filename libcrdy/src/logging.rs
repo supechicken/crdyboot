@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use log::{info, LevelFilter};
+use alloc::format;
+use alloc::string::String;
+use log::{info, LevelFilter, Metadata, Record};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
-use uefi::{boot, CStr16, Status};
+use uefi::{boot, println, CStr16, Status};
 
 /// Check if `efi\boot\crdyboot_verbose` exists on the boot
 /// filesystem. If any error occurs when checking for this file, `false`
@@ -40,15 +42,41 @@ pub fn does_verbose_file_exist() -> bool {
     }
 }
 
+struct Logger;
+
+static LOGGER: Logger = Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, _metadata: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if record.level() <= log::max_level() {
+            println!("{}", format_record(record));
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn format_record(record: &Record) -> String {
+    format!(
+        "[{:>5}]: {:>12}@{:03}: {}",
+        record.level(),
+        record.file().unwrap_or("<unknown file>"),
+        record.line().unwrap_or(0),
+        record.args()
+    )
+}
+
 /// Initialize logging at the specified level.
 ///
 /// # Panics
 ///
 /// Panics if called more than once.
 pub fn initialize_logging_with_level(level: LevelFilter) {
-    // Note: despite the generic name of 'helpers', this call is just
-    // initializing the logger.
-    uefi::helpers::init().expect("must not be called more than once");
+    log::set_logger(&LOGGER).expect("logger must not be initialized twice");
     log::set_max_level(level);
 }
 
@@ -70,4 +98,38 @@ pub fn initialize_logging() {
         LevelFilter::Warn
     };
     initialize_logging_with_level(level);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use log::Level;
+
+    #[test]
+    fn test_record_format() {
+        let record = Record::builder()
+            .args(format_args!("log message"))
+            .level(Level::Error)
+            .file(Some("file.rs"))
+            .line(Some(123))
+            .build();
+        assert_eq!(
+            format_record(&record),
+            "[ERROR]:      file.rs@123: log message"
+        );
+    }
+
+    #[test]
+    fn test_record_format_missing_location() {
+        let record = Record::builder()
+            .args(format_args!("log message"))
+            .level(Level::Error)
+            .file(None)
+            .line(None)
+            .build();
+        assert_eq!(
+            format_record(&record),
+            "[ERROR]: <unknown file>@000: log message"
+        );
+    }
 }
