@@ -6,14 +6,14 @@
 #![cfg_attr(target_os = "uefi", no_std)]
 
 use core::mem;
-use libcrdy::logging::initialize_logging;
-use log::info;
+use libcrdy::logging::initialize_logging_with_level;
+use log::{info, LevelFilter};
 use uefi::prelude::*;
 use uefi::runtime::{self, ResetType, VariableAttributes, VariableVendor};
 
 #[entry]
 fn efi_main() -> Status {
-    initialize_logging();
+    initialize_logging_with_level(LevelFilter::Debug);
 
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),

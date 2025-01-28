@@ -40,6 +40,18 @@ pub fn does_verbose_file_exist() -> bool {
     }
 }
 
+/// Initialize logging at the specified level.
+///
+/// # Panics
+///
+/// Panics if called more than once.
+pub fn initialize_logging_with_level(level: LevelFilter) {
+    // Note: despite the generic name of 'helpers', this call is just
+    // initializing the logger.
+    uefi::helpers::init().expect("must not be called more than once");
+    log::set_max_level(level);
+}
+
 /// Initialize logging.
 ///
 /// By default the log level is set to `Warn` so that only warnings and
@@ -52,14 +64,10 @@ pub fn does_verbose_file_exist() -> bool {
 ///
 /// Panics if called more than once.
 pub fn initialize_logging() {
-    // Note: despite the generic name of 'helpers', this call is just
-    // initializing the logger.
-    uefi::helpers::init().expect("must not be called more than once");
-
     let level = if does_verbose_file_exist() {
         LevelFilter::Debug
     } else {
         LevelFilter::Warn
     };
-    log::set_max_level(level);
+    initialize_logging_with_level(level);
 }

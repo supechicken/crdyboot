@@ -13,8 +13,8 @@ mod tpm_v1;
 
 use core::mem;
 use core::sync::atomic::{AtomicU32, Ordering};
-use libcrdy::logging::initialize_logging;
-use log::info;
+use libcrdy::logging::initialize_logging_with_level;
+use log::{info, LevelFilter};
 use operation::Operation;
 use uefi::boot;
 use uefi::{cstr16, entry, fs, Status};
@@ -61,7 +61,7 @@ impl Operation {
 
 #[entry]
 fn efi_main() -> Status {
-    initialize_logging();
+    initialize_logging_with_level(LevelFilter::Debug);
 
     Operation::init();
     match Operation::get() {
