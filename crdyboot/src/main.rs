@@ -23,6 +23,7 @@ mod sbat;
 mod vbpubk;
 
 use firmware::update_firmware;
+use libcrdy::logging::initialize_logging;
 use libcrdy::sbat_revocation::{self, RevocationError};
 use libcrdy::{embed_section, fail_with_fatal_error, set_log_level};
 use linux::{load_and_execute_kernel, CrdybootError};
@@ -96,7 +97,7 @@ fn run(crdyboot: &dyn Crdyboot) -> Result<(), CrdybootError> {
 
 #[entry]
 fn efi_main() -> Status {
-    uefi::helpers::init().expect("failed to initialize uefi::helpers");
+    initialize_logging();
     set_log_level();
 
     match run(&CrdybootImpl) {

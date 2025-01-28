@@ -6,13 +6,14 @@
 #![cfg_attr(target_os = "uefi", no_std)]
 
 use core::mem;
+use libcrdy::logging::initialize_logging;
 use log::info;
 use uefi::prelude::*;
 use uefi::runtime::{self, ResetType, VariableAttributes, VariableVendor};
 
 #[entry]
 fn efi_main() -> Status {
-    uefi::helpers::init().expect("failed to initialize uefi::helpers");
+    initialize_logging();
 
     match mem::size_of::<usize>() {
         4 => info!("32-bit UEFI"),

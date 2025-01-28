@@ -55,3 +55,14 @@ pub fn set_log_level() {
         log::set_max_level(LevelFilter::Debug);
     }
 }
+
+/// Initialize logging.
+///
+/// # Panics
+///
+/// Panics if called more than once.
+pub fn initialize_logging() {
+    // Note: despite the generic name of 'helpers', this call is just
+    // initializing the logger.
+    uefi::helpers::init().expect("must not be called more than once");
+}

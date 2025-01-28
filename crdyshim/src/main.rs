@@ -18,6 +18,7 @@ use libcrdy::arch::{Arch, PeFileForCurrentArch};
 use libcrdy::entry_point::get_primary_entry_point;
 use libcrdy::fs::{FileLoader, FileLoaderImpl, FsError};
 use libcrdy::launch::{LaunchError, NextStage};
+use libcrdy::logging::initialize_logging;
 use libcrdy::nx::{self, NxError};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::relocation::{relocate_pe_into, RelocationError};
@@ -472,7 +473,7 @@ fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
 
 #[entry]
 fn efi_main() -> Status {
-    uefi::helpers::init().expect("failed to initialize uefi::helpers");
+    initialize_logging();
     set_log_level();
 
     match run(&CrdyshimImpl) {

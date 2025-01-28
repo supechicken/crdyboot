@@ -13,6 +13,7 @@ mod tpm_v1;
 
 use core::mem;
 use core::sync::atomic::{AtomicU32, Ordering};
+use libcrdy::logging::initialize_logging;
 use log::info;
 use operation::Operation;
 use uefi::boot;
@@ -60,7 +61,7 @@ impl Operation {
 
 #[entry]
 fn efi_main() -> Status {
-    uefi::helpers::init().expect("failed to initialize uefi::helpers");
+    initialize_logging();
 
     Operation::init();
     match Operation::get() {
