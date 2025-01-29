@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::String;
 use core::cell::RefCell;
@@ -50,6 +51,10 @@ pub fn does_verbose_file_exist() -> bool {
 struct LoggerInner {
     /// Log level filter controlling whether a log is printed to the screen.
     display_level: LevelFilter,
+
+    /// Recent log lines. This includes verbose logs and does not
+    /// respect `display_level`.
+    history: LogHistory,
 }
 
 struct Logger(
@@ -108,6 +113,8 @@ impl log::Log for Logger {
             if record.level() <= inner.display_level {
                 println!("{}", line);
             }
+
+            inner.history.push(line);
         });
     }
 
@@ -131,16 +138,47 @@ fn format_record(record: &Record) -> String {
     output
 }
 
+struct LogHistory {
+    lines: VecDeque<String>,
+    max_lines: usize,
+}
+
+impl LogHistory {
+    fn new(max_lines: usize) -> Self {
+        Self {
+            lines: VecDeque::with_capacity(max_lines),
+            max_lines,
+        }
+    }
+
+    fn push(&mut self, line: String) {
+        if self.lines.len() >= self.max_lines {
+            self.lines.pop_front();
+        }
+
+        self.lines.push_back(line);
+        assert!(self.lines.len() <= self.max_lines);
+    }
+}
+
 /// Initialize logging at the specified level.
 ///
 /// # Panics
 ///
 /// Panics if called more than once.
 pub fn initialize_logging_with_level(display_level: LevelFilter) {
+    // The number of history lines is somewhat arbitrary, but it should
+    // be small enough that printing the history will not cause the
+    // console to scroll on any supported devices.
+    let max_lines = 20;
+
     // Allocate logger data on the heap and leak it. This data needs to
     // live as long as the program, so it's OK that nothing ever frees
     // it.
-    let inner = Box::into_raw(Box::new(RefCell::new(LoggerInner { display_level })));
+    let inner = Box::into_raw(Box::new(RefCell::new(LoggerInner {
+        history: LogHistory::new(max_lines),
+        display_level,
+    })));
     LOGGER.0.store(inner, Ordering::Relaxed);
     log::set_logger(&LOGGER).expect("logger must not be initialized twice");
 
@@ -196,5 +234,29 @@ mod tests {
             .line(None)
             .build();
         assert_eq!(format_record(&record), "ERROR: [<unknown>] log message");
+    }
+
+    #[test]
+    fn test_log_history() {
+        let mut history = LogHistory::new(3);
+        assert!(history.lines.is_empty());
+
+        history.push("0".to_owned());
+        assert_eq!(history.lines, ["0"]);
+
+        history.push("1".to_owned());
+        assert_eq!(history.lines, ["0", "1"]);
+
+        history.push("2".to_owned());
+        assert_eq!(history.lines, ["0", "1", "2"]);
+
+        history.push("3".to_owned());
+        assert_eq!(history.lines, ["1", "2", "3"]);
+
+        history.push("4".to_owned());
+        assert_eq!(history.lines, ["2", "3", "4"]);
+
+        history.push("5".to_owned());
+        assert_eq!(history.lines, ["3", "4", "5"]);
     }
 }
