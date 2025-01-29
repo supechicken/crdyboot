@@ -362,7 +362,7 @@ fn run_bootloader_build(
     }
 
     // Add or remove the `crdyboot_verbose` file.
-    gen_disk::update_verbose_boot_file(conf, verbose)
+    gen_disk::update_verbose_boot_file(conf.disk_path(), verbose)
 }
 
 fn run_build_enroller(conf: &Config) -> Result<()> {
