@@ -4,6 +4,7 @@
 
 use alloc::format;
 use alloc::string::String;
+use core::fmt::Write;
 use log::{info, LevelFilter, Metadata, Record};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
@@ -61,13 +62,20 @@ impl log::Log for Logger {
 }
 
 fn format_record(record: &Record) -> String {
-    format!(
-        "[{:>5}]: {:>12}@{:03}: {}",
+    let mut output = format!(
+        "{}: [{}",
         record.level(),
-        record.file().unwrap_or("<unknown file>"),
-        record.line().unwrap_or(0),
-        record.args()
-    )
+        record.file().unwrap_or("<unknown>")
+    );
+    if let Some(line) = record.line() {
+        // OK to unwrap: writing to a string cannot fail.
+        write!(output, "({line})").unwrap();
+    }
+
+    // OK to unwrap: writing to a string cannot fail.
+    write!(output, "] {}", record.args()).unwrap();
+
+    output
 }
 
 /// Initialize logging at the specified level.
@@ -113,10 +121,7 @@ mod tests {
             .file(Some("file.rs"))
             .line(Some(123))
             .build();
-        assert_eq!(
-            format_record(&record),
-            "[ERROR]:      file.rs@123: log message"
-        );
+        assert_eq!(format_record(&record), "ERROR: [file.rs(123)] log message");
     }
 
     #[test]
@@ -127,9 +132,6 @@ mod tests {
             .file(None)
             .line(None)
             .build();
-        assert_eq!(
-            format_record(&record),
-            "[ERROR]: <unknown file>@000: log message"
-        );
+        assert_eq!(format_record(&record), "ERROR: [<unknown>] log message");
     }
 }
