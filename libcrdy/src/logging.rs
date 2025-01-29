@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
+use core::cell::RefCell;
 use core::fmt::Write;
+use core::ptr;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use log::{info, LevelFilter, Metadata, Record};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
@@ -43,9 +47,54 @@ pub fn does_verbose_file_exist() -> bool {
     }
 }
 
-struct Logger;
+struct LoggerInner {
+    // TODO: add data.
+}
 
-static LOGGER: Logger = Logger;
+struct Logger(
+    /// Use an `AtomicPtr` so that the contents can be mutated. `static
+    /// mut` would work as well since UEFI is not multithreaded, but
+    /// atomics make it easier to avoid UB.
+    ///
+    /// The inner refcell is not strictly necessary, but simplifies safety
+    /// by not requiring a mutable dereference of the pointer.
+    AtomicPtr<RefCell<LoggerInner>>,
+);
+
+static LOGGER: Logger = Logger(AtomicPtr::new(ptr::null_mut()));
+
+impl Logger {
+    /// Call a function `f` with the logger's inner value mutably borrowed.
+    ///
+    /// # Panics
+    ///
+    /// This will panic if `f` calls any function that would recursively
+    /// lead to `with_inner` being called again. In particular, `f` must
+    /// not do any logging through the `log` crate (e.g. calling `info!`
+    /// or `error!` macros).
+    #[expect(unused)] // TODO
+    fn with_inner<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut LoggerInner) -> R,
+    {
+        let inner: *const RefCell<LoggerInner> = self.0.load(Ordering::Relaxed);
+        assert!(!inner.is_null());
+        // SAFETY:
+        // * The pointer is set to a valid allocation in
+        //   `initialize_logging`, and never unset.
+        // * We know that initialization has occurred because the pointer
+        //   is not null (see above assert).
+        // * The pointer is not dereferenced by any other code.
+        // * The pointer is never mutably dereferenced.
+        // * Even if two borrows were created in the call stack, it
+        //   would not be UB. The inner `RefCell` would panic on the
+        //   call to `borrow_mut` below if that occurred.
+        // * UEFI is single-threaded so there is no other thread that
+        //   could violate assumptions.
+        let inner = unsafe { &*inner };
+        f(&mut inner.borrow_mut())
+    }
+}
 
 impl log::Log for Logger {
     fn enabled(&self, _metadata: &Metadata) -> bool {
@@ -84,6 +133,13 @@ fn format_record(record: &Record) -> String {
 ///
 /// Panics if called more than once.
 pub fn initialize_logging_with_level(level: LevelFilter) {
+    // Allocate logger data on the heap and leak it. This data needs to
+    // live as long as the program, so it's OK that nothing ever frees
+    // it.
+    let inner = Box::into_raw(Box::new(RefCell::new(LoggerInner {
+        // TODO: add data.
+    })));
+    LOGGER.0.store(inner, Ordering::Relaxed);
     log::set_logger(&LOGGER).expect("logger must not be initialized twice");
     log::set_max_level(level);
 }
