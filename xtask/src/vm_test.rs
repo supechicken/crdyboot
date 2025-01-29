@@ -13,7 +13,8 @@ use crate::config::Config;
 use crate::gen_disk::{
     copy_partition_from_disk_to_disk, corrupt_crdyboot_signatures, corrupt_kern_a,
     corrupt_pubkey_section, delete_crdyboot_signatures, install_uefi_test_tool,
-    update_flexor_disk_with_test_kernel, SignAfterCorrupt, VerboseRuntimeLogs,
+    update_flexor_disk_with_test_kernel, update_verbose_boot_file, SignAfterCorrupt,
+    VerboseRuntimeLogs,
 };
 use crate::network::HttpsResource;
 use crate::qemu::{Display, QemuOpts};
@@ -426,6 +427,50 @@ fn test_tpm1_extend_error_success(conf: &Config) -> Result<()> {
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
 
+/// Test that if verbose logs are disabled, a successful boot prints no logs.
+fn test_no_verbose_logs(conf: &Config) -> Result<()> {
+    println!("test that no unwanted verbose logs are printed");
+
+    update_verbose_boot_file(&conf.test_disk_path(), VerboseRuntimeLogs(false))?;
+
+    let opts = default_qemu_opts(conf);
+    let vm = opts.spawn_disk_image(conf)?;
+
+    let stdout = vm.qemu.lock().unwrap().stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 {
+            // EOF reached, which means the VM has stopped.
+            bail!("QEMU no longer running");
+        }
+        print!(">>> {line}");
+
+        // Note: use `contains` rather than stricter forms of comparison
+        // to account for non-printing control characters.
+        if line.contains("BdsDxe: ") {
+            // This line come from the firmware, ignore it.
+            continue;
+        } else if line.contains("EFI stub: UEFI Secure Boot is enabled.") {
+            // This log line comes from the kernel, not the
+            // bootloaders. This means the bootloaders have completed
+            // their work, so the test is successful.
+            break;
+        } else {
+            // Print the log line to help with debugging. The error
+            // below is not currently printed because a different error
+            // takes precedence.
+            println!("unexpected log: {line}");
+
+            bail!("unexpected log in non-verbose mode");
+        }
+    }
+
+    vm.qemu.lock().unwrap().kill().unwrap();
+    Ok(())
+}
+
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(
         conf,
@@ -438,6 +483,7 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     create_test_disk(conf)?;
 
     let tests = [
+        test_no_verbose_logs,
         test_tpm1_deactivated_success,
         test_tpm1_extend_error_success,
         test_missing_signature_prevents_crdyboot_launch,
