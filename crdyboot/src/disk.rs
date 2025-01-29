@@ -269,7 +269,7 @@ pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid,
 /// This finds the `name` partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-fn find_partition_by_name(
+pub fn find_partition_by_name(
     uefi: &dyn Uefi,
     name: &CStr16,
 ) -> Result<(Handle, GptPartitionEntry), GptDiskError> {
@@ -457,6 +457,8 @@ pub(crate) mod tests {
         Hd3MbrPartition,
         FilePath,
         MacAddr,
+        BootA,
+        BootB,
     }
 
     impl DeviceKind {
@@ -474,7 +476,7 @@ pub(crate) mod tests {
             // non-zero size, each element is guaranteed to have a different
             // address.
             let index = self as usize;
-            static H: [u8; 8] = [0; 8];
+            static H: [u8; 10] = [0; 10];
             let ptr: *const u8 = &H[index];
             let ptr: *mut _ = ptr.cast_mut().cast();
             unsafe { Handle::from_ptr(ptr) }.unwrap()
@@ -497,6 +499,8 @@ pub(crate) mod tests {
                 Self::Hd3MbrPartition,
                 Self::FilePath,
                 Self::MacAddr,
+                Self::BootA,
+                Self::BootB,
             ]
         }
 
@@ -528,6 +532,26 @@ pub(crate) mod tests {
                     starting_lba: 0,
                     size_in_lba: 10000,
                 })),
+                Self::BootA => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                    partition_type_guid: GptPartitionType(guid!(
+                        "fe3a2a5d-4f32-41a7-b725-accc3285a309"
+                    )),
+                    unique_partition_guid: guid!("48339261-bf07-4faa-84e2-63bf034ba881"),
+                    starting_lba: 6_000_000,
+                    ending_lba: 16_000_000,
+                    attributes: GptPartitionAttributes::from_bits_retain(0x010E000000000000),
+                    partition_name: init_partition_name(cstr16!("boot_a")),
+                })),
+                Self::BootB => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                    partition_type_guid: GptPartitionType(guid!(
+                        "fe3a2a5d-4f32-41a7-b725-accc3285a309"
+                    )),
+                    unique_partition_guid: guid!("41673840-88b4-4db3-90b1-c0f328276647"),
+                    starting_lba: 6_000_000,
+                    ending_lba: 16_000_000,
+                    attributes: GptPartitionAttributes::from_bits_retain(0x003F000000000000),
+                    partition_name: init_partition_name(cstr16!("boot_b")),
+                })),
                 _ => None,
             }
         }
@@ -537,6 +561,8 @@ pub(crate) mod tests {
                 Self::Hd1Esp | Self::Hd2Esp => Some(12),
                 Self::Hd1State => Some(1),
                 Self::Hd3MbrPartition => Some(1),
+                Self::BootA => Some(13),
+                Self::BootB => Some(14),
                 _ => None,
             }
         }
@@ -629,6 +655,14 @@ pub(crate) mod tests {
                     mac_address: [1; 32],
                     interface_type: 2,
                 }),
+                Self::BootA => {
+                    nodes.extend(hd1);
+                    nodes.push(partition.unwrap());
+                }
+                Self::BootB => {
+                    nodes.extend(hd1);
+                    nodes.push(partition.unwrap());
+                }
             }
 
             let mut vec = Vec::new();

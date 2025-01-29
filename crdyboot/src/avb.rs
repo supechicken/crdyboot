@@ -23,6 +23,7 @@ use libcrdy::util::u32_to_usize;
 use log::{debug, info, log_enabled, warn};
 use uefi::boot::{AllocateType, MemoryType};
 use uefi::{cstr16, CStr16, CString16, Char16};
+use vboot::CgptAttributes;
 
 /// Allocated buffers from AVB to execute the kernel.
 pub struct LoadedBuffersAvb {
@@ -31,7 +32,7 @@ pub struct LoadedBuffersAvb {
     pub cmdline: CString16,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum AvbError {
     /// The avb slot verify call failed.
     #[error("image verification failed: {}", verify_result_to_str(*.0))]
@@ -99,6 +100,18 @@ pub enum AvbError {
     /// Combined initramfs is too large.
     #[error("initramfs is too large")]
     InitramfsTooLarge,
+
+    /// Failed finding the partition by name.
+    #[error("failed finding the partition {name} : {error}")]
+    FailedFindPartition {
+        // Partition name
+        name: &'static CStr16,
+        error: GptDiskError,
+    },
+
+    /// No partitions are bootable.
+    #[error("no partitions are bootable")]
+    NoBootablePartition,
 
     /// Failed looking up the boot partition uuid.
     #[error("failed reading the boot partition UUID: {0}")]
@@ -654,16 +667,14 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
         ptr::null(),
     ];
 
-    // Forcing only slot a for now.
-    // TODO: support boot priority flag checking.
-    let slot = c"_a";
+    let slot = get_priority_slot(&UefiImpl)?;
 
     let mut verify_data: *mut AvbSlotVerifyData = ptr::null_mut();
     let res = unsafe {
         avb_slot_verify(
             &mut avbops,
             requested_partitions.as_ptr(),
-            slot.as_ptr(),
+            slot.slot_suffix_cstr().as_ptr(),
             AvbSlotVerifyFlags::AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR,
             AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_LOGGING,
             &mut verify_data,
@@ -755,12 +766,13 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
 
     // TODO: Have this handle dynamic boot slots.
     // TODO: have this be part of bootconfig once this handles bootconfig.
-    cmdline.push_str(cstr16!(" androidboot.slot_suffix=_a"));
+    cmdline.push_str(cstr16!(" androidboot.slot_suffix="));
+    cmdline.push_str(slot.slot_suffix_cstr16());
 
     // Add the UUID of the boot partition needed for the second stage to
     // load the file system.
     // TODO: Put as bootconfig once it is supported.
-    let boot_part_uuid = get_android_boot_part_uuid(&UefiImpl)?;
+    let boot_part_uuid = get_android_boot_part_uuid(&UefiImpl, slot)?;
     cmdline.push_str(cstr16!(" androidboot.boot_part_uuid="));
     cmdline.push_str(&boot_part_uuid);
 
@@ -780,14 +792,91 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     })
 }
 
-// Name of the boot partition passed to the stage 2 of booting
-const BOOT_PARTITION_NAME: &CStr16 = cstr16!("boot_a");
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum BootSlot {
+    A,
+    B,
+}
+
+impl BootSlot {
+    fn all() -> &'static [Self] {
+        &[Self::A, Self::B]
+    }
+
+    /// Get the `CStr16` representation of the boot partititon name
+    /// for the given slot.
+    fn boot_part_name(self) -> &'static CStr16 {
+        match self {
+            BootSlot::A => cstr16!("boot_a"),
+            BootSlot::B => cstr16!("boot_b"),
+        }
+    }
+
+    /// Get the `CStr` representation of the slot suffix.
+    fn slot_suffix_cstr(self) -> &'static CStr {
+        match self {
+            BootSlot::A => c"_a",
+            BootSlot::B => c"_b",
+        }
+    }
+
+    /// Get the `CStr16` representation of the slot suffix.
+    fn slot_suffix_cstr16(self) -> &'static CStr16 {
+        match self {
+            BootSlot::A => cstr16!("_a"),
+            BootSlot::B => cstr16!("_b"),
+        }
+    }
+}
+
+/// Determines which boot slot to use based on partition priority.
+/// Return Err if we don't find a bootable partition.
+fn get_priority_slot(uefi: &dyn Uefi) -> Result<BootSlot, AvbError> {
+    // Priority must be > 0 or the partition is not bootable per standard.
+    let mut max_priority: u8 = 0;
+    let mut result_slot = BootSlot::A;
+    for slot in BootSlot::all() {
+        let name = slot.boot_part_name();
+        let (_, gpt_partition_entry) = disk::find_partition_by_name(uefi, name)
+            .map_err(|error| AvbError::FailedFindPartition { name, error })?;
+
+        let attributes = gpt_partition_entry.attributes;
+        let priority = CgptAttributes::from_u64(attributes.bits()).priority;
+        debug!("partition: {} priority: {}", name, priority);
+        // TODO: check and update tries
+        // b:393358402
+        if priority > max_priority {
+            max_priority = priority;
+            result_slot = *slot;
+        }
+    }
+
+    if max_priority != 0 {
+        Ok(result_slot)
+    } else {
+        Err(AvbError::NoBootablePartition)
+    }
+}
 
 /// Look up the UUID of the boot partition and return as a `CString16`.
 /// Return Err if there was an issue looking it up.
-fn get_android_boot_part_uuid(uefi: &dyn Uefi) -> Result<CString16, AvbError> {
-    let guid = disk::get_partition_unique_guid(uefi, BOOT_PARTITION_NAME)
-        .map_err(AvbError::FailedBootPartUuid)?;
+fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<CString16, AvbError> {
+    let name = slot.boot_part_name();
+    let guid = disk::get_partition_unique_guid(uefi, name).map_err(AvbError::FailedBootPartUuid)?;
     let boot_part_string = guid.to_string();
     Ok(CString16::try_from(boot_part_string.as_str()).unwrap())
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::disk::tests::{create_mock_uefi, BootDrive};
+
+    #[test]
+    fn test_get_priority_slot_basic() {
+        // In default setup boot_a has priority 14, success 1
+        // boot_b has priority 15, success 0, tries 3
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        assert_eq!(get_priority_slot(&uefi), Ok(BootSlot::B));
+    }
 }
