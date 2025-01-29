@@ -48,7 +48,8 @@ pub fn does_verbose_file_exist() -> bool {
 }
 
 struct LoggerInner {
-    // TODO: add data.
+    /// Log level filter controlling whether a log is printed to the screen.
+    display_level: LevelFilter,
 }
 
 struct Logger(
@@ -72,7 +73,6 @@ impl Logger {
     /// lead to `with_inner` being called again. In particular, `f` must
     /// not do any logging through the `log` crate (e.g. calling `info!`
     /// or `error!` macros).
-    #[expect(unused)] // TODO
     fn with_inner<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut LoggerInner) -> R,
@@ -102,9 +102,13 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &Record) {
-        if record.level() <= log::max_level() {
-            println!("{}", format_record(record));
-        }
+        let line = format_record(record);
+
+        self.with_inner(|inner| {
+            if record.level() <= inner.display_level {
+                println!("{}", line);
+            }
+        });
     }
 
     fn flush(&self) {}
@@ -132,16 +136,19 @@ fn format_record(record: &Record) -> String {
 /// # Panics
 ///
 /// Panics if called more than once.
-pub fn initialize_logging_with_level(level: LevelFilter) {
+pub fn initialize_logging_with_level(display_level: LevelFilter) {
     // Allocate logger data on the heap and leak it. This data needs to
     // live as long as the program, so it's OK that nothing ever frees
     // it.
-    let inner = Box::into_raw(Box::new(RefCell::new(LoggerInner {
-        // TODO: add data.
-    })));
+    let inner = Box::into_raw(Box::new(RefCell::new(LoggerInner { display_level })));
     LOGGER.0.store(inner, Ordering::Relaxed);
     log::set_logger(&LOGGER).expect("logger must not be initialized twice");
-    log::set_max_level(level);
+
+    // Allow messages at the `Debug` level and lower to be passed to
+    // `Logger`. This filtering occurs in the `log` crate macros,
+    // whereas the `display_level` filtering occurs in the `Logger`
+    // implementation.
+    log::set_max_level(LevelFilter::Debug);
 }
 
 /// Initialize logging.
