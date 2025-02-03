@@ -53,9 +53,9 @@ const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[
     // M126: gs://chromeos-releases/dev-channel/reven/15940.0.0/\
     // flexor_15940.0.0_reven_dev-channel.bin
     "2e7f43d5cd03a3dd9c23d9adca64095b8b5e7dc088d2f9b222f07a0291e9d4aa",
-    // M132: gs://chromeos-releases/ltc-channel/reven/16093.68.0/\
-    // flexor_16093.68.0_reven_ltc-channel.bin
-    "4355b1d576ebd65f31ed05e61c968b79ad4ae188abf7ebe42d233d1187daba3d",
+    // M134: gs://chromeos-releases/dev-channel/reven/16180.0.0/
+    // flexor_16180.0.0_reven_dev-channel.bin
+    "5950b2c31f2853e4687a286ea8b4579fa09737caa9d71d098e931bed812e926c",
 ];
 
 /// Size (in bytes) of the buffer into which vboot loads the kernel
