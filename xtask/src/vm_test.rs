@@ -504,6 +504,7 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     create_test_disk(conf)?;
 
     let tests = [
+        test_invalid_flexor_kernel,
         test_fatal_error_logs,
         test_no_verbose_logs,
         test_tpm1_deactivated_success,
@@ -522,19 +523,6 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
         test(conf)?;
 
         reset_test_disk(conf)?;
-    }
-
-    // tests with flexor enabled.
-    run_bootloader_build(
-        conf,
-        BuildAndroid(false),
-        BuildFlexor(true),
-        VerboseRuntimeLogs(true),
-    )?;
-
-    let flexor_tests = [test_invalid_flexor_kernel];
-    for test in flexor_tests {
-        test(conf)?;
     }
 
     println!("all VM tests successful");
