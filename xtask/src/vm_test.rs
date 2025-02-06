@@ -539,5 +539,7 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
         test(conf)?;
     }
 
+    println!("all VM tests successful");
+
     Ok(())
 }
