@@ -184,27 +184,6 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Test that booting flexor fails when the flexor_vmlinuz kernel is not in the
-/// allow list of hashes.
-///
-/// The error is the generic `boot failed` output because we check each partition
-/// for a valid flexor kernel and return an error in the end when load fails due
-/// to kernel missing, invalid kernel or errors while reading from the filesystem.
-fn test_invalid_flexor_kernel(conf: &Config) -> Result<()> {
-    let opts = QemuOpts {
-        image_path: conf.flexor_disk_path(),
-        timeout: None,
-        network: true,
-        ..default_qemu_opts(conf)
-    };
-    // update flexor disk image with a test kernel.
-    update_flexor_disk_with_test_kernel(conf.disk_path(), &conf.flexor_disk_path())?;
-    let expected_output = &["Boot error in crdyboot-.*: failed to load the flexor kernel"];
-
-    launch_test_disk_and_expect_output(conf, opts, expected_output)?;
-    Ok(())
-}
-
 /// Make a copy of the original disk image so that we can modify it for
 /// the test.
 fn create_test_disk(conf: &Config) -> Result<()> {
@@ -490,6 +469,27 @@ fn test_fatal_error_logs(conf: &Config) -> Result<()> {
         "INFO: .* embedded revocations date: .*",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
+}
+
+/// Test that booting flexor fails when the flexor_vmlinuz kernel is not in the
+/// allow list of hashes.
+///
+/// The error is the generic `boot failed` output because we check each partition
+/// for a valid flexor kernel and return an error in the end when load fails due
+/// to kernel missing, invalid kernel or errors while reading from the filesystem.
+fn test_invalid_flexor_kernel(conf: &Config) -> Result<()> {
+    let opts = QemuOpts {
+        image_path: conf.flexor_disk_path(),
+        timeout: None,
+        network: true,
+        ..default_qemu_opts(conf)
+    };
+    // update flexor disk image with a test kernel.
+    update_flexor_disk_with_test_kernel(conf.disk_path(), &conf.flexor_disk_path())?;
+    let expected_output = &["Boot error in crdyboot-.*: failed to load the flexor kernel"];
+
+    launch_test_disk_and_expect_output(conf, opts, expected_output)?;
+    Ok(())
 }
 
 pub fn run_vm_tests(conf: &Config) -> Result<()> {
