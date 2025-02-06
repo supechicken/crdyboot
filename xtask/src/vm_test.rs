@@ -305,7 +305,7 @@ fn test_corrupt_kern_a(conf: &Config) -> Result<()> {
 
     let expected_output = &[
         "Kernel data verification failed",
-        "Boot error in crdyboot-.*: failed to load kernel",
+        r"vboot failed: call to LoadKernel failed: 0x100b1000 \(VB2_ERROR_LK_INVALID_KERNEL_FOUND\)",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
@@ -341,9 +341,7 @@ fn test_signed_vbpubk_mod_breaks_vboot(conf: &Config) -> Result<()> {
     corrupt_pubkey_section(conf, &conf.test_disk_path(), SignAfterCorrupt(true))?;
 
     let expected_output = &[
-        "Boot error in crdyboot-.*: failed to load kernel",
-        "Caused by:",
-        r"    failed to inject kernel subkey: 0x10050013 \(VB2_ERROR_INSIDE_DATA_OVERLAP\)",
+        r"vboot failed: failed to inject kernel subkey: 0x10050013 \(VB2_ERROR_INSIDE_DATA_OVERLAP\)",
     ];
     launch_test_disk_and_expect_output(conf, default_qemu_opts(conf), expected_output)
 }
@@ -498,7 +496,7 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     run_bootloader_build(
         conf,
         BuildAndroid(false),
-        BuildFlexor(false),
+        BuildFlexor(true),
         VerboseRuntimeLogs(true),
     )?;
     download_test_key(conf)?;
