@@ -37,9 +37,6 @@ use tempfile::TempDir;
 /// Whether or not to build with android enabled.
 pub struct BuildAndroid(pub bool);
 
-// Whether or not to build with flexor enabled.
-pub struct BuildFlexor(pub bool);
-
 /// Tools for crdyboot.
 #[derive(Parser)]
 pub struct Opt {
@@ -294,18 +291,8 @@ fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
     )?;
     // Build android first to check those paths but leave the final
     // binary as the normal version by building w/o android second.
-    run_bootloader_build(
-        conf,
-        BuildAndroid(true),
-        BuildFlexor(true),
-        action.verbose(),
-    )?;
-    run_bootloader_build(
-        conf,
-        BuildAndroid(false),
-        BuildFlexor(true),
-        action.verbose(),
-    )?;
+    run_bootloader_build(conf, BuildAndroid(true), action.verbose())?;
+    run_bootloader_build(conf, BuildAndroid(false), action.verbose())?;
 
     Ok(())
 }
@@ -336,16 +323,12 @@ fn run_uefi_build(package: Package, features: Vec<&str>) -> Result<()> {
 fn run_bootloader_build(
     conf: &Config,
     android: BuildAndroid,
-    flexor: BuildFlexor,
     verbose: VerboseRuntimeLogs,
 ) -> Result<()> {
     run_uefi_build(Package::Crdyshim, vec!["use_dev_pubkey"])?;
-    let mut crdyboot_features = vec!["firmware_update"];
+    let mut crdyboot_features = vec!["firmware_update", "flexor"];
     if android.0 {
         crdyboot_features.push("android")
-    }
-    if flexor.0 {
-        crdyboot_features.push("flexor");
     }
     run_uefi_build(Package::Crdyboot, crdyboot_features)?;
     run_uefi_build(Package::UefiTestTool, vec![])?;
@@ -572,12 +555,7 @@ fn main() -> Result<()> {
     setup::rerun_setup_if_needed(&opt.action, &conf)?;
 
     match &opt.action {
-        Action::Build(action) => run_bootloader_build(
-            &conf,
-            action.is_android(),
-            BuildFlexor(true),
-            action.verbose(),
-        ),
+        Action::Build(action) => run_bootloader_build(&conf, action.is_android(), action.verbose()),
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(action) => run_check(&conf, action),
         Action::Coverage(action) => run_coverage(action),
