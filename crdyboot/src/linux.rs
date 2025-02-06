@@ -158,6 +158,7 @@ trait RunKernel {
 
     unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
 
+    #[allow(unused)] // TODO(nicholasbishop): remove this method
     fn is_flexor_enabled(&self) -> bool;
 
     fn verbose_logging(&self) -> bool;
@@ -349,7 +350,10 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             //
             // If flexor is enabled, log the error and move on to
             // attempting to loading a flexor kernel instead.
-            if rk.is_flexor_enabled() {
+            //
+            // TODO(nicholasbishop): this unnecessary branch will be
+            // removed in the next commit.
+            if true {
                 info!("vboot failed: {err}");
 
                 flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
@@ -529,7 +533,6 @@ mod tests {
     use core::ptr;
     use libcrdy::fs::MockFileLoader;
     use libcrdy::uefi::MockUefi;
-    use vboot::{LoadKernelError, ReturnCode};
 
     const TEST_DATA: &[u8] = &[1, 2, 3];
     const FLEXOR_SHA256_TEST_HASHES: &[&str] = &[
@@ -637,10 +640,6 @@ mod tests {
             .return_once(|_| Ok(()));
     }
 
-    fn expect_is_flexor_enabled(rk: &mut MockRunKernel, enabled: bool) {
-        rk.expect_is_flexor_enabled().times(1).return_const(enabled);
-    }
-
     fn expect_verbose_logging(rk: &mut MockRunKernel) {
         rk.expect_verbose_logging().times(1).return_const(false);
     }
@@ -708,29 +707,6 @@ mod tests {
         load_and_execute_kernel_impl(&rk, &uefi).unwrap();
     }
 
-    /// Test that `load_and_execute_kernel_impl` correctly fails if
-    /// flexor is disabled and vboot fails to load a kernel.
-    #[test]
-    #[cfg_attr(any(miri, feature = "android"), ignore)]
-    fn test_vboot_no_valid_kernels() {
-        let mut rk = MockRunKernel::new();
-
-        expect_allocate_pages(&mut rk);
-        expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
-        expect_is_flexor_enabled(&mut rk, false);
-
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-
-        assert!(matches!(
-            load_and_execute_kernel_impl(&rk, &uefi),
-            Err(CrdybootError::LoadKernelFailed(
-                LoadKernelError::InjectKernelSubkeyFailed(
-                    ReturnCode::VB2_ERROR_INSIDE_MEMBER_OUTSIDE
-                )
-            ))
-        ));
-    }
-
     /// Test that `load_and_execute_kernel_impl` successfully loads a
     /// flexor kernel after failing to load via vboot.
     #[test]
@@ -743,7 +719,6 @@ mod tests {
         expect_extend_pcr_and_log(&mut rk);
         expect_update_mem_attrs(&mut rk);
         expect_launch_next_stage(&mut rk);
-        expect_is_flexor_enabled(&mut rk, true);
         expect_verbose_logging(&mut rk);
         expect_get_valid_flexor_sha256_hashes(&mut rk, &[SHA_256_OF_TEST_PE]);
         expect_open_file_loader(&mut rk);
@@ -755,17 +730,15 @@ mod tests {
     }
 
     /// Test that `load_and_execute_kernel_impl` correctly fails if
-    /// flexor is enabled, and both vboot and flexor and fail to load a
-    /// kernel.
+    /// there are no valid vboot kernels and no valid flexor kernels.
     #[test]
     #[cfg_attr(any(miri, feature = "android"), ignore)]
-    fn test_flexor_no_valid_kernels() {
+    fn test_no_valid_kernels() {
         let mut rk = MockRunKernel::new();
         let mut uefi = create_mock_uefi(BootDrive::Hd1);
 
         expect_allocate_pages(&mut rk);
         expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
-        expect_is_flexor_enabled(&mut rk, true);
         expect_find_nvme_express_pass_through_handles(&mut uefi);
         expect_connect_nvme_controller(&mut uefi);
 
