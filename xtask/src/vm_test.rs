@@ -478,6 +478,8 @@ fn test_fatal_error_logs(conf: &Config) -> Result<()> {
 /// for a valid flexor kernel and return an error in the end when load fails due
 /// to kernel missing, invalid kernel or errors while reading from the filesystem.
 fn test_invalid_flexor_kernel(conf: &Config) -> Result<()> {
+    println!("test that flexor boot rejects kernels not in the allow list");
+
     let opts = QemuOpts {
         image_path: conf.flexor_disk_path(),
         timeout: None,
