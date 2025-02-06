@@ -10,8 +10,6 @@ repository.workspace = true
 android = ["dep:avb", "dep:bootimg"]
 # Temporary feature flag to control whether firmware updates are allowed.
 firmware_update = []
-# Feature flag to gate flexor support.
-flexor = []
 
 [dependencies]
 avb = { path = "../avb", optional = true }
