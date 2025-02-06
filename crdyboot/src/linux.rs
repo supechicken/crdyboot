@@ -345,9 +345,13 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
                 .ok_or(CrdybootError::GetCommandLineFailed)?;
         }
         Err(err) => {
-            // When load kernel fails, fallback to load flexor if the feature is
-            // enabled.
+            // Loading via vboot failed.
+            //
+            // If flexor is enabled, log the error and move on to
+            // attempting to loading a flexor kernel instead.
             if rk.is_flexor_enabled() {
+                info!("vboot failed: {err}");
+
                 flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
                 kernel_data = &flexor_kernel;
                 kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
