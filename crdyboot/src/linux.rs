@@ -31,7 +31,7 @@ use uefi::boot::{self, AllocateType, MemoryType};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::{cstr16, CStr16, CString16, Handle, Status};
-use vboot::{LoadKernelError, LoadKernelInputs};
+use vboot::LoadKernelInputs;
 
 /// TPM PCR to measure into.
 ///
@@ -88,10 +88,6 @@ pub enum CrdybootError {
     /// Failed to open the disk for reads and writes.
     #[error("failed to open GPT disk")]
     GptDisk(#[source] GptDiskError),
-
-    /// Vboot failed to find a valid kernel partition.
-    #[error("failed to load kernel")]
-    LoadKernelFailed(#[source] LoadKernelError),
 
     /// Failed to relocate a PE executable.
     #[error("failed to relocate the kernel")]
@@ -158,9 +154,6 @@ trait RunKernel {
 
     unsafe fn launch_next_stage<'a>(&self, next_stage: NextStage<'a>) -> Result<(), LaunchError>;
 
-    #[allow(unused)] // TODO(nicholasbishop): remove this method
-    fn is_flexor_enabled(&self) -> bool;
-
     fn verbose_logging(&self) -> bool;
 
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str];
@@ -194,10 +187,6 @@ impl RunKernel for RunKernelImpl {
 
     unsafe fn launch_next_stage(&self, next_stage: NextStage) -> Result<(), LaunchError> {
         unsafe { next_stage.launch() }
-    }
-
-    fn is_flexor_enabled(&self) -> bool {
-        cfg!(feature = "flexor")
     }
 
     fn verbose_logging(&self) -> bool {
@@ -346,22 +335,13 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
                 .ok_or(CrdybootError::GetCommandLineFailed)?;
         }
         Err(err) => {
-            // Loading via vboot failed.
-            //
-            // If flexor is enabled, log the error and move on to
+            // Loading via vboot failed. Log the error and move on to
             // attempting to loading a flexor kernel instead.
-            //
-            // TODO(nicholasbishop): this unnecessary branch will be
-            // removed in the next commit.
-            if true {
-                info!("vboot failed: {err}");
+            info!("vboot failed: {err}");
 
-                flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
-                kernel_data = &flexor_kernel;
-                kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
-            } else {
-                return Err(CrdybootError::LoadKernelFailed(err));
-            }
+            flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
+            kernel_data = &flexor_kernel;
+            kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
         }
     }
 
