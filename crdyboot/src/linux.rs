@@ -419,35 +419,45 @@ fn load_flexor_kernel_with_retry(
         Err(err) => {
             info!("failed to load flexor kernel: {err}");
 
-            // Connect nvme controllers and try again.
-            connect_nvme_handles(uefi);
+            // Connect disk controllers and try again.
+            connect_disk_handles(uefi);
             load_flexor_kernel(rk, uefi)
         }
     }
 }
 
-/// Attempt to recursively connect a driver to NVME handles.
+/// Attempt to recursively connect a driver to disk handles.
 ///
 /// In b/388506108, it was found that on the HP Probook 445 fails to
 /// boot flexor because the `SimpleFileSystem` protocol is not loaded
 /// for the Flexor data partition.
 ///
-/// Recursively connecting controllers for handles supporting the NVME
-/// express passthrough protocol fixes the issue.
-fn connect_nvme_handles(uefi: &dyn Uefi) {
+/// Recursively connecting controllers for handles supporting the
+/// ATA/NVME passthrough protocols fixes the issue.
+fn connect_disk_handles(uefi: &dyn Uefi) {
+    info!("connecting ata handles...");
+    match uefi.find_ata_pass_through_handles() {
+        Ok(handles) => connect_handles(uefi, &handles),
+        Err(err) => {
+            info!("failed to get ata handles: {err}");
+        }
+    }
+
     info!("connecting nvme handles...");
-    let nvme_handles = match uefi.find_nvme_express_pass_through_handles() {
-        Ok(handles) => handles,
+    match uefi.find_nvme_express_pass_through_handles() {
+        Ok(handles) => connect_handles(uefi, &handles),
         Err(err) => {
             info!("failed to get nvme handles: {err}");
-            return;
         }
-    };
+    }
+}
 
-    for handle in nvme_handles {
+/// Attempt to recursively connect a driver to each handle in `handles`.
+fn connect_handles(uefi: &dyn Uefi, handles: &[Handle]) {
+    for handle in handles {
         // This will fail if no new controllers are connected, so ignore
         // the result.
-        let _ = uefi.connect_controller_recursive(handle);
+        let _ = uefi.connect_controller_recursive(*handle);
     }
 }
 
@@ -571,6 +581,11 @@ mod tests {
         unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
     }
 
+    fn get_ata_handle() -> Handle {
+        static IMAGE_HANDLE: u8 = 236u8;
+        unsafe { Handle::from_ptr(ptr::from_ref(&IMAGE_HANDLE).cast_mut().cast()) }.unwrap()
+    }
+
     fn expect_allocate_pages(rk: &mut MockRunKernel) {
         for expected_size in [
             LoadKernelInputs::RECOMMENDED_WORKBUF_SIZE,
@@ -656,6 +671,12 @@ mod tests {
             .returning(|| Ok(vec![get_sfs_handle()]));
     }
 
+    fn expect_find_ata_pass_through_handles(uefi: &mut MockUefi) {
+        uefi.expect_find_ata_pass_through_handles()
+            .times(1)
+            .returning(|| Ok(vec![get_ata_handle()]));
+    }
+
     fn expect_find_nvme_express_pass_through_handles(uefi: &mut MockUefi) {
         uefi.expect_find_nvme_express_pass_through_handles()
             .times(1)
@@ -719,7 +740,9 @@ mod tests {
 
         expect_allocate_pages(&mut rk);
         expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
+        expect_find_ata_pass_through_handles(&mut uefi);
         expect_find_nvme_express_pass_through_handles(&mut uefi);
+        expect_connect_controller_recursive(&mut uefi, get_ata_handle());
         expect_connect_controller_recursive(&mut uefi, get_nvme_handle());
 
         // Called twice due to `load_flexor_kernel_with_retry`.
