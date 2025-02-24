@@ -81,6 +81,8 @@ pub trait Uefi {
     /// The actual UEFI implementation of this never returns.
     fn reset(&self, reset_type: ResetType);
 
+    fn find_ata_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
+
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
@@ -195,6 +197,10 @@ impl Uefi for UefiImpl {
 
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<BlockIO>()
+    }
+
+    fn find_ata_pass_through_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<AtaPassThrough>()
     }
 
     fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>> {
@@ -411,8 +417,14 @@ impl Iterator for VariableKeys {
     }
 }
 
-/// Stub definition for the NVME express pass through since it's not
-/// defined in uefi-rs.
+// Stub definitions for protocols not defined in uefi-rs.
+
+#[unsafe_protocol("1d3de7f0-0807-424f-aa69-11a54e19a46f")]
+#[repr(C)]
+struct AtaPassThrough {
+    _data: [usize; 8],
+}
+
 #[unsafe_protocol("52c78312-8edc-4233-98f2-1a1aa5e388a5")]
 #[repr(C)]
 struct NvmeExpressPassThrough {
