@@ -662,10 +662,10 @@ mod tests {
             .returning(|| Ok(vec![get_nvme_handle()]));
     }
 
-    fn expect_connect_nvme_controller(uefi: &mut MockUefi) {
+    fn expect_connect_controller_recursive(uefi: &mut MockUefi, handle: Handle) {
         uefi.expect_connect_controller_recursive()
             .times(1)
-            .withf(|h| *h == get_nvme_handle())
+            .withf_st(move |h| *h == handle)
             .returning(|_| Ok(()));
     }
 
@@ -720,7 +720,7 @@ mod tests {
         expect_allocate_pages(&mut rk);
         expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
         expect_find_nvme_express_pass_through_handles(&mut uefi);
-        expect_connect_nvme_controller(&mut uefi);
+        expect_connect_controller_recursive(&mut uefi, get_nvme_handle());
 
         // Called twice due to `load_flexor_kernel_with_retry`.
         for _ in 0..2 {
