@@ -39,8 +39,9 @@ necessitates revoking older versions. In more detail:
    revocations.
 
 Note that the canonical source of revocation data is in
-[`sbat_var_defs.h`] in the shim repo. Revocations should be submitted
-there as well as applied to crdyshim's [`revocations.csv`].
+[`SbatLevel_Variable.txt`] in the shim repo. Revocations should be
+submitted there as well as applied to [`sbat_revocations.csv`] in this
+repo.
 
 \* Exactly what constitutes a "sufficiently complete" rollout is not
    fully defined yet. We will need to consider scenarios such as OS
@@ -70,5 +71,5 @@ appropriate section.
 [`SBAT.md`]: https://github.com/rhboot/shim/blob/HEAD/SBAT.md
 [`libcrdy/src/util.rs`]: ../libcrdy/src/util.rs
 [`link_section`]: https://doc.rust-lang.org/beta/reference/abi.html#the-link_section-attribute
-[`revocations.csv`]: ../crdyshim/revocations.csv
-[`sbat_var_defs.h`]: https://github.com/rhboot/shim/blob/HEAD/include/sbat_var_defs.h
+[`sbat_revocations.csv`]: ../libcrdy/sbat_revocations.csv
+[`SbatLevel_Variable.txt`]: https://github.com/rhboot/shim/blob/HEAD/SbatLevel_Variable.txt
