@@ -67,6 +67,18 @@ The macro is defined in [`libcrdy/src/util.rs`]. It creates a static
 variable and uses the [`link_section`] attribute to place it in the
 appropriate section.
 
+## Revocations
+
+Both crdyshim and crdyboot contain the same embedded list of SBAT
+revocations. See [`sbat_revocations.csv`]. That file can be updated with
+`cargo xtask update-sbat-revocations`, which will pull updates from
+[`SbatLevel_Variable.txt`] in the shim repo.
+
+Shortly after launching, both crdyshim and crdyboot check if the UEFI
+variable containing SBAT revocations needs to be updated by comparing
+against the date in the embedded revocation list. If the UEFI variable
+is out of date, the embedded revocations are copied to the variable.
+
 [UEFI Signing Requirements]: https://techcommunity.microsoft.com/t5/hardware-dev-center/updated-uefi-signing-requirements/ba-p/1062916
 [`SBAT.md`]: https://github.com/rhboot/shim/blob/HEAD/SBAT.md
 [`libcrdy/src/util.rs`]: ../libcrdy/src/util.rs
