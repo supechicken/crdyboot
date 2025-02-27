@@ -62,6 +62,7 @@ enum Action {
     GenTestDataTarball(GenTestDataTarballAction),
     GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
     GenEsp(GenEspAction),
+    UpdateSbatRevocations(UpdateSbatRevocations),
 }
 
 /// Build crdyboot.
@@ -226,6 +227,10 @@ struct GenVbootReturnCodeStringsAction {}
 /// Build an ESP from the last built bootx64.efi binary.
 #[derive(Parser)]
 struct GenEspAction {}
+
+/// Update libcrdy/sbat_revocations.csv.
+#[derive(Parser)]
+struct UpdateSbatRevocations {}
 
 /// Optional features that are selected when doing unit tests
 /// and lint checks.
@@ -568,5 +573,6 @@ fn main() -> Result<()> {
         Action::GenTestDataTarball(_) => gen_test_data_tarball(&conf),
         Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),
         Action::GenEsp(_) => gen_disk::gen_trivial_esp_image(&conf, &VerboseRuntimeLogs(false)),
+        Action::UpdateSbatRevocations(_) => secure_boot::update_sbat_revocations(),
     }
 }
