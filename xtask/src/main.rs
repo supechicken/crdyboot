@@ -24,7 +24,7 @@ use arch::Arch;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
 use command_run::Command;
-use config::Config;
+use config::{Config, EfiExe};
 use fs_err as fs;
 use gen_disk::VerboseRuntimeLogs;
 use package::Package;
@@ -340,6 +340,21 @@ fn run_bootloader_build(
 
     // Check various properties of the bootloader binaries.
     bin_checks::run_bin_checks(conf)?;
+
+    // Sign the bootloaders.
+    for arch in Arch::all() {
+        secure_boot::authenticode_sign(
+            &conf.target_exec_path(arch, EfiExe::Crdyshim),
+            &conf.crdyshim_signed_path(arch),
+            &conf.secure_boot_root_key_paths(),
+        )?;
+
+        secure_boot::create_detached_signature(
+            &conf.target_exec_path(arch, EfiExe::Crdyboot),
+            &conf.crdyboot_signature_path(arch),
+            &conf.secure_boot_shim_key_paths(),
+        )?;
+    }
 
     // Update the disk image with the new executables.
     gen_disk::sign_and_copy_bootloaders(conf)?;

@@ -52,6 +52,24 @@ impl Config {
             .join(exe.as_str())
     }
 
+    /// Get the path of the signed crdyshim executable.
+    ///
+    /// This at the same path as the unsigned crdyshim executable, but
+    /// with the extension changed from "efi" to "signed".
+    pub fn crdyshim_signed_path(&self, arch: Arch) -> Utf8PathBuf {
+        self.target_exec_path(arch, EfiExe::Crdyshim)
+            .with_extension("signed")
+    }
+
+    /// Get the path of the detached crdyboot signature.
+    ///
+    /// This is at the same path as the crdyboot executable, but with
+    /// the extension changed from "efi" to "sig".
+    pub fn crdyboot_signature_path(&self, arch: Arch) -> Utf8PathBuf {
+        self.target_exec_path(arch, EfiExe::Crdyboot)
+            .with_extension("sig")
+    }
+
     pub fn workspace_path(&self) -> Utf8PathBuf {
         self.repo.join("workspace")
     }
