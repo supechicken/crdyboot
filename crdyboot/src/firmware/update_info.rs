@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::firmware::FirmwareError;
+use crate::firmware::{FirmwareError, BOOTLOADER_SUPPORTS_FWUPD};
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -195,8 +195,14 @@ fn get_update_from_var(
         return Ok(None);
     }
 
-    // Skip fwupd-efi debugging settings.
-    if key.name == FWUPDATE_VERBOSE || key.name == FWUPDATE_DEBUG_LOG {
+    // Skip special fwupd variables.
+    if [
+        FWUPDATE_VERBOSE,
+        FWUPDATE_DEBUG_LOG,
+        BOOTLOADER_SUPPORTS_FWUPD,
+    ]
+    .contains(&&*key.name)
+    {
         return Ok(None);
     }
 
@@ -558,6 +564,7 @@ pub(crate) mod tests {
         let vars = [
             (Ok(new_var_key(FWUPDATE_VERBOSE, FWUPDATE_VENDOR))),
             (Ok(new_var_key(FWUPDATE_DEBUG_LOG, FWUPDATE_VENDOR))),
+            (Ok(new_var_key(BOOTLOADER_SUPPORTS_FWUPD, FWUPDATE_VENDOR))),
         ];
         for var in vars {
             assert!(get_update_from_var(&uefi, var).unwrap().is_none());

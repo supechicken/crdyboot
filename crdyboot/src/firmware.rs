@@ -15,9 +15,21 @@ use libcrdy::util::u32_to_usize;
 use load_capsules::{CapsuleLoader, CapsuleLoaderImpl};
 use log::info;
 use uefi::boot::PAGE_SIZE;
-use uefi::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType};
-use uefi::Status;
-use update_info::{get_update_table, set_update_statuses, UpdateInfo};
+use uefi::runtime::{CapsuleBlockDescriptor, CapsuleHeader, ResetType, VariableAttributes};
+use uefi::{cstr16, CStr16, Status};
+use update_info::{get_update_table, set_update_statuses, UpdateInfo, FWUPDATE_VENDOR};
+
+/// Name of a UEFI variable used to announce support for installing UEFI
+/// capsules provided by fwupd.
+const BOOTLOADER_SUPPORTS_FWUPD: &CStr16 = cstr16!("BootloaderSupportsFwupd");
+
+/// Attributes for the `BOOTLOADER_SUPPORTS_FWUPD` UEFI variable.
+///
+/// The variable must be accessible at runtime so that fwupd can see
+/// it. It does not need the nonvolatile attribute; the variable is
+/// created on each boot in regular memory.
+const BOOTLOADER_SUPPORTS_FWUPD_ATTRS: VariableAttributes =
+    VariableAttributes::BOOTSERVICE_ACCESS.union(VariableAttributes::RUNTIME_ACCESS);
 
 #[derive(Debug, thiserror::Error)]
 enum FirmwareError {
@@ -231,6 +243,24 @@ pub fn update_firmware() {
     }
 }
 
+/// Inform fwupd that crdyboot will handle capsule updates (rather than
+/// fwupd-efi) by setting a UEFI variable.
+///
+/// Errors are logged but otherwise ignored.
+pub fn announce_fwupd_support(uefi: &dyn Uefi) {
+    // The variable's value is a single-byte encoding of `true`.
+    let value = &[1];
+
+    if let Err(err) = uefi.set_variable(
+        BOOTLOADER_SUPPORTS_FWUPD,
+        &FWUPDATE_VENDOR,
+        BOOTLOADER_SUPPORTS_FWUPD_ATTRS,
+        value,
+    ) {
+        info!("failed to set {BOOTLOADER_SUPPORTS_FWUPD}: {err}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,7 +271,6 @@ mod tests {
     use uefi::runtime::{CapsuleFlags, CapsuleInfo, VariableKey};
     use uefi::{guid, Guid, Status};
     use update_info::tests::{create_mock_uefi_with_get_var, VAR_NAME};
-    use update_info::FWUPDATE_VENDOR;
 
     const TEST_GUID: Guid = guid!("4f5c8eed-4346-4de8-82b2-48b884a84dee");
     const TEST_FLAGS: CapsuleFlags = CapsuleFlags::PERSIST_ACROSS_RESET;
@@ -464,5 +493,37 @@ mod tests {
             .expect_load_capsules_from_disk()
             .returning(|_, _| Ok(vec![]));
         assert!(update_firmware_impl(&uefi, &loader).is_ok());
+    }
+
+    fn expect_set_variable_bootloader_supports_fwupd(uefi: &mut MockUefi, result: uefi::Result) {
+        uefi.expect_set_variable()
+            .withf(|name, vendor, attrs, value| {
+                name == BOOTLOADER_SUPPORTS_FWUPD
+                    && *vendor == FWUPDATE_VENDOR
+                    && *attrs == BOOTLOADER_SUPPORTS_FWUPD_ATTRS
+                    && value == [1]
+            })
+            .return_once(|_, _, _, _| result)
+            .times(1);
+    }
+
+    /// Test successfully announcing fwupd support.
+    #[test]
+    fn test_announce_fwupd_support() {
+        let mut uefi = MockUefi::new();
+        expect_set_variable_bootloader_supports_fwupd(&mut uefi, Ok(()));
+        announce_fwupd_support(&uefi);
+    }
+
+    /// Test unsuccessfully announcing fwupd support -- the error should
+    /// be silently swallowed.
+    #[test]
+    fn test_announce_fwupd_support_error() {
+        let mut uefi = MockUefi::new();
+        expect_set_variable_bootloader_supports_fwupd(
+            &mut uefi,
+            Err(Status::OUT_OF_RESOURCES.into()),
+        );
+        announce_fwupd_support(&uefi);
     }
 }

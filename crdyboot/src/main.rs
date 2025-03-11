@@ -25,6 +25,7 @@ mod vbpubk;
 use firmware::update_firmware;
 use libcrdy::logging::initialize_logging;
 use libcrdy::sbat_revocation::{self, RevocationError};
+use libcrdy::uefi::UefiImpl;
 use libcrdy::{embed_section, fail_with_fatal_error};
 use linux::{load_and_execute_kernel, CrdybootError};
 use log::info;
@@ -43,6 +44,8 @@ trait Crdyboot {
     fn update_sbat_revocations(&self) -> Result<(), RevocationError>;
 
     fn maybe_copy_sbat_revocations(&self);
+
+    fn announce_fwupd_support(&self);
 
     fn update_firmware(&self);
 
@@ -63,6 +66,10 @@ impl Crdyboot for CrdybootImpl {
 
     fn maybe_copy_sbat_revocations(&self) {
         sbat::maybe_copy_sbat_revocations();
+    }
+
+    fn announce_fwupd_support(&self) {
+        firmware::announce_fwupd_support(&UefiImpl);
     }
 
     fn update_firmware(&self) {
@@ -87,6 +94,10 @@ fn run(crdyboot: &dyn Crdyboot) -> Result<(), CrdybootError> {
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.
     crdyboot.maybe_copy_sbat_revocations();
+
+    // Set a UEFI variable to inform fwupd that crdyboot supports
+    // firmware capsule updates.
+    crdyboot.announce_fwupd_support();
 
     // Install firmware update capsules if needed. This may reset the
     // system.
@@ -158,6 +169,13 @@ mod tests {
             .return_once(|| ());
     }
 
+    fn expect_announce_fwupd_support(crdyboot: &mut MockCrdyboot) {
+        crdyboot
+            .expect_announce_fwupd_support()
+            .times(1)
+            .return_once(|| ());
+    }
+
     fn expect_update_firmware(crdyboot: &mut MockCrdyboot) {
         crdyboot
             .expect_update_firmware()
@@ -180,6 +198,7 @@ mod tests {
         expect_self_revocation_check(&mut crdyboot, Ok(()));
         expect_update_sbat_revocations(&mut crdyboot, Ok(()));
         expect_maybe_copy_sbat_revocations(&mut crdyboot);
+        expect_announce_fwupd_support(&mut crdyboot);
         expect_update_firmware(&mut crdyboot);
         expect_load_and_execute_kernel(&mut crdyboot);
 
@@ -215,6 +234,7 @@ mod tests {
             Err(RevocationError::UndatedEmbeddedRevocations),
         );
         expect_maybe_copy_sbat_revocations(&mut crdyboot);
+        expect_announce_fwupd_support(&mut crdyboot);
         expect_update_firmware(&mut crdyboot);
         expect_load_and_execute_kernel(&mut crdyboot);
 
