@@ -480,7 +480,7 @@ fn fat_write_file<T: ReadWriteSeek>(
 
 /// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
 /// system partition in the disk image at `disk_path`.
-pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
+fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
     modify_system_partition(disk_path, |root_dir| {
         let dst_efi_dir = root_dir.open_dir("EFI")?;
         let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
@@ -500,32 +500,6 @@ pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()>
         Ok(())
     })
     .context("failed to update boot files")
-}
-
-/// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the EFI
-/// system partition in the disk image at `flexor_disk_path`.
-pub fn update_flexor_boot_files(flexor_disk_path: &Utf8PathBuf, src_dir: &Utf8Path) -> Result<()> {
-    modify_system_partition(flexor_disk_path, |root_dir| {
-        let dst_efi_dir = root_dir.open_dir("EFI")?;
-        let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;
-
-        for entry in fs::read_dir(src_dir)? {
-            let entry = entry?;
-            let file_name = entry.file_name();
-            let file_name = file_name.to_str().unwrap();
-
-            println!(
-                "copying {} to EFI/BOOT in the flexor disk image.",
-                entry.path().display()
-            );
-
-            let src = fs::read(entry.path())?;
-
-            fat_write_file(&dst_boot_dir, file_name, &src)?;
-        }
-        Ok(())
-    })
-    .context("failed to update flexor boot files")
 }
 
 /// Copy `vmlinuz.A` from `disk_path` to `flexor_disk_path` with the name
@@ -591,7 +565,7 @@ pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
     }
 
     update_boot_files(conf.disk_path(), tmp_path)?;
-    update_flexor_boot_files(&conf.flexor_disk_path(), tmp_path)
+    update_boot_files(&conf.flexor_disk_path(), tmp_path)
 }
 
 pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> {
