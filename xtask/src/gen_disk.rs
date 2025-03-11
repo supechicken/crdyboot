@@ -5,7 +5,7 @@
 use crate::arch::Arch;
 use crate::config::{Config, EfiExe};
 use crate::mount::Mount;
-use crate::secure_boot::{self, SecureBootKeyPaths};
+use crate::secure_boot;
 use crate::vm_test::Operation;
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -545,40 +545,6 @@ pub fn update_flexor_disk_with_test_kernel(
     .context("failed to update flexor disk image with the test kernel.")
 }
 
-pub struct SignAndUpdateBootloader<'a> {
-    /// Path to a reven disk image.
-    pub disk_path: &'a Utf8Path,
-
-    /// Path to flexor disk image.
-    pub flexor_disk_path: Utf8PathBuf,
-
-    /// Keys to sign with.
-    pub key_paths: SecureBootKeyPaths,
-
-    /// Mapping from source file path (an unsigned bootloader
-    /// executable) to the destination file name (within the EFI/BOOT
-    /// subdirectory of the system partition).
-    pub mapping: Vec<(Utf8PathBuf, String)>,
-}
-
-impl<'a> SignAndUpdateBootloader<'a> {
-    /// Sign each source file (in a temporary directory, source files
-    /// are not modified), then copy the signed files into the system
-    /// partition of the disk image.
-    pub fn run(&self) -> Result<()> {
-        let tmp_dir = TempDir::new()?;
-        let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
-
-        for (src, dst_name) in &self.mapping {
-            let signed_src = tmp_path.join(dst_name);
-            secure_boot::sign(src, &signed_src, &self.key_paths)?;
-        }
-
-        update_boot_files(self.disk_path, tmp_path)?;
-        update_flexor_boot_files(&self.flexor_disk_path, tmp_path)
-    }
-}
-
 /// Whether to enable verbose runtime logs in crdyboot.
 pub struct VerboseRuntimeLogs(pub bool);
 
@@ -603,37 +569,23 @@ pub fn update_verbose_boot_file(disk_path: &Utf8Path, verbose: VerboseRuntimeLog
 /// Sign the bootloaders (both crdyshim and crdyboot) and copy them into
 /// the disk image.
 pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
-    SignAndUpdateBootloader {
-        disk_path: conf.disk_path(),
-        flexor_disk_path: conf.flexor_disk_path(),
-        key_paths: conf.secure_boot_root_key_paths(),
-        mapping: Arch::all()
-            .iter()
-            .map(|arch| {
-                (
-                    conf.target_exec_path(*arch, EfiExe::Crdyshim),
-                    arch.efi_file_name("boot"),
-                )
-            })
-            .collect(),
-    }
-    .run()?;
+    let tmp_dir = TempDir::new()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
-    SignAndUpdateBootloader {
-        disk_path: conf.disk_path(),
-        flexor_disk_path: conf.flexor_disk_path(),
-        key_paths: conf.secure_boot_shim_key_paths(),
-        mapping: Arch::all()
-            .iter()
-            .map(|arch| {
-                (
-                    conf.target_exec_path(*arch, EfiExe::Crdyboot),
-                    arch.efi_file_name("crdyboot"),
-                )
-            })
-            .collect(),
+    for arch in Arch::all() {
+        // Sign crdyshim.
+        let src = conf.target_exec_path(arch, EfiExe::Crdyshim);
+        let dst = tmp_path.join(arch.efi_file_name("boot"));
+        secure_boot::sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
+
+        // Sign crdyboot.
+        let src = conf.target_exec_path(arch, EfiExe::Crdyboot);
+        let dst = tmp_path.join(arch.efi_file_name("crdyboot"));
+        secure_boot::sign(&src, &dst, &conf.secure_boot_shim_key_paths())?;
     }
-    .run()
+
+    update_boot_files(conf.disk_path(), tmp_path)?;
+    update_flexor_boot_files(&conf.flexor_disk_path(), tmp_path)
 }
 
 pub fn sign_kernel_partition(conf: &Config, partition_name: &str) -> Result<()> {
@@ -870,6 +822,16 @@ pub fn corrupt_crdyboot_signatures(disk_path: &Utf8Path) -> Result<()> {
 /// Install the signed `uefi_test_runner` executable as the first-stage
 /// bootloader (for VM testing).
 pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()> {
+    let tmp_dir = TempDir::new()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+    // Sign the test tool.
+    for arch in Arch::all() {
+        let src = conf.target_exec_path(arch, EfiExe::UefiTestTool);
+        let dst = tmp_path.join(arch.efi_file_name("boot"));
+        secure_boot::sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
+    }
+
     modify_system_partition(&conf.test_disk_path(), |root_dir| {
         let efi_dir = root_dir.open_dir("EFI")?;
         let boot_dir = efi_dir.open_dir("BOOT")?;
@@ -877,6 +839,14 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
         // Rename the boot executables to crdyshim.
         boot_dir.rename("bootx64.efi", &boot_dir, "crdyshimx64.efi")?;
         boot_dir.rename("bootia32.efi", &boot_dir, "crdyshimia32.efi")?;
+
+        // Copy in the signed test tool.
+        for arch in Arch::all() {
+            let name = arch.efi_file_name("boot");
+            let src = tmp_path.join(&name);
+            let data = fs::read(src)?;
+            fat_write_file(&boot_dir, &name, &data)?;
+        }
 
         // Create the test control file.
         fat_write_file(
@@ -887,23 +857,6 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
 
         Ok(())
     })?;
-
-    // Sign the test tool and copy it to the ESP.
-    SignAndUpdateBootloader {
-        disk_path: &conf.test_disk_path(),
-        flexor_disk_path: conf.flexor_disk_path(),
-        key_paths: conf.secure_boot_root_key_paths(),
-        mapping: Arch::all()
-            .iter()
-            .map(|arch| {
-                (
-                    conf.target_exec_path(*arch, EfiExe::UefiTestTool),
-                    arch.efi_file_name("boot"),
-                )
-            })
-            .collect(),
-    }
-    .run()?;
 
     Ok(())
 }
