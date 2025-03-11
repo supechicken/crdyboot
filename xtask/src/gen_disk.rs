@@ -540,28 +540,32 @@ pub fn update_verbose_boot_file(disk_path: &Utf8Path, verbose: VerboseRuntimeLog
     })
 }
 
-/// Sign the bootloaders (both crdyshim and crdyboot) and copy them into
-/// the disk image.
-pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
+/// Copy the bootloaders (both crdyshim and crdyboot) into the disk image.
+pub fn copy_in_bootloaders(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
+    // Copy files to a temporary staging directory.
     for arch in Arch::all() {
-        // Sign crdyshim.
-        let src = conf.target_exec_path(arch, EfiExe::Crdyshim);
-        let dst = tmp_path.join(arch.efi_file_name("boot"));
-        secure_boot::authenticode_sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
+        // Copy the signed crdyshim executable.
+        fs::copy(
+            conf.crdyshim_signed_path(arch),
+            tmp_path.join(arch.efi_file_name("boot")),
+        )?;
 
-        // Copy crdyboot in unmodified.
-        let src = conf.target_exec_path(arch, EfiExe::Crdyboot);
-        let dst = tmp_path.join(arch.efi_file_name("crdyboot"));
-        fs::copy(&src, &dst)?;
+        // Copy the crdyboot executable.
+        fs::copy(
+            conf.target_exec_path(arch, EfiExe::Crdyboot),
+            tmp_path.join(arch.efi_file_name("crdyboot")),
+        )?;
 
-        // Create crdyboot signature.
-        let dst = tmp_path
-            .join(arch.efi_file_name("crdyboot"))
-            .with_extension("sig");
-        secure_boot::create_detached_signature(&src, &dst, &conf.secure_boot_shim_key_paths())?;
+        // Copy the crdyboot signature.
+        fs::copy(
+            conf.crdyboot_signature_path(arch),
+            tmp_path
+                .join(arch.efi_file_name("crdyboot"))
+                .with_extension("sig"),
+        )?;
     }
 
     update_boot_files(conf.disk_path(), tmp_path)?;

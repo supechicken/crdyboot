@@ -357,7 +357,7 @@ fn run_bootloader_build(
     }
 
     // Update the disk image with the new executables.
-    gen_disk::sign_and_copy_bootloaders(conf)?;
+    gen_disk::copy_in_bootloaders(conf)?;
 
     // If android generate an ESP blob as well.
     if android.0 {
