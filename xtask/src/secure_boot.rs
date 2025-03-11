@@ -145,9 +145,13 @@ fn convert_pem_to_der(input: &Utf8Path, output: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// Sign the file at `src` using the keys provided by `key_paths`. The
-/// signed result is written to `dst` (and the `src` is never modified).
-pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) -> Result<()> {
+/// Add an authenticode signature to a file. The signed result is
+/// written to `dst` (and the `src` is never modified).
+pub fn authenticode_sign(
+    src: &Utf8Path,
+    dst: &Utf8Path,
+    key_paths: &SecureBootKeyPaths,
+) -> Result<()> {
     #[rustfmt::skip]
     Command::with_args("sbsign", [
         "--key", key_paths.priv_pem().as_str(),
@@ -156,24 +160,25 @@ pub fn sign(src: &Utf8Path, dst: &Utf8Path, key_paths: &SecureBootKeyPaths) -> R
         "--output", dst.as_str(),
     ]).run()?;
 
-    // Created a detached Ed25519 signature for the file using
-    // openssl. An Ed25519 is not always available (the first-stage
-    // bootloader is only signed with an RSA key), so skip if the key
-    // does not exist.
-    //
+    Ok(())
+}
+
+/// Created a detached Ed25519 signature of `src`. The signature is
+/// written to `dst`.
+pub fn create_detached_signature(
+    src: &Utf8Path,
+    dst: &Utf8Path,
+    key_paths: &SecureBootKeyPaths,
+) -> Result<()> {
     // Args based on https://cendyne.dev/posts/2022-03-06-ed25519-signatures.html
-    let priv_ed25519_pem = key_paths.priv_ed25519_pem();
-    if priv_ed25519_pem.exists() {
-        let sig_dst = dst.with_extension("sig");
-        #[rustfmt::skip]
-        Command::with_args("openssl", [
-            "pkeyutl", "-sign",
-            "-rawin",
-            "-in", dst.as_str(),
-            "-inkey", priv_ed25519_pem.as_str(),
-            "-out", sig_dst.as_str(),
-        ]).run()?;
-    }
+    #[rustfmt::skip]
+    Command::with_args("openssl", [
+        "pkeyutl", "-sign",
+        "-rawin",
+        "-in", src.as_str(),
+        "-inkey", key_paths.priv_ed25519_pem().as_str(),
+        "-out", dst.as_str(),
+    ]).run()?;
 
     Ok(())
 }

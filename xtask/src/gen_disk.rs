@@ -576,12 +576,18 @@ pub fn sign_and_copy_bootloaders(conf: &Config) -> Result<()> {
         // Sign crdyshim.
         let src = conf.target_exec_path(arch, EfiExe::Crdyshim);
         let dst = tmp_path.join(arch.efi_file_name("boot"));
-        secure_boot::sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
+        secure_boot::authenticode_sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
 
-        // Sign crdyboot.
+        // Copy crdyboot in unmodified.
         let src = conf.target_exec_path(arch, EfiExe::Crdyboot);
         let dst = tmp_path.join(arch.efi_file_name("crdyboot"));
-        secure_boot::sign(&src, &dst, &conf.secure_boot_shim_key_paths())?;
+        fs::copy(&src, &dst)?;
+
+        // Create crdyboot signature.
+        let dst = tmp_path
+            .join(arch.efi_file_name("crdyboot"))
+            .with_extension("sig");
+        secure_boot::create_detached_signature(&src, &dst, &conf.secure_boot_shim_key_paths())?;
     }
 
     update_boot_files(conf.disk_path(), tmp_path)?;
@@ -772,15 +778,17 @@ pub fn corrupt_pubkey_section(
             let tmp_dir = tempfile::tempdir()?;
             let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
             let unsigned = tmp_path.join("unsigned");
-            let signed = tmp_path.join("signed");
-            fs::write(&unsigned, data)?;
+            let signature = tmp_path.join("signature");
+            fs::write(&unsigned, &data)?;
 
-            secure_boot::sign(&unsigned, &signed, &conf.secure_boot_shim_key_paths())?;
-
-            data = fs::read(signed)?;
+            secure_boot::create_detached_signature(
+                &unsigned,
+                &signature,
+                &conf.secure_boot_shim_key_paths(),
+            )?;
 
             // Write the modified signature out.
-            let sig_data = fs::read(tmp_path.join("signed.sig"))?;
+            let sig_data = fs::read(signature)?;
             fat_write_file(&boot_dir, &file_name.replace(".efi", ".sig"), &sig_data)?;
         }
 
@@ -829,7 +837,7 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
     for arch in Arch::all() {
         let src = conf.target_exec_path(arch, EfiExe::UefiTestTool);
         let dst = tmp_path.join(arch.efi_file_name("boot"));
-        secure_boot::sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
+        secure_boot::authenticode_sign(&src, &dst, &conf.secure_boot_root_key_paths())?;
     }
 
     modify_system_partition(&conf.test_disk_path(), |root_dir| {
