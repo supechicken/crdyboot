@@ -7,6 +7,7 @@ extern crate alloc;
 mod arch;
 mod bin_checks;
 mod config;
+mod deploy;
 mod gen_disk;
 mod mount;
 mod network;
@@ -51,6 +52,7 @@ enum Action {
     Check(CheckAction),
     #[command(name = "cov")]
     Coverage(CoverageAction),
+    Deploy(DeployAction),
     #[command(name = "fmt")]
     Format(FormatAction),
     Lint(LintAction),
@@ -119,6 +121,19 @@ struct CoverageAction {
     /// Open the output in a browser.
     #[arg(long)]
     open: bool,
+}
+
+/// Deploy crdyboot to a device's ESP.
+#[derive(Parser)]
+struct DeployAction {
+    /// Deploy crdyshim in addition to crdyboot.
+    #[arg(long)]
+    crdyshim: bool,
+
+    /// SSH target to deploy to.
+    ///
+    /// Generally this should be a host defined in your SSH config.
+    target: String,
 }
 
 /// Run "cargo fmt" on all the code.
@@ -579,6 +594,7 @@ fn main() -> Result<()> {
         Action::BuildEnroller(_) => run_build_enroller(&conf),
         Action::Check(action) => run_check(&conf, action),
         Action::Coverage(action) => run_coverage(action),
+        Action::Deploy(action) => deploy::run_deploy(&conf, action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
         Action::Setup(action) => setup::run_setup(&conf, action),
