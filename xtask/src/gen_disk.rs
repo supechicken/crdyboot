@@ -868,11 +868,13 @@ pub fn gen_trivial_esp_image(conf: &Config, verbose: &VerboseRuntimeLogs) -> Res
         if verbose.0 {
             boot_dir.create_file("crdyboot_verbose")?;
         }
-        // Force x64 for now as 32 bit EFI devices aren't used.
-        let arch = Arch::X64;
-        let src_path = conf.target_exec_path(arch, EfiExe::Crdyboot);
-        let src_data = fs::read(src_path)?;
-        fat_write_file(&boot_dir, &arch.efi_file_name("boot"), &src_data)
+        // Exclude 32-bit, as 32-bit EFI devices aren't used.
+        for arch in [Arch::Aarch64, Arch::X64] {
+            let src_path = conf.target_exec_path(arch, EfiExe::Crdyboot);
+            let src_data = fs::read(src_path)?;
+            fat_write_file(&boot_dir, &arch.efi_file_name("boot"), &src_data)?;
+        }
+        Ok(())
     })
     .context("failed to update boot files")?;
 

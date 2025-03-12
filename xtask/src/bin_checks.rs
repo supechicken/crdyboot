@@ -102,7 +102,9 @@ pub fn run_bin_checks(conf: &Config) -> Result<()> {
             let bin_data = fs::read(conf.target_exec_path(arch, *exe))?;
             match arch {
                 Arch::Ia32 => bin_check_impl::<ImageNtHeaders32>(conf, *exe, &bin_data)?,
-                Arch::X64 => bin_check_impl::<ImageNtHeaders64>(conf, *exe, &bin_data)?,
+                Arch::Aarch64 | Arch::X64 => {
+                    bin_check_impl::<ImageNtHeaders64>(conf, *exe, &bin_data)?
+                }
             }
         }
     }

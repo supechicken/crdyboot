@@ -141,6 +141,7 @@ impl Config {
 
     pub fn ovmf_paths(&self, arch: Arch) -> OvmfPaths {
         let subdir = match arch {
+            Arch::Aarch64 => "aarch64",
             Arch::Ia32 => "uefi32",
             Arch::X64 => "uefi64",
         };

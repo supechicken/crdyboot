@@ -236,11 +236,18 @@ fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
             continue;
         }
 
+        // TODO(b/403257806): Skip ARM for now. We don't currently run
+        // ARM VM tests.
+        if arch == Arch::Aarch64 {
+            continue;
+        }
+
         let ovmf = conf.ovmf_paths(arch);
 
         // Get the system path of the OVMF files installed via apt.
         let system_ovmf_dir = Utf8Path::new("/usr/share/OVMF/");
         let (system_code, system_vars) = match arch {
+            Arch::Aarch64 => unimplemented!(),
             Arch::Ia32 => ("OVMF32_CODE_4M.secboot.fd", "OVMF32_VARS_4M.fd"),
             Arch::X64 => ("OVMF_CODE_4M.secboot.fd", "OVMF_VARS_4M.fd"),
         };
@@ -248,6 +255,7 @@ fn enroll_secure_boot_keys(conf: &Config, action: &SetupAction) -> Result<()> {
         let system_vars = system_ovmf_dir.join(system_vars);
 
         let (args_code, args_vars) = match arch {
+            Arch::Aarch64 => unimplemented!(),
             Arch::Ia32 => (action.ovmf32_code.as_ref(), action.ovmf32_vars.as_ref()),
             Arch::X64 => (action.ovmf64_code.as_ref(), action.ovmf64_vars.as_ref()),
         };

@@ -147,6 +147,11 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
             continue;
         }
 
+        // TODO(b/403257806): Skip ARM for now.
+        if arch == Arch::Aarch64 {
+            continue;
+        }
+
         println!("test successful boot with arch={arch:?}");
         let opts = QemuOpts {
             // No need to copy the disk for this test since we aren't
