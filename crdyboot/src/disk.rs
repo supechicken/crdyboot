@@ -4,7 +4,7 @@
 
 use core::num::NonZeroU64;
 use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
-use log::error;
+use log::info;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::media::partition::GptPartitionEntry;
@@ -388,7 +388,7 @@ impl DiskIo for GptDisk {
         match self.block_io.read_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!(
+                info!(
                     "disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
                     buffer.len()
                 );
@@ -402,7 +402,7 @@ impl DiskIo for GptDisk {
         match self.block_io.write_blocks(media_id, lba_start, buffer) {
             Ok(()) => ReturnCode::VB2_SUCCESS,
             Err(err) => {
-                error!(
+                info!(
                     "disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
                     buffer.len()
                 );
