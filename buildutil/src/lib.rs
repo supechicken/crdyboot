@@ -38,7 +38,7 @@ impl Target {
     /// target is used in that case.
     ///
     /// The targets chosen here match those in the `cc` crate:
-    /// https://github.com/rust-lang/cc-rs/pull/623/files
+    /// https://github.com/rust-lang/cc-rs/pull/1264/files
     pub fn c_target_override(self) -> Option<&'static str> {
         match self {
             Self::UefiI686 => Some("i686-unknown-windows-gnu"),
