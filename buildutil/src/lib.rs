@@ -50,13 +50,6 @@ impl Target {
     pub fn build_subdir(self) -> &'static str {
         self.c_target_override().unwrap_or("host")
     }
-
-    pub fn fw_arch(self) -> &'static str {
-        match self {
-            Self::UefiI686 => "i386",
-            Self::UefiX86_64 | Self::Host => "amd64",
-        }
-    }
 }
 
 /// Convert a `Path` to a `str`, or panic if the path isn't UTF-8.

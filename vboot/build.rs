@@ -6,6 +6,14 @@ use buildutil::{path_to_str, rerun_if_changed, Target};
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
+/// Convert `target` to the `FIRMWARE_ARCH` name used in vboot's Makefile.
+fn target_to_fw_arch(target: Target) -> &'static str {
+    match target {
+        Target::UefiI686 => "i386",
+        Target::UefiX86_64 | Target::Host => "amd64",
+    }
+}
+
 /// Build vboot_reference's fwlib.
 fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -42,7 +50,7 @@ fn build_vboot_fwlib(vboot_ref: &Path, target: Target, c_compiler: &str) {
         // larger) code.
         .arg("UNROLL_LOOPS=1")
         .arg(format!("CC={c_compiler}"))
-        .arg(format!("FIRMWARE_ARCH={}", target.fw_arch()))
+        .arg(format!("FIRMWARE_ARCH={}", target_to_fw_arch(target)))
         .arg(format!("BUILD={}", path_to_str(&vboot_build_dir)))
         .arg("fwlib");
     println!("{make_cmd:?}");
