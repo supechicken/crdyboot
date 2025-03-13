@@ -7,6 +7,7 @@
 // Allow unused code since the variant used depends on the target.
 #[allow(dead_code)]
 pub enum Arch {
+    Aarch64,
     Ia32,
     X86_64,
 }
@@ -17,6 +18,11 @@ impl Arch {
     /// This will fail to compile on unsupported targets.
     #[must_use]
     pub fn get_current_exe_arch() -> Self {
+        #[cfg(target_arch = "aarch64")]
+        {
+            Arch::Aarch64
+        }
+
         #[cfg(target_arch = "x86")]
         {
             Arch::Ia32

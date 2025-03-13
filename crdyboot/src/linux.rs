@@ -230,7 +230,7 @@ fn execute_linux_kernel(
         .map_err(CrdybootError::MemoryProtection)?;
 
     let entry_point_offset = match Arch::get_current_exe_arch() {
-        Arch::X86_64 => get_primary_entry_point(&pe),
+        Arch::Aarch64 | Arch::X86_64 => get_primary_entry_point(&pe),
         Arch::Ia32 => {
             get_ia32_compat_entry_point(&pe).ok_or(CrdybootError::MissingIa32CompatEntryPoint)?
         }

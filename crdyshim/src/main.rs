@@ -310,6 +310,7 @@ fn get_executable_path(name: &CStr16, arch: Arch) -> CString16 {
     let mut path = cstr16!(r"\efi\boot\").to_owned();
     path.push_str(name);
     path.push_str(match arch {
+        Arch::Aarch64 => cstr16!("aa64.efi"),
         Arch::Ia32 => cstr16!("ia32.efi"),
         Arch::X86_64 => cstr16!("x64.efi"),
     });
