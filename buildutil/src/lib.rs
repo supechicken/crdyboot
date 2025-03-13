@@ -7,6 +7,7 @@ use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Target {
+    UefiAarch64,
     UefiI686,
     UefiX86_64,
     Host,
@@ -17,6 +18,7 @@ impl Target {
     pub fn from_env() -> Target {
         let target = env::var("TARGET").unwrap();
         match target.as_str() {
+            "aarch64-unknown-uefi" => Self::UefiAarch64,
             "i686-unknown-uefi" => Self::UefiI686,
             "x86_64-unknown-uefi" => Self::UefiX86_64,
             // For everything else, assume it's a host build
@@ -28,7 +30,7 @@ impl Target {
     /// True if this is a UEFI target, false if it's a host target.
     pub fn is_uefi(self) -> bool {
         match self {
-            Self::UefiI686 | Self::UefiX86_64 => true,
+            Self::UefiAarch64 | Self::UefiI686 | Self::UefiX86_64 => true,
             Self::Host => false,
         }
     }
@@ -41,6 +43,7 @@ impl Target {
     /// https://github.com/rust-lang/cc-rs/pull/1264/files
     pub fn c_target_override(self) -> Option<&'static str> {
         match self {
+            Self::UefiAarch64 => Some("aarch64-unknown-windows-gnu"),
             Self::UefiI686 => Some("i686-unknown-windows-gnu"),
             Self::UefiX86_64 => Some("x86_64-unknown-windows-gnu"),
             Self::Host => None,

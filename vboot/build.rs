@@ -9,6 +9,7 @@ use std::{env, fs, process};
 /// Convert `target` to the `FIRMWARE_ARCH` name used in vboot's Makefile.
 fn target_to_fw_arch(target: Target) -> &'static str {
     match target {
+        Target::UefiAarch64 => "arm",
         Target::UefiI686 => "i386",
         Target::UefiX86_64 | Target::Host => "amd64",
     }
