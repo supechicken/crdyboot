@@ -138,6 +138,12 @@ fn split_avb_log_line(full_log: &str) -> (Option<&str>, Option<u32>, &str) {
 
 #[no_mangle]
 unsafe extern "C" fn avb_printf(fmt: *const c_char, mut args: ...) {
+    // TODO(b/403257806): cast the format string to unsigned on
+    // aarch64. This is needed because printf-compat-0.1.1 uses cty for
+    // C definitions, and cty diverges slightly from core::ffi.
+    #[cfg(target_arch = "aarch64")]
+    let fmt: *const core::ffi::c_uchar = fmt.cast();
+
     // Used when AVB_USE_PRINTF_LOGS is defined.
     // AVB_USE_PRINTF_LOGS is defined in build.rs.
     let mut full = String::new();
