@@ -250,7 +250,7 @@ struct UpdateSbatRevocations {}
 /// Optional features that are selected when doing unit tests
 /// and lint checks.
 /// They are not built into the target executables by default.
-const CHECK_FEATURES: [&str; 2] = ["android", "firmware_update"];
+const CHECK_FEATURES: [&str; 1] = ["android"];
 
 fn run_cargo_deny() -> Result<()> {
     // Check if cargo-deny is installed, and install it if not.
@@ -346,7 +346,7 @@ fn run_bootloader_build(
     verbose: VerboseRuntimeLogs,
 ) -> Result<()> {
     run_uefi_build(Package::Crdyshim, vec!["use_dev_pubkey"])?;
-    let mut crdyboot_features = vec!["firmware_update"];
+    let mut crdyboot_features = vec![];
     if android.0 {
         crdyboot_features.push("android")
     }
@@ -461,11 +461,7 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
         .run()?;
     // TODO(nicholasbishop): some tests don't run if the android feature
     // is enabled. For now, run a second `cargo test` to cover these.
-    Command::new("cargo")
-        .add_arg("test")
-        .add_arg("--features")
-        .add_arg("firmware_update")
-        .run()?;
+    Command::new("cargo").add_arg("test").run()?;
 
     if !action.no_miri {
         Command::new("cargo").add_args(["miri", "test"]).run()?;
