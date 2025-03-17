@@ -8,8 +8,6 @@ repository.workspace = true
 
 [features]
 android = ["dep:avb", "dep:bootimg"]
-# Temporary feature flag to control whether firmware updates are allowed.
-firmware_update = []
 
 [dependencies]
 avb = { path = "../avb", optional = true }
