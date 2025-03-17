@@ -233,11 +233,6 @@ fn update_firmware_impl(
 ///
 /// Errors are logged but otherwise ignored.
 pub fn update_firmware() {
-    if !cfg!(feature = "firmware_update") {
-        info!("firmware updates disabled");
-        return;
-    }
-
     if let Err(err) = update_firmware_impl(&UefiImpl, &CapsuleLoaderImpl) {
         info!("firmware update failed: {err}");
     }
