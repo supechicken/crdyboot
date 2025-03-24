@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::uefi::{Uefi, UefiImpl, CRDYBOOT_VAR_VENDOR};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::format;
@@ -13,6 +14,7 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 use log::{info, LevelFilter, Metadata, Record};
 use uefi::prelude::cstr16;
 use uefi::proto::media::file::{File, FileAttribute, FileMode};
+use uefi::runtime::VariableAttributes;
 use uefi::{boot, println, CStr16, Status};
 
 /// Check if `efi\boot\crdyboot_verbose` exists on the boot
@@ -76,8 +78,10 @@ impl Logger {
     ///
     /// This will panic if `f` calls any function that would recursively
     /// lead to `with_inner` being called again. In particular, `f` must
-    /// not do any logging through the `log` crate (e.g. calling `info!`
-    /// or `error!` macros), or call `write_log_history`.
+    /// not:
+    /// * Do any logging through the `log` crate (e.g. calling `info!`
+    ///   or `error!` macros)
+    /// * Call `write_log_history` or `store_log_history_to_var`.
     fn with_inner<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut LoggerInner) -> R,
@@ -175,6 +179,23 @@ impl LogHistory {
             let _ = writeln!(writer, "{line}");
         }
     }
+
+    /// Write the entire log history to a UEFI variable.
+    ///
+    /// The variable key will be `CRDYBOOT_VAR_VENDOR` and the given
+    /// `name`. The variable is accessible at runtime, and is _not_ in
+    /// nvram.
+    fn store_to_var(&self, uefi: &dyn Uefi, name: &CStr16) {
+        let mut data = String::new();
+        self.write(&mut data, self.lines.len());
+
+        let attributes =
+            VariableAttributes::BOOTSERVICE_ACCESS | VariableAttributes::RUNTIME_ACCESS;
+        if let Err(err) = uefi.set_variable(name, &CRDYBOOT_VAR_VENDOR, attributes, data.as_bytes())
+        {
+            info!("failed to store logs: {err}");
+        }
+    }
 }
 
 /// Write the end of the log history to `writer`.
@@ -183,6 +204,16 @@ impl LogHistory {
 pub(crate) fn write_log_history(writer: &mut dyn Write, max_lines_to_write: usize) {
     LOGGER.with_inner(|inner| {
         inner.history.write(writer, max_lines_to_write);
+    });
+}
+
+/// Write the entire log history to a UEFI variable.
+///
+/// See `LogHistory::store_to_var` for details.
+#[expect(unused)]
+pub(crate) fn store_log_history_to_var(name: &CStr16) {
+    LOGGER.with_inner(|inner| {
+        inner.history.store_to_var(&UefiImpl, name);
     });
 }
 
@@ -237,6 +268,7 @@ pub fn initialize_logging() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::uefi::MockUefi;
     use log::Level;
 
     #[test]
@@ -318,5 +350,27 @@ mod tests {
         let max_lines_to_write = 4;
         history.write(&mut s, max_lines_to_write);
         assert_eq!(s, "a\nb\nc\n");
+    }
+
+    #[test]
+    fn test_log_history_store_to_var() {
+        let mut history = LogHistory::new(3);
+        history.push("a".to_owned());
+        history.push("b".to_owned());
+        history.push("c".to_owned());
+
+        let mut uefi = MockUefi::new();
+        uefi.expect_set_variable()
+            .times(1)
+            .withf(|name, vendor, attr, data| {
+                name == cstr16!("name")
+                    && vendor == &CRDYBOOT_VAR_VENDOR
+                    && *attr
+                        == VariableAttributes::BOOTSERVICE_ACCESS
+                            | VariableAttributes::RUNTIME_ACCESS
+                    && data == "a\nb\nc\n".as_bytes()
+            })
+            .return_once(|_, _, _, _| Ok(()));
+        history.store_to_var(&uefi, cstr16!("name"));
     }
 }
