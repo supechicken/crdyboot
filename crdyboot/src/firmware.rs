@@ -57,11 +57,11 @@ enum FirmwareError {
     #[error("file path is not valid for ext4: {0}")]
     FilePathInvalid(PathError),
 
-    #[error("failed to allocate pages for a capsule")]
-    CapsuleAllocationFailed(#[source] PageAllocationError),
+    #[error("failed to allocate pages for a capsule: {0}")]
+    CapsuleAllocationFailed(PageAllocationError),
 
-    #[error("failed to open the stateful partition")]
-    OpenStatefulPartitionFailed(#[source] GptDiskError),
+    #[error("failed to open the stateful partition: {0}")]
+    OpenStatefulPartitionFailed(GptDiskError),
 
     #[error("failed to load the stateful filesystem: {0}")]
     Ext4LoadFailed(Ext4Error),
