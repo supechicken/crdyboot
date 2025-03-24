@@ -159,13 +159,30 @@ impl LogHistory {
         self.lines.push_back(line);
         assert!(self.lines.len() <= self.max_lines);
     }
-}
 
-pub(crate) fn write_log_history(writer: &mut dyn Write) {
-    LOGGER.with_inner(|inner| {
-        for line in &inner.history.lines {
+    /// Write the end of the log history to `writer`.
+    ///
+    /// Up to `max_lines_to_write` lines are written. If the number of
+    /// history lines is less than `max_lines_to_write`, all lines are
+    /// written.
+    fn write(&self, writer: &mut dyn Write, max_lines_to_write: usize) {
+        // Get the index of the first line to print. If the number of
+        // lines is less than `max_lines_to_write`, this will be 0.
+        let first_line = self.lines.len().saturating_sub(max_lines_to_write);
+
+        // Starting at `first_line`, print the rest of the lines.
+        for line in self.lines.iter().skip(first_line) {
             let _ = writeln!(writer, "{line}");
         }
+    }
+}
+
+/// Write the end of the log history to `writer`.
+///
+/// See `LogHistory::write` for details.
+pub(crate) fn write_log_history(writer: &mut dyn Write, max_lines_to_write: usize) {
+    LOGGER.with_inner(|inner| {
+        inner.history.write(writer, max_lines_to_write);
     });
 }
 
@@ -176,8 +193,8 @@ pub(crate) fn write_log_history(writer: &mut dyn Write) {
 /// Panics if called more than once.
 pub fn initialize_logging_with_level(display_level: LevelFilter) {
     // The number of history lines is somewhat arbitrary, but it should
-    // be small enough that printing the history will not cause the
-    // console to scroll on any supported devices.
+    // be small enough that memory usage isn't too high if some bug
+    // causes a large amount of log spam.
     let max_lines = 20;
 
     // Allocate logger data on the heap and leak it. This data needs to
@@ -266,5 +283,40 @@ mod tests {
 
         history.push("5".to_owned());
         assert_eq!(history.lines, ["3", "4", "5"]);
+    }
+
+    #[test]
+    fn test_log_history_write() {
+        let mut history = LogHistory::new(3);
+        history.push("a".to_owned());
+        history.push("b".to_owned());
+        history.push("c".to_owned());
+
+        // Limit is zero: no lines are written.
+        let mut s = String::new();
+        let max_lines_to_write = 0;
+        history.write(&mut s, max_lines_to_write);
+        assert_eq!(s, "");
+
+        let mut s = String::new();
+        let max_lines_to_write = 1;
+        history.write(&mut s, max_lines_to_write);
+        assert_eq!(s, "c\n");
+
+        let mut s = String::new();
+        let max_lines_to_write = 2;
+        history.write(&mut s, max_lines_to_write);
+        assert_eq!(s, "b\nc\n");
+
+        let mut s = String::new();
+        let max_lines_to_write = 3;
+        history.write(&mut s, max_lines_to_write);
+        assert_eq!(s, "a\nb\nc\n");
+
+        // Limit is larger than the number of lines: all lines are written.
+        let mut s = String::new();
+        let max_lines_to_write = 4;
+        history.write(&mut s, max_lines_to_write);
+        assert_eq!(s, "a\nb\nc\n");
     }
 }

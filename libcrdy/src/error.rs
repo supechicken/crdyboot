@@ -29,8 +29,14 @@ pub fn fail_with_fatal_error_impl(exe: &str, version: &str, err: &dyn Error) -> 
         // If verbose logging is not enabled, print recent log lines to
         // help debug the problem.
         if !does_verbose_file_exist() {
+            // The number of history lines to print is somewhat
+            // arbitrary, but it should be small enough that printing
+            // the history will not cause the console to scroll on any
+            // supported devices.
+            let max_lines_to_write = 20;
+
             let _ = writeln!(stdout, "\nRecent logs:");
-            write_log_history(stdout);
+            write_log_history(stdout, max_lines_to_write);
         }
     });
 
