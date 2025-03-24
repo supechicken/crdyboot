@@ -17,7 +17,12 @@ use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
     VariableKey, VariableVendor,
 };
-use uefi::{CStr16, Handle, Status};
+use uefi::{guid, CStr16, Handle, Status};
+
+/// Arbitrarily-chosen GUID for UEFI variables specific to crdyboot and
+/// crdyshim.
+pub const CRDYBOOT_VAR_VENDOR: VariableVendor =
+    VariableVendor(guid!("2a6f93c9-29ea-46bf-b618-271b63baacf3"));
 
 /// Interface for accessing UEFI boot services and UEFI runtime services.
 ///

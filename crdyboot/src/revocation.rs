@@ -49,22 +49,17 @@
 
 use core::cmp::Ordering;
 use core::{fmt, mem};
-use libcrdy::uefi::{Uefi, UefiImpl};
+use libcrdy::uefi::{Uefi, UefiImpl, CRDYBOOT_VAR_VENDOR};
 use log::{error, info};
 use uefi::prelude::*;
 use uefi::runtime::{VariableAttributes, VariableVendor};
-use uefi::{guid, CStr16};
+use uefi::CStr16;
 
 /// Revocation level.
 type Level = u32;
 
 /// Name of the UEFI variable.
 const REVOCATION_VAR_NAME: &CStr16 = cstr16!("crdyboot_min_lvl");
-
-/// GUID namespace for the UEFI variable. This is an arbitrarily-chosen
-/// GUID that henceforth shall be crdyboot's vendor GUID.
-const REVOCATION_VAR_VENDOR: VariableVendor =
-    VariableVendor(guid!("2a6f93c9-29ea-46bf-b618-271b63baacf3"));
 
 /// Attributes of the UEFI variable.
 ///
@@ -129,7 +124,7 @@ impl<'a> Revocation<'a> {
         Self {
             var_access,
 
-            var_vendor: &REVOCATION_VAR_VENDOR,
+            var_vendor: &CRDYBOOT_VAR_VENDOR,
             var_name: REVOCATION_VAR_NAME,
             var_attrs: REVOCATION_VAR_ATTRS,
 
@@ -275,7 +270,7 @@ mod tests {
         uefi.expect_get_variable()
             .times(1)
             .withf(|name, vendor, buf| {
-                name == REVOCATION_VAR_NAME && *vendor == REVOCATION_VAR_VENDOR && buf.len() == 4
+                name == REVOCATION_VAR_NAME && *vendor == CRDYBOOT_VAR_VENDOR && buf.len() == 4
             })
             .return_once(move |_, _, buf| {
                 buf[..data.len()].copy_from_slice(&data);
@@ -287,7 +282,7 @@ mod tests {
         uefi.expect_get_variable()
             .times(1)
             .withf(|name, vendor, buf| {
-                name == REVOCATION_VAR_NAME && *vendor == REVOCATION_VAR_VENDOR && buf.len() == 4
+                name == REVOCATION_VAR_NAME && *vendor == CRDYBOOT_VAR_VENDOR && buf.len() == 4
             })
             .return_once(move |_, _, _| Err(err));
     }
@@ -297,7 +292,7 @@ mod tests {
             .times(1)
             .withf(move |name, vendor, attrs, data| {
                 name == REVOCATION_VAR_NAME
-                    && *vendor == REVOCATION_VAR_VENDOR
+                    && *vendor == CRDYBOOT_VAR_VENDOR
                     && *attrs == REVOCATION_VAR_ATTRS
                     && data == level.to_le_bytes()
             })
@@ -309,7 +304,7 @@ mod tests {
             .times(1)
             .withf(move |name, vendor, attrs, data| {
                 name == REVOCATION_VAR_NAME
-                    && *vendor == REVOCATION_VAR_VENDOR
+                    && *vendor == CRDYBOOT_VAR_VENDOR
                     && *attrs == REVOCATION_VAR_ATTRS
                     && data.is_empty()
             })
