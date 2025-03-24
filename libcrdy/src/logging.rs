@@ -225,7 +225,7 @@ pub fn initialize_logging_with_level(display_level: LevelFilter) {
     // The number of history lines is somewhat arbitrary, but it should
     // be small enough that memory usage isn't too high if some bug
     // causes a large amount of log spam.
-    let max_lines = 20;
+    let max_lines = 200;
 
     // Allocate logger data on the heap and leak it. This data needs to
     // live as long as the program, so it's OK that nothing ever frees
