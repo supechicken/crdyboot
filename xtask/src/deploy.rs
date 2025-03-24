@@ -153,5 +153,17 @@ pub fn run_deploy(conf: &Config, action: &DeployAction) -> Result<()> {
             .run()?;
     }
 
+    // Drop the mount now since it can't be done after sending the
+    // reboot command.
+    drop(mount);
+
+    // If requested, reboot the device.
+    if action.reboot {
+        // Allow this to fail, since the ssh server is going down.
+        Command::with_args("ssh", [&action.target, "reboot"])
+            .disable_check()
+            .run()?;
+    }
+
     Ok(())
 }

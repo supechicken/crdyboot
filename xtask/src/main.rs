@@ -138,6 +138,10 @@ struct DeployAction {
     #[arg(long, conflicts_with("enable_verbose_logs"))]
     disable_verbose_logs: bool,
 
+    /// Reboot the device after deploying.
+    #[arg(long)]
+    reboot: bool,
+
     /// SSH target to deploy to.
     ///
     /// Generally this should be a host defined in your SSH config.
