@@ -45,7 +45,7 @@ pub struct NextStage<'a> {
     pub log_var_name: &'a CStr16,
 }
 
-impl<'a> NextStage<'a> {
+impl NextStage<'_> {
     fn entry_point_from_offset(&self) -> Result<EntryPointFn, LaunchError> {
         info!("entry_point_offset: {:#08x}", self.entry_point_offset);
 

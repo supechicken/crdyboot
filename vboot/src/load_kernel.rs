@@ -72,7 +72,7 @@ pub struct LoadedKernel<'a> {
     unique_partition_guid: Guid,
 }
 
-impl<'a> LoadedKernel<'a> {
+impl LoadedKernel<'_> {
     fn command_line_with_placeholders(&self) -> Option<&str> {
         let cros_config = self.data.get(self.cros_config.clone())?;
 
@@ -156,7 +156,7 @@ pub struct LoadKernelInputs<'kernel, 'other> {
     pub packed_pubkey: &'other [u8],
 }
 
-impl<'kernel, 'other> LoadKernelInputs<'kernel, 'other> {
+impl LoadKernelInputs<'_, '_> {
     /// Recommended size in bytes of [`LoadKernelInputs::workbuf`].
     pub const RECOMMENDED_WORKBUF_SIZE: usize =
         vboot_sys::VB2_KERNEL_WORKBUF_RECOMMENDED_SIZE as usize;

@@ -91,7 +91,7 @@ struct Revocation<'a> {
     embedded_revocations: &'a [u8],
 }
 
-impl<'a> Revocation<'a> {
+impl Revocation<'_> {
     /// Read the UEFI variable and parse as revocation data.
     ///
     /// # Errors

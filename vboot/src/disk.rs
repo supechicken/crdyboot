@@ -54,7 +54,7 @@ pub struct DiskInfo<'a> {
     phantom: PhantomData<&'a ()>,
 }
 
-impl<'a> DiskInfo<'a> {
+impl DiskInfo<'_> {
     pub fn as_mut_ptr(&mut self) -> *mut vb2_disk_info {
         &mut self.info
     }

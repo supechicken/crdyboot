@@ -46,7 +46,7 @@ struct CompatEntryIter<'a> {
     offset: usize,
 }
 
-impl<'a> CompatEntryIter<'a> {
+impl CompatEntryIter<'_> {
     fn new(section: &[u8]) -> CompatEntryIter {
         CompatEntryIter {
             data: section,
@@ -77,7 +77,7 @@ impl<'a> CompatEntryIter<'a> {
     }
 }
 
-impl<'a> Iterator for CompatEntryIter<'a> {
+impl Iterator for CompatEntryIter<'_> {
     type Item = CompatEntry;
 
     fn next(&mut self) -> Option<CompatEntry> {

@@ -47,7 +47,7 @@ struct PartitionSettings<'a> {
     data: &'a [u8],
 }
 
-impl<'a> PartitionSettings<'a> {
+impl PartitionSettings<'_> {
     fn attribute_bits(&self) -> u64 {
         let mut attribute_bits: u64 = 0;
 
@@ -82,7 +82,7 @@ struct DiskSettings<'a> {
     partitions: &'a [PartitionSettings<'a>],
 }
 
-impl<'a> DiskSettings<'a> {
+impl DiskSettings<'_> {
     fn create(&self) -> Result<()> {
         create_empty_file_with_size(self.path, self.size)?;
 
