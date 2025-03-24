@@ -130,6 +130,14 @@ struct DeployAction {
     #[arg(long)]
     crdyshim: bool,
 
+    /// Create the file that enables verbose logs at runtime.
+    #[arg(long)]
+    enable_verbose_logs: bool,
+
+    /// Delete the file that enables verbose logs at runtime.
+    #[arg(long, conflicts_with("enable_verbose_logs"))]
+    disable_verbose_logs: bool,
+
     /// SSH target to deploy to.
     ///
     /// Generally this should be a host defined in your SSH config.

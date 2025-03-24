@@ -141,5 +141,17 @@ pub fn run_deploy(conf: &Config, action: &DeployAction) -> Result<()> {
         )?;
     }
 
+    // If requested, create or delete the file that controls verbose
+    // logging.
+    let verbose_path = dst_dir.join("crdyboot_verbose");
+    if action.enable_verbose_logs {
+        Command::with_args("ssh", [&action.target, "touch", verbose_path.as_str()]).run()?;
+    } else if action.disable_verbose_logs {
+        // Allow this to fail, since the file might not exist.
+        Command::with_args("ssh", [&action.target, "rm", verbose_path.as_str()])
+            .disable_check()
+            .run()?;
+    }
+
     Ok(())
 }
