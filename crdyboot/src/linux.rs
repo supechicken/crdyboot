@@ -240,6 +240,7 @@ fn execute_linux_kernel(
         image_data: kernel_data,
         load_options: cmdline.as_bytes(),
         entry_point_offset,
+        log_var_name: cstr16!("CrdybootLog"),
     };
     unsafe { rk.launch_next_stage(next_stage) }.map_err(CrdybootError::Launch)
 }

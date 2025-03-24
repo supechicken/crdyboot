@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use crate::logging::store_log_history_to_var;
 use crate::uefi::{Uefi, UefiImpl};
 use crate::util::{u32_to_usize, usize_to_u64};
 use core::ffi::c_void;
 use core::mem;
 use log::info;
-use uefi::{boot, table, Handle, Status};
+use uefi::{boot, table, CStr16, Handle, Status};
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LaunchError {
@@ -39,6 +40,9 @@ pub struct NextStage<'a> {
 
     /// Offset within `image_data` of the executable entry point.
     pub entry_point_offset: u32,
+
+    /// Name of the UEFI variable to write logs into.
+    pub log_var_name: &'a CStr16,
 }
 
 impl<'a> NextStage<'a> {
@@ -128,6 +132,10 @@ impl<'a> NextStage<'a> {
 
         let system_table = table::system_table_raw().ok_or(LaunchError::SystemTableNotSet)?;
 
+        // Just before passing control to the next stage, write the log
+        // to a runtime UEFI variable so it can be read by the OS.
+        store_log_history_to_var(self.log_var_name);
+
         (entry_point)(image_handle, system_table.as_ptr().cast());
 
         // We do not expect the next stage to ever exit back to our
@@ -145,7 +153,7 @@ mod tests {
     use core::ptr;
     use uefi::boot::MemoryType;
     use uefi::proto::loaded_image::LoadedImage;
-    use uefi::Error;
+    use uefi::{cstr16, Error};
     use uefi_raw::protocol::loaded_image::LoadedImageProtocol;
 
     fn get_image_handle() -> Handle {
@@ -158,6 +166,7 @@ mod tests {
             image_data: b"image data",
             load_options: b"load options",
             entry_point_offset: 3,
+            log_var_name: cstr16!("log var name"),
         }
     }
 

@@ -210,7 +210,6 @@ pub(crate) fn write_log_history(writer: &mut dyn Write, max_lines_to_write: usiz
 /// Write the entire log history to a UEFI variable.
 ///
 /// See `LogHistory::store_to_var` for details.
-#[expect(unused)]
 pub(crate) fn store_log_history_to_var(name: &CStr16) {
     LOGGER.with_inner(|inner| {
         inner.history.store_to_var(&UefiImpl, name);

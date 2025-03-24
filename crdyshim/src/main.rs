@@ -254,6 +254,7 @@ impl Crdyshim for CrdyshimImpl {
             image_data: relocated_exe,
             load_options: &[],
             entry_point_offset,
+            log_var_name: cstr16!("CrdyshimLog"),
         };
         unsafe { next_stage.launch() }.map_err(CrdyshimError::Launch)
     }
