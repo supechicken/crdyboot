@@ -5,7 +5,6 @@
 #![deny(clippy::arithmetic_side_effects)]
 #![deny(clippy::indexing_slicing)]
 #![deny(clippy::pedantic)]
-#![expect(clippy::module_name_repetitions)]
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
 

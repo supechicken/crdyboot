@@ -11,7 +11,6 @@
 #![deny(missing_docs)]
 #![deny(clippy::pedantic)]
 #![expect(clippy::missing_errors_doc)]
-#![expect(clippy::module_name_repetitions)]
 // Turn off std, except when running tests.
 #![cfg_attr(not(test), no_std)]
 // Needed by the printf module.
