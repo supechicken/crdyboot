@@ -198,6 +198,14 @@ fn update_firmware_impl(
     let updates = get_update_table(uefi, uefi.variable_keys());
     info!("found {} capsule update variables", updates.len());
 
+    // If there are no capsules to load, don't bother opening the
+    // stateful partition. This ensures that firmware updates don't
+    // impact boot performance in the common case where there are no
+    // updates to install.
+    if updates.is_empty() {
+        return Ok(());
+    }
+
     let capsules = capsule_loader.load_capsules_from_disk(uefi, &updates)?;
     info!("loaded {} capsules from disk", capsules.len());
 
@@ -473,9 +481,20 @@ mod tests {
     }
 
     /// Test that `update_firmware_impl` returns early if no valid
-    /// capsules are loaded.
+    /// capsule vars exist.
     #[test]
-    fn test_update_firmware_impl_no_valid_capsule() {
+    fn test_update_firmware_impl_no_valid_capsule_vars() {
+        let mut uefi = create_mock_uefi_with_get_var();
+        uefi.expect_variable_keys()
+            .returning(|| VariableKeys::ForTest(vec![]));
+        let loader = MockCapsuleLoader::new();
+        assert!(update_firmware_impl(&uefi, &loader).is_ok());
+    }
+
+    /// Test that `update_firmware_impl` returns early if no valid
+    /// capsules are loaded from disk.
+    #[test]
+    fn test_update_firmware_impl_no_valid_capsule_on_disk() {
         let mut uefi = create_mock_uefi_with_get_var();
         uefi.expect_variable_keys().returning(|| {
             VariableKeys::ForTest(vec![Ok(VariableKey {
@@ -486,6 +505,7 @@ mod tests {
         let mut loader = MockCapsuleLoader::new();
         loader
             .expect_load_capsules_from_disk()
+            .times(1)
             .returning(|_, _| Ok(vec![]));
         assert!(update_firmware_impl(&uefi, &loader).is_ok());
     }
