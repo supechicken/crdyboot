@@ -13,6 +13,26 @@ To alter the log level at runtime, create an empty file called
 `crdyboot_verbose` in the same directory as the bootloader
 (`/efi/boot`). This will set the log level to `Debug`.
 
+## Accessing logs from the OS
+
+Crdyboot writes logs to a temporary UEFI variable just prior to
+launching the kernel. The variable does _not_ have the non-volatile flag
+set, so it does not use flash storage.
+
+To view the logs from the OS:
+
+```
+cat /sys/firmware/efi/efivars/CrdybootLog-2a6f93c9-29ea-46bf-b618-271b63baacf3
+```
+
+This includes debug logging, regardless of whether `crdyboot_verbose` is
+enabled. The variable is limited to the most recent 200 lines, which
+should ordinarily be more than enough to hold the entire log.
+
+There is a similar variable for crdyshim logs, but note that this will
+not exist for release images until such time as we get a new version of
+crdyshim signed.
+
 ## Flexor
 
 When booting flexor, the kernel log level will be increased if
