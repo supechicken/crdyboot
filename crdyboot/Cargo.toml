@@ -13,6 +13,7 @@ android = ["dep:avb", "dep:bootimg"]
 avb = { path = "../avb", optional = true }
 bootimg = { path = "../bootimg", optional = true }
 ext4-view = "0.9.1"
+gpt_disk_io.workspace = true
 libcrdy.workspace = true
 log.workspace = true
 object.workspace = true

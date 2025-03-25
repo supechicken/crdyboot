@@ -26,6 +26,7 @@ bindgen = "0.69.4"
 buildutil = { path = "buildutil" }
 cmem = { path = "cmem" }
 ed25519-compact = { version = "1.0.0", default-features = false }
+gpt_disk_io = "0.16.2"
 libcrdy = { path = "libcrdy" }
 log = { version = "0.4.0", default-features = false }
 mockall = "0.12.1"
