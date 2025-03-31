@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+mod uefi_disk;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
@@ -18,6 +20,8 @@ use uefi::runtime::{
     VariableKey, VariableVendor,
 };
 use uefi::{guid, CStr16, Handle, Status};
+
+pub use uefi_disk::BlockIoError;
 
 /// Arbitrarily-chosen GUID for UEFI variables specific to crdyboot and
 /// crdyshim.
