@@ -6,8 +6,9 @@ use crate::disk;
 use crate::firmware::{FirmwareError, UpdateInfo};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::error::Error;
 use core::fmt::{self, Display, Formatter};
-use ext4_view::{Ext4, Ext4Read, IoError, PathBuf};
+use ext4_view::{Ext4, Ext4Read, PathBuf};
 use libcrdy::page_alloc::ScopedPageAllocation;
 use libcrdy::uefi::{ScopedDiskIo, Uefi};
 use log::info;
@@ -101,7 +102,11 @@ struct DiskReader {
 }
 
 impl Ext4Read for DiskReader {
-    fn read(&mut self, start_byte: u64, dst: &mut [u8]) -> Result<(), Box<dyn IoError>> {
+    fn read(
+        &mut self,
+        start_byte: u64,
+        dst: &mut [u8],
+    ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         self.disk_io
             .read_disk(self.media_id, start_byte, dst)
             .map_err(|err| ReadError::boxed(start_byte, dst, err))
@@ -117,9 +122,13 @@ struct ReadError {
 }
 
 impl ReadError {
-    /// Create a boxed `ReadError`. This is returned as a `Box<dyn
-    /// IoError>` to match the ext4 API.
-    fn boxed(start_byte: u64, dst: &[u8], err: uefi::Error) -> Box<dyn IoError> {
+    /// Create a boxed `ReadError`. This is returned as a `Box<dyn ...>`
+    /// to match the ext4 API.
+    fn boxed(
+        start_byte: u64,
+        dst: &[u8],
+        err: uefi::Error,
+    ) -> Box<dyn Error + Send + Sync + 'static> {
         Box::new(Self {
             start_byte,
             len: dst.len(),
@@ -139,8 +148,6 @@ impl Display for ReadError {
         )
     }
 }
-
-impl IoError for ReadError {}
 
 #[cfg(test)]
 mod tests {
