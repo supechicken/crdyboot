@@ -4,7 +4,7 @@
 
 #[cfg(feature = "android")]
 use crate::avb::{do_avb_verify, AvbError};
-use crate::disk::{GptDisk, GptDiskError};
+use crate::disk::{GptDiskError, VbootGptDisk};
 #[cfg(feature = "android")]
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
@@ -323,7 +323,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             kernel_buffer: &mut kernel_buffer,
             packed_pubkey: kernel_verification_key,
         },
-        &mut GptDisk::new(uefi).map_err(CrdybootError::GptDisk)?,
+        &mut VbootGptDisk::new(uefi).map_err(CrdybootError::GptDisk)?,
     ) {
         Ok(loaded_kernel) => {
             vboot_kernel = loaded_kernel;

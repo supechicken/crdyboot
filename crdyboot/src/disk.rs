@@ -348,14 +348,14 @@ pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), G
     open_partition_by_name(uefi, STATE_NAME)
 }
 
-pub struct GptDisk {
+pub struct VbootGptDisk {
     block_io: ScopedBlockIo,
     bytes_per_lba: NonZeroU64,
     lba_count: u64,
 }
 
-impl GptDisk {
-    pub fn new(uefi: &dyn Uefi) -> Result<GptDisk, GptDiskError> {
+impl VbootGptDisk {
+    pub fn new(uefi: &dyn Uefi) -> Result<Self, GptDiskError> {
         let block_io = find_disk_block_io(uefi)?;
 
         let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
@@ -366,7 +366,7 @@ impl GptDisk {
             .checked_add(1)
             .ok_or(GptDiskError::InvalidLastBlock)?;
 
-        Ok(GptDisk {
+        Ok(Self {
             block_io,
             bytes_per_lba,
             lba_count,
@@ -374,7 +374,7 @@ impl GptDisk {
     }
 }
 
-impl DiskIo for GptDisk {
+impl DiskIo for VbootGptDisk {
     fn bytes_per_lba(&self) -> NonZeroU64 {
         self.bytes_per_lba
     }
@@ -1094,21 +1094,21 @@ pub(crate) mod tests {
         open_stateful_partition(&uefi).unwrap();
     }
 
-    /// Test that `GptDisk` accessor methods work.
+    /// Test that `VbootGptDisk` accessor methods work.
     #[test]
     fn test_gpt_disk_accessors() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
-        let disk = GptDisk::new(&uefi).unwrap();
+        let disk = VbootGptDisk::new(&uefi).unwrap();
         assert_eq!(disk.bytes_per_lba().get(), 512);
         assert_eq!(disk.lba_count(), usize_to_u64(VBOOT_TEST_DISK.len() / 512));
     }
 
-    /// Test that `GptDisk` can read via the Block IO protocol.
+    /// Test that `VbootGptDisk` can read via the Block IO protocol.
     #[test]
     fn test_gpt_disk_read() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
 
-        let disk = GptDisk::new(&uefi).unwrap();
+        let disk = VbootGptDisk::new(&uefi).unwrap();
 
         // Valid read.
         let mut blocks = vec![0; 512 * 3];
@@ -1122,12 +1122,12 @@ pub(crate) mod tests {
         );
     }
 
-    /// Test that `GptDisk` can write via the Block IO protocol.
+    /// Test that `VbootGptDisk` can write via the Block IO protocol.
     #[test]
     fn test_gpt_disk_write() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
 
-        let mut disk = GptDisk::new(&uefi).unwrap();
+        let mut disk = VbootGptDisk::new(&uefi).unwrap();
         let block = vec![0; 512];
 
         // Valid write.
