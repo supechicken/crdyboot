@@ -98,7 +98,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.87",
+ "syn",
  "which",
 ]
 
@@ -213,7 +213,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -602,7 +602,7 @@ dependencies = [
  "cfg-if",
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -688,7 +688,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f12335488a2f3b0a83b14edad48dca9879ce89b2edd10e80237e4e852dd645e"
 dependencies = [
  "proc-macro2",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -714,22 +714,22 @@ dependencies = [
 
 [[package]]
 name = "ptr_meta"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcada80daa06c42ed5f48c9a043865edea5dc44cbf9ac009fda3b89526e28607"
+checksum = "fe9e76f66d3f9606f44e45598d155cb13ecf09f4a28199e48daf8c8fc937ea90"
 dependencies = [
  "ptr_meta_derive",
 ]
 
 [[package]]
 name = "ptr_meta_derive"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bca9224df2e20e7c5548aeb5f110a0f3b77ef05f8585139b7148b59056168ed2"
+checksum = "ca414edb151b4c8d125c12566ab0d74dc9cdba36fb80eb7b848c15f495fd32d1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.107",
+ "syn",
 ]
 
 [[package]]
@@ -817,7 +817,7 @@ checksum = "243902eda00fad750862fc144cea25caca5e20d615af0a81bee94ca738f1df1f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -836,17 +836,6 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "syn"
-version = "1.0.107"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
-dependencies = [
- "proc-macro2",
- "quote",
- "unicode-ident",
-]
 
 [[package]]
 name = "syn"
@@ -904,7 +893,7 @@ checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -915,7 +904,7 @@ checksum = "22efd00f33f93fa62848a7cab956c3d38c8d43095efda1decfc2b3a5dc0b8972"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
@@ -935,9 +924,9 @@ dependencies = [
 
 [[package]]
 name = "uefi"
-version = "0.33.0"
+version = "0.34.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6679b7fc2f6d6d2ea2f67555ef3ed9d71d30c5021faf9193091a5192db7dc468"
+checksum = "c25038e420a68d30a0e8002a3b51c075ad2342f5ae7a2383f042bd41fef73272"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if",
@@ -951,23 +940,22 @@ dependencies = [
 
 [[package]]
 name = "uefi-macros"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b24e77d3fc1e617051e630f99da24bcae6328abab37b8f9216bb68d06804f9a"
+checksum = "72cb3027736dad1b6f23437c63249025d960377fe7f9f769a111dfbc0dd2bdda"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]
 
 [[package]]
 name = "uefi-raw"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6d465de2c918779dafb769a5a4fe8d6e4fb7cc4cc6cb1a735f2f6ec68beea4"
+checksum = "d246ed5d6fd71c0331f0ac774a6aefb6cb9170a46f83148cacc70b09f82c87bb"
 dependencies = [
  "bitflags 2.6.0",
- "ptr_meta",
  "uguid",
 ]
 
@@ -1167,5 +1155,5 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn",
 ]

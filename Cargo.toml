@@ -34,8 +34,8 @@ printf-compat = { version = "0.1.1", default-features = false }
 sbat = "0.5.0"
 sha2 = { version = "0.10.6", default-features = false }
 thiserror = { version = "2.0.0", default-features = false }
-uefi = { version = "0.33.0", default-features = false, features = ["alloc"] }
-uefi-raw = "0.9.0"
+uefi = { version = "0.34.0", default-features = false, features = ["alloc"] }
+uefi-raw = "0.10.0"
 zerocopy = { version = "0.7.32", features = ["derive"] }
 
 [profile.release]
