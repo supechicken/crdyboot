@@ -4,10 +4,11 @@
 
 #[cfg(feature = "android")]
 use crate::avb::{do_avb_verify, AvbError};
-use crate::disk::{GptDiskError, VbootGptDisk};
+use crate::disk::GptDiskError;
 #[cfg(feature = "android")]
 use crate::initramfs::set_up_loadfile_protocol;
 use crate::revocation::RevocationError;
+use crate::vboot_disk::VbootGptDisk;
 use crate::vbpubk::{get_vbpubk_from_image, VbpubkError};
 use alloc::boxed::Box;
 use alloc::format;

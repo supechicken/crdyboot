@@ -19,6 +19,7 @@ mod initramfs;
 mod linux;
 mod revocation;
 mod sbat;
+mod vboot_disk;
 mod vbpubk;
 
 use firmware::update_firmware;

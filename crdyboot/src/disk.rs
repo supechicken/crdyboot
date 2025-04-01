@@ -2,16 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use core::num::NonZeroU64;
 use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
-use log::info;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::proto::media::partition::GptPartitionEntry;
-#[cfg(feature = "android")]
-use uefi::Guid;
 use uefi::{CStr16, Char16};
-use vboot::{DiskIo, ReturnCode};
+
+#[cfg(feature = "android")]
+use {core::num::NonZeroU64, uefi::Guid};
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
@@ -143,7 +141,7 @@ pub fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError
     }
 }
 
-fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError> {
+pub fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError> {
     let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -348,70 +346,6 @@ pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), G
     open_partition_by_name(uefi, STATE_NAME)
 }
 
-pub struct VbootGptDisk {
-    block_io: ScopedBlockIo,
-    bytes_per_lba: NonZeroU64,
-    lba_count: u64,
-}
-
-impl VbootGptDisk {
-    pub fn new(uefi: &dyn Uefi) -> Result<Self, GptDiskError> {
-        let block_io = find_disk_block_io(uefi)?;
-
-        let bytes_per_lba = NonZeroU64::new(block_io.media().block_size().into())
-            .ok_or(GptDiskError::InvalidBlockSize)?;
-        let lba_count = block_io
-            .media()
-            .last_block()
-            .checked_add(1)
-            .ok_or(GptDiskError::InvalidLastBlock)?;
-
-        Ok(Self {
-            block_io,
-            bytes_per_lba,
-            lba_count,
-        })
-    }
-}
-
-impl DiskIo for VbootGptDisk {
-    fn bytes_per_lba(&self) -> NonZeroU64 {
-        self.bytes_per_lba
-    }
-
-    fn lba_count(&self) -> u64 {
-        self.lba_count
-    }
-
-    fn read(&self, lba_start: u64, buffer: &mut [u8]) -> ReturnCode {
-        let media_id = self.block_io.media().media_id();
-        match self.block_io.read_blocks(media_id, lba_start, buffer) {
-            Ok(()) => ReturnCode::VB2_SUCCESS,
-            Err(err) => {
-                info!(
-                    "disk read failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
-                    buffer.len()
-                );
-                ReturnCode::VB2_ERROR_UNKNOWN
-            }
-        }
-    }
-
-    fn write(&mut self, lba_start: u64, buffer: &[u8]) -> ReturnCode {
-        let media_id = self.block_io.media().media_id();
-        match self.block_io.write_blocks(media_id, lba_start, buffer) {
-            Ok(()) => ReturnCode::VB2_SUCCESS,
-            Err(err) => {
-                info!(
-                    "disk write failed: lba_start={lba_start}, size in bytes: {}, err: {err:?}",
-                    buffer.len()
-                );
-                ReturnCode::VB2_ERROR_UNKNOWN
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -434,7 +368,7 @@ pub(crate) mod tests {
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
-    static VBOOT_TEST_DISK: &[u8] =
+    pub(crate) static VBOOT_TEST_DISK: &[u8] =
         include_bytes!("../../workspace/crdyboot_test_data/vboot_test_disk.bin");
 
     static STATEFUL_TEST_PARTITION: &[u8] =
@@ -1092,52 +1026,6 @@ pub(crate) mod tests {
     fn test_open_stateful_partition() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
         open_stateful_partition(&uefi).unwrap();
-    }
-
-    /// Test that `VbootGptDisk` accessor methods work.
-    #[test]
-    fn test_gpt_disk_accessors() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        let disk = VbootGptDisk::new(&uefi).unwrap();
-        assert_eq!(disk.bytes_per_lba().get(), 512);
-        assert_eq!(disk.lba_count(), usize_to_u64(VBOOT_TEST_DISK.len() / 512));
-    }
-
-    /// Test that `VbootGptDisk` can read via the Block IO protocol.
-    #[test]
-    fn test_gpt_disk_read() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-
-        let disk = VbootGptDisk::new(&uefi).unwrap();
-
-        // Valid read.
-        let mut blocks = vec![0; 512 * 3];
-        assert_eq!(disk.read(1, &mut blocks), ReturnCode::VB2_SUCCESS);
-        assert_eq!(blocks, VBOOT_TEST_DISK[512..512 * 4]);
-
-        // Out of range starting block.
-        assert_eq!(
-            disk.read(100_000_000, &mut blocks),
-            ReturnCode::VB2_ERROR_UNKNOWN
-        );
-    }
-
-    /// Test that `VbootGptDisk` can write via the Block IO protocol.
-    #[test]
-    fn test_gpt_disk_write() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-
-        let mut disk = VbootGptDisk::new(&uefi).unwrap();
-        let block = vec![0; 512];
-
-        // Valid write.
-        assert_eq!(disk.write(0, &block), ReturnCode::VB2_SUCCESS);
-
-        // Out of range starting block.
-        assert_eq!(
-            disk.write(100_000_000, &block),
-            ReturnCode::VB2_ERROR_UNKNOWN
-        );
     }
 
     /// Initialize a type matching the `partition_name` field of
