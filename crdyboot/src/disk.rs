@@ -371,8 +371,13 @@ pub(crate) mod tests {
     pub(crate) static VBOOT_TEST_DISK: &[u8] =
         include_bytes!("../../workspace/crdyboot_test_data/vboot_test_disk.bin");
 
-    static STATEFUL_TEST_PARTITION: &[u8] =
-        include_bytes!("../../workspace/crdyboot_test_data/stateful_test_partition.bin");
+    // TODO(b/397698913): temporarily hardcode the start and length of
+    // the stateful test partition within `VBOOT_TEST_DISK`.
+    //
+    // This can be removed once we replace all use of UEFI partition
+    // protocols with UEFI disk protocols.
+    const STATEFUL_TEST_PARTITION_START: u64 = (1024 * 1024) * (64 + 1);
+    const STATEFUL_TEST_PARTITION_LEN: u64 = 1024 * 1024;
 
     pub(crate) enum BootDrive {
         Hd1,
@@ -627,7 +632,7 @@ pub(crate) mod tests {
         };
         static HD1_STATE_MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 456,
-            last_block: usize_to_u64((STATEFUL_TEST_PARTITION.len() / 512) - 1),
+            last_block: (STATEFUL_TEST_PARTITION_LEN / 512) - 1,
             ..HD1_MEDIA
         };
 
@@ -687,8 +692,8 @@ pub(crate) mod tests {
         ) -> uefi_raw::Status {
             assert_eq!(media_id, HD1_STATE_MEDIA.media_id);
 
-            let offset = usize::try_from(offset).unwrap();
-            let Some(src) = STATEFUL_TEST_PARTITION.get(offset..offset + buffer_size) else {
+            let offset = usize::try_from(offset + STATEFUL_TEST_PARTITION_START).unwrap();
+            let Some(src) = VBOOT_TEST_DISK.get(offset..offset + buffer_size) else {
                 return uefi_raw::Status::INVALID_PARAMETER;
             };
 
