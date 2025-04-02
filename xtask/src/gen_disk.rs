@@ -218,28 +218,56 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
     let kern_a = read_real_kernel_partition(conf)?;
 
     let kernel_partition_size_in_mib = 64;
+    let stateful_partition_size_in_mib = 1;
+
+    // Get the start/end locations of each partition (in bytes). The
+    // partitions start at 1MiB to leave room for the primary GPT.
+    let kernel_partition_start = mib_to_byte(1);
+    let kernel_partition_end = kernel_partition_start + mib_to_byte(kernel_partition_size_in_mib);
+    let stateful_partition_start = kernel_partition_end;
+    let stateful_partition_end =
+        stateful_partition_start + mib_to_byte(stateful_partition_size_in_mib);
 
     let disk = DiskSettings {
         path: &conf.vboot_test_disk_path(),
-        // Kernel partition size plus extra space for GPT headers.
-        size: &format!("{}MiB", kernel_partition_size_in_mib + 2),
+        // Partition sizes plus extra space for GPT headers.
+        size: &format!(
+            "{}MiB",
+            kernel_partition_size_in_mib + stateful_partition_size_in_mib + 2
+        ),
         // Arbitrary GUID.
         guid: guid!("d24199e7-33f0-4409-b677-1c04683552c5"),
-        partitions: &[PartitionSettings {
-            label: "KERN-A",
-            data_range: PartitionDataRange::from_byte_range(
-                mib_to_byte(1)..mib_to_byte(kernel_partition_size_in_mib + 1),
-            ),
-            type_guid: GptPartitionType::CHROME_OS_KERNEL,
-            // Arbitrary, but must match the partition GUID in the vboot
-            // test `test_load_kernel`.
-            guid: guid!("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
-            set_successful_boot_bit: true,
-            // Must be set to something between 1 and 15, but otherwise
-            // arbitrary.
-            priority: Some(1),
-            data: &kern_a,
-        }],
+        partitions: &[
+            PartitionSettings {
+                label: "KERN-A",
+                data_range: PartitionDataRange::from_byte_range(
+                    kernel_partition_start..kernel_partition_end,
+                ),
+                type_guid: GptPartitionType::CHROME_OS_KERNEL,
+                // Arbitrary, but must match the partition GUID in the vboot
+                // test `test_load_kernel`.
+                guid: guid!("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
+                set_successful_boot_bit: true,
+                // Must be set to something between 1 and 15, but otherwise
+                // arbitrary.
+                priority: Some(1),
+                data: &kern_a,
+            },
+            PartitionSettings {
+                label: "STATE",
+                // Put the stateful partition right after the kernel partition.
+                data_range: PartitionDataRange::from_byte_range(
+                    stateful_partition_start..stateful_partition_end,
+                ),
+                // Standard Linux data GUID.
+                type_guid: GptPartitionType(guid!("0fc63daf-8483-4772-8e79-3d69d8477de4")),
+                // Arbitrary GUID.
+                guid: guid!("25532186-f207-0e47-9985-cc4b8847c1ad"),
+                set_successful_boot_bit: false,
+                priority: None,
+                data: &gen_stateful_test_partition(stateful_partition_size_in_mib)?,
+            },
+        ],
     };
     disk.create()
 }
@@ -311,12 +339,21 @@ pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
     Ok(())
 }
 
-pub fn gen_stateful_test_partition(conf: &Config) -> Result<()> {
+/// Generate an ext4 filesystem containing a firmware capsule
+/// update. This is used for firmware update tests.
+///
+/// The filesystem is generated in a temporary location, and the data is
+/// returned as raw bytes.
+fn gen_stateful_test_partition(size_in_mib: u64) -> Result<Vec<u8>> {
+    let tmp_dir = TempDir::new()?;
+    let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
+    let path = tmp_dir.join("stateful");
+
     let uid = nix::unistd::getuid();
     let gid = nix::unistd::getgid();
 
     // Create the empty filesystem.
-    create_empty_file_with_size(&conf.stateful_test_partition_path(), "1MiB")?;
+    create_empty_file_with_size(&path, &format!("{size_in_mib}MiB"))?;
     Command::with_args(
         "mkfs.ext4",
         [
@@ -326,12 +363,12 @@ pub fn gen_stateful_test_partition(conf: &Config) -> Result<()> {
             // filesystem.
             "-E",
             &format!("root_owner={uid}:{gid}"),
-            conf.stateful_test_partition_path().as_str(),
+            path.as_str(),
         ],
     )
     .run()?;
 
-    let mount = Mount::new(&conf.stateful_test_partition_path())?;
+    let mount = Mount::new(&path)?;
 
     // Create the capsule directory.
     let capsules_path = mount
@@ -343,7 +380,10 @@ pub fn gen_stateful_test_partition(conf: &Config) -> Result<()> {
         "test capsule data",
     )?;
 
-    Ok(())
+    // Drop the mount to flush the filesystem, then read it into memory.
+    drop(mount);
+
+    Ok(fs::read(path)?)
 }
 
 /// Generate the EFI system partition FAT file system containing the

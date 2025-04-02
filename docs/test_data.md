@@ -19,7 +19,6 @@ cargo xtask gen-test-data-tarball
 
 # Check what updates to the test are needed.
 cp workspace/vboot_test_disk.bin workspace/crdyboot_test_data
-cp workspace/stateful_test_partition.bin workspace/crdyboot_test_data
 cargo xtask check
 ```
 

@@ -498,7 +498,6 @@ fn run_tests(conf: &Config, action: &TestAction) -> Result<()> {
 /// https://chromium.googlesource.com/chromiumos/docs/+/HEAD/archive_mirrors.md
 fn gen_test_data_tarball(conf: &Config) -> Result<()> {
     gen_disk::gen_vboot_test_disk(conf)?;
-    gen_disk::gen_stateful_test_partition(conf)?;
 
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
@@ -511,10 +510,8 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
 
     // Create and fill the directory that will be in the tarball.
     fs::create_dir(&data_dir)?;
-    for src in &[
-        conf.vboot_test_disk_path(),
-        conf.stateful_test_partition_path(),
-    ] {
+    let src_files = [conf.vboot_test_disk_path()];
+    for src in &src_files {
         fs::copy(src, data_dir.join(src.file_name().unwrap()))?;
     }
 
