@@ -11,7 +11,7 @@ to do that are documented here.
 rm workspace/disk.bin
 
 # Download a fresh disk image from GE (among other things).
-cargo xtask setup
+cargo xtask setup --reven-private
 
 # Generate the test data tarball in the repo root directory.
 # The file will be named like this: `crdyboot_test_data_<XXXXXX>.tar.xz`.
