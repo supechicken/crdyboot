@@ -7,6 +7,8 @@ use crate::Config;
 use anyhow::Result;
 use fs_err as fs;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// TPM version.
@@ -61,8 +63,18 @@ impl Swtpm {
             cmd.arg("--tpm2");
         }
 
-        println!("launching swtpm");
+        // Print the command before spawning it.
+        println!(
+            "launching swtpm: {}",
+            format!("{:?}", cmd).replace('\"', "")
+        );
         let child = ScopedChild::new(cmd.spawn()?);
+
+        // Add an artificial short delay here to give the swtpm time to
+        // launch before qemu runs. This is a speculative fix for
+        // b/407787282, where the TPM tests sometimes fail in the CoP
+        // container.
+        thread::sleep(Duration::from_secs_f32(0.5));
 
         Ok(Self {
             tmp_dir,
