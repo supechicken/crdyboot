@@ -194,7 +194,10 @@ mod tests {
             disk_io: stateful_disk_io,
             media_id,
         });
-        assert!(reader.read(u64::MAX, &mut []).is_err());
+        // The test disk is much smaller than 1GiB, so reading at this
+        // large offset is expected to fail.
+        let byte_offset_1gib = 1024 * 1024 * 1024;
+        assert!(reader.read(byte_offset_1gib, &mut []).is_err());
     }
 
     /// Test that `ReadError` formats correctly.
