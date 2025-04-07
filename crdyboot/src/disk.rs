@@ -381,7 +381,13 @@ pub(crate) mod tests {
 
     pub(crate) enum BootDrive {
         Hd1,
+
+        /// Android disk with three partitions:
+        /// 1. ESP
+        /// 2. boot_a
+        /// 3. boot_b
         Hd2,
+
         Hd3Mbr,
         HdWithNoEspDeviceHandle,
         Invalid,
@@ -392,12 +398,15 @@ pub(crate) mod tests {
         Hd1 = 0,
         Hd1Esp,
         Hd1State,
+
+        Hd2,
         Hd2Esp,
+        Hd2BootA,
+        Hd2BootB,
+
         Hd3MbrPartition,
         FilePath,
         MacAddr,
-        BootA,
-        BootB,
     }
 
     impl DeviceKind {
@@ -434,12 +443,13 @@ pub(crate) mod tests {
                 Self::Hd1,
                 Self::Hd1Esp,
                 Self::Hd1State,
+                Self::Hd2,
                 Self::Hd2Esp,
+                Self::Hd2BootA,
+                Self::Hd2BootB,
                 Self::Hd3MbrPartition,
                 Self::FilePath,
                 Self::MacAddr,
-                Self::BootA,
-                Self::BootB,
             ]
         }
 
@@ -471,7 +481,7 @@ pub(crate) mod tests {
                     starting_lba: 0,
                     size_in_lba: 10000,
                 })),
-                Self::BootA => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                Self::Hd2BootA => Some(PartitionInfo::Gpt(GptPartitionEntry {
                     partition_type_guid: GptPartitionType(guid!(
                         "fe3a2a5d-4f32-41a7-b725-accc3285a309"
                     )),
@@ -481,7 +491,7 @@ pub(crate) mod tests {
                     attributes: GptPartitionAttributes::from_bits_retain(0x010E000000000000),
                     partition_name: init_partition_name(cstr16!("boot_a")),
                 })),
-                Self::BootB => Some(PartitionInfo::Gpt(GptPartitionEntry {
+                Self::Hd2BootB => Some(PartitionInfo::Gpt(GptPartitionEntry {
                     partition_type_guid: GptPartitionType(guid!(
                         "fe3a2a5d-4f32-41a7-b725-accc3285a309"
                     )),
@@ -499,9 +509,9 @@ pub(crate) mod tests {
             match self {
                 Self::Hd1Esp | Self::Hd2Esp => Some(12),
                 Self::Hd1State => Some(1),
+                Self::Hd2BootA => Some(13),
+                Self::Hd2BootB => Some(14),
                 Self::Hd3MbrPartition => Some(1),
-                Self::BootA => Some(13),
-                Self::BootB => Some(14),
                 _ => None,
             }
         }
@@ -570,15 +580,12 @@ pub(crate) mod tests {
 
             match self {
                 Self::Hd1 => nodes.extend(hd1),
-                Self::Hd1Esp => {
+                Self::Hd1Esp | Self::Hd1State => {
                     nodes.extend(hd1);
                     nodes.push(partition.unwrap());
                 }
-                Self::Hd1State => {
-                    nodes.extend(hd1);
-                    nodes.push(partition.unwrap());
-                }
-                Self::Hd2Esp => {
+                Self::Hd2 => nodes.extend(hd2),
+                Self::Hd2Esp | Self::Hd2BootA | Self::Hd2BootB => {
                     nodes.extend(hd2);
                     nodes.push(partition.unwrap());
                 }
@@ -594,14 +601,6 @@ pub(crate) mod tests {
                     mac_address: [1; 32],
                     interface_type: 2,
                 }),
-                Self::BootA => {
-                    nodes.extend(hd1);
-                    nodes.push(partition.unwrap());
-                }
-                Self::BootB => {
-                    nodes.extend(hd1);
-                    nodes.push(partition.unwrap());
-                }
             }
 
             let mut vec = Vec::new();
@@ -737,7 +736,10 @@ pub(crate) mod tests {
                 DeviceKind::Hd1.handle(),
                 DeviceKind::Hd1Esp.handle(),
                 DeviceKind::Hd1State.handle(),
+                DeviceKind::Hd2.handle(),
                 DeviceKind::Hd2Esp.handle(),
+                DeviceKind::Hd2BootA.handle(),
+                DeviceKind::Hd2BootB.handle(),
             ])
         });
         uefi.expect_partition_info_for_handle()

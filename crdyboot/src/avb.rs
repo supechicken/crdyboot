@@ -876,7 +876,7 @@ pub(crate) mod tests {
     fn test_get_priority_slot_basic() {
         // In default setup boot_a has priority 14, success 1
         // boot_b has priority 15, success 0, tries 3
-        let uefi = create_mock_uefi(BootDrive::Hd1);
+        let uefi = create_mock_uefi(BootDrive::Hd2);
         assert_eq!(get_priority_slot(&uefi), Ok(BootSlot::B));
     }
 }
