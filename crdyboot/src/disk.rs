@@ -4,19 +4,17 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
-use core::mem;
-use gpt_disk_io::gpt_disk_types::{self, GptPartitionEntry, GptPartitionEntrySizeError};
+use gpt_disk_io::gpt_disk_types::{GptPartitionEntry, GptPartitionEntrySizeError};
 use gpt_disk_io::{Disk, DiskError};
-use libcrdy::uefi::{
-    BlockIoError, PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi,
-};
+use libcrdy::uefi::{BlockIoError, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use libcrdy::util::u32_to_usize;
 use uefi::prelude::*;
+use uefi::proto::device_path::media::HardDrive;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::CStr16;
 
 #[cfg(feature = "android")]
-use {gpt_disk_types::BlockSize, uefi::Guid};
+use {gpt_disk_io::gpt_disk_types::BlockSize, uefi::Guid};
 
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
@@ -31,10 +29,6 @@ pub enum GptDiskError {
     /// No handles support the [`BlockIO`] protocol.
     #[error("no handles support the BlockIO protocol: {0}")]
     BlockIoProtocolMissing(Status),
-
-    /// No handles support the [`PartitionInfo`] protocol.
-    #[error("no handles support the PartitionInfo protocol: {0}")]
-    PartitionInfoProtocolMissing(Status),
 
     /// Failed to open the [`BlockIO`] protocol.
     #[error("failed to open the BlockIO protocol: {0}")]
@@ -51,10 +45,6 @@ pub enum GptDiskError {
     /// Failed to open the [`LoadedImage`] protocol.
     #[error("failed to open the LoadedImage protocol: {0}")]
     OpenLoadedImageProtocolFailed(Status),
-
-    /// Failed to open the [`PartitionInfo`] protocol.
-    #[error("failed to open the PartitionInfo protocol: {0}")]
-    OpenPartitionInfoProtocolFailed(Status),
 
     /// The [`LoadedImage`] does not have a device handle set.
     #[error("the LoadedImage does not have a device handle set")]
@@ -204,45 +194,6 @@ pub fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError
     }
 }
 
-/// Check if `p1` and `p2` are handles of partitions on the same
-/// disk. Returns `Ok(true)` if they are on the same disk, `Ok(false)`
-/// otherwise.
-///
-/// Both handles are assumed to be partition handles. If they are not,
-/// the function may fail with an error or return `Ok(false)`.
-fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool, GptDiskError> {
-    // Get the device path for both partitions.
-    let p1 = device_path_for_handle(uefi, p1)?;
-    let p2 = device_path_for_handle(uefi, p2)?;
-
-    // Check that both paths have the same number of nodes.
-    let count = p1.node_iter().count();
-    if count != p2.node_iter().count() {
-        return Ok(false);
-    }
-
-    for (i, (n1, n2)) in p1.node_iter().zip(p2.node_iter()).enumerate() {
-        // `count - 1` cannot fail because if we are in this loop then
-        // `count` is not zero.
-        #[expect(clippy::arithmetic_side_effects)]
-        if i < count - 1 {
-            // Check that all nodes except the last are the same.
-            if n1 != n2 {
-                return Ok(false);
-            }
-        } else {
-            // For the last node of each path, check that they are of
-            // the expected type.
-            let hd = (DeviceType::MEDIA, DeviceSubType::MEDIA_HARD_DRIVE);
-            if n1.full_type() != hd || n2.full_type() != hd {
-                return Ok(false);
-            }
-        }
-    }
-
-    Ok(true)
-}
-
 /// Test if the passed in `name` matches the `partition_name` in the
 /// `partition_info` struct.
 /// This compares `name` with `partition_name` only up to the
@@ -292,18 +243,6 @@ pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid,
     Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)
 }
 
-/// Convert from the definition of `GptPartitionEntry` in the
-/// `uefi` crate to the one in the `gpt_disk_types` crate.
-fn convert_gpt_partition_entry_from_uefi(
-    entry: &uefi::proto::media::partition::GptPartitionEntry,
-) -> gpt_disk_types::GptPartitionEntry {
-    // Safety: the `GptPartitionEntry` type is defined differently
-    // in the two crates, but both are modeling the same packed C
-    // type in the UEFI spec; they are layout compatible and have no
-    // undefined padding bytes.
-    unsafe { mem::transmute_copy(entry) }
-}
-
 /// Get the handle and `GptPartitionEntry` of the named GPT partition.
 ///
 /// This finds the `name` partition by its label, and excludes
@@ -313,36 +252,49 @@ pub fn find_partition_by_name(
     uefi: &dyn Uefi,
     name: &CStr16,
 ) -> Result<(Handle, GptPartitionEntry), GptDiskError> {
-    let esp_partition_handle = find_esp_partition_handle(uefi)?;
+    // Find the boot disk and load its GPT.
+    let boot_disk_handle = find_boot_disk_handle(uefi)?;
+    let gpt = Gpt::load(uefi, boot_disk_handle)?;
 
-    // Get all handles that support the partition info protocol.
-    let partition_info_handles = uefi
-        .find_partition_info_handles()
-        .map_err(|err| GptDiskError::PartitionInfoProtocolMissing(err.status()))?;
+    // Find the partition named `name`.
+    let (partition_num, entry) = gpt
+        .find_partition_by_name(name)
+        .ok_or(GptDiskError::PartitionNotFound)?;
 
-    for handle in partition_info_handles {
-        let partition_info = uefi
-            .partition_info_for_handle(handle)
-            .map_err(|err| GptDiskError::OpenPartitionInfoProtocolFailed(err.status()))?;
+    // Get all handles that support BlockIO. This includes both disk devices
+    // and logical partition devices.
+    let block_io_handles = uefi
+        .find_block_io_handles()
+        .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
-        // Ignore non-GPT partitions.
-        let PartitionInfo::Gpt(partition_info) = partition_info else {
-            continue;
-        };
-
-        let partition_info = convert_gpt_partition_entry_from_uefi(&partition_info);
-
-        // Ignore partitions with a name other than `name`.
-        if !is_gpt_partition_entry_named(&partition_info, name) {
+    // Find the partition handle that matches `partition_num`. This is
+    // needed so that other code can open protocols (like BlockIO)
+    // targeting that specific partition.
+    for handle in block_io_handles {
+        // Ignore the handle if it's not a child of the boot disk.
+        if is_parent_disk(uefi, boot_disk_handle, handle) != Ok(true) {
             continue;
         }
 
-        // Ignore partitions from a different disk. For example, if the
-        // user is running from an installed system but also has an
-        // installer USB plugged in, this ensures that we find the
-        // partition on the internal disk.
-        if is_sibling_partition(uefi, esp_partition_handle, handle)? {
-            return Ok((handle, partition_info));
+        // Get the handle's device path.
+        let Ok(dp) = device_path_for_handle(uefi, handle) else {
+            continue;
+        };
+
+        // Get the last node in the device path.
+        let Some(last_node) = dp.node_iter().last() else {
+            continue;
+        };
+
+        // Convert the node to the `HardDrive` type used for partitions.
+        let Ok(last_node) = <&HardDrive>::try_from(last_node) else {
+            continue;
+        };
+
+        // Check if this node's partition number matches the one we're
+        // looking for.
+        if last_node.partition_number() == *partition_num {
+            return Ok((handle, *entry));
         }
     }
 
@@ -404,7 +356,6 @@ struct Gpt {
     partitions: Vec<(PartitionNum, GptPartitionEntry)>,
 }
 
-#[allow(unused)]
 impl Gpt {
     /// Create a `Gpt` for the disk represented by `disk_handle`.
     fn load(uefi: &dyn Uefi, disk_handle: Handle) -> Result<Self, GptDiskError> {
@@ -473,8 +424,8 @@ pub(crate) mod tests {
     use super::*;
     use core::ffi::c_void;
     use core::{mem, slice};
-    use gpt_disk_types::{GptPartitionAttributes, GptPartitionType, LbaLe};
-    use libcrdy::uefi::MockUefi;
+    use gpt_disk_io::gpt_disk_types::{GptPartitionAttributes, GptPartitionType, LbaLe};
+    use libcrdy::uefi::{MockUefi, PartitionInfo};
     use libcrdy::util::usize_to_u64;
     use uefi::data_types::chars::NUL_16;
     use uefi::proto::device_path::build::acpi::Acpi;
@@ -1017,57 +968,6 @@ pub(crate) mod tests {
         );
     }
 
-    /// Test that `is_sibling_partition` returns true for sibling partitions.
-    #[test]
-    fn test_is_sibling_partition_true() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert!(is_sibling_partition(
-            &uefi,
-            DeviceKind::Hd1Esp.handle(),
-            DeviceKind::Hd1State.handle(),
-        )
-        .unwrap());
-    }
-
-    /// Test that `is_sibling_partition` returns false for partitions on
-    /// different drives.
-    #[test]
-    fn test_is_sibling_partition_false() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert!(!is_sibling_partition(
-            &uefi,
-            DeviceKind::Hd1Esp.handle(),
-            DeviceKind::Hd2Esp.handle(),
-        )
-        .unwrap());
-    }
-
-    /// Test that `is_sibling_partition` returns false for device paths
-    /// of different lengths.
-    #[test]
-    fn test_is_sibling_partition_different_lengths() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert!(!is_sibling_partition(
-            &uefi,
-            DeviceKind::Hd1Esp.handle(),
-            DeviceKind::Hd1.handle(),
-        )
-        .unwrap());
-    }
-
-    /// Test that `is_sibling_partition` returns false for paths that
-    /// end with a non-partition node.
-    #[test]
-    fn test_is_sibling_partition_non_partition() {
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert!(!is_sibling_partition(
-            &uefi,
-            DeviceKind::Hd1Esp.handle(),
-            DeviceKind::FilePath.handle(),
-        )
-        .unwrap());
-    }
-
     /// Test that `get_partition_size_in_bytes` succeeds.
     #[cfg(feature = "android")]
     #[test]
@@ -1140,17 +1040,6 @@ pub(crate) mod tests {
 
         assert_eq!(
             find_partition_by_name(&uefi, pname).unwrap_err(),
-            GptDiskError::PartitionNotFound
-        );
-    }
-
-    /// Test that `find_partition_by_name` fails for MBR disks.
-    #[test]
-    fn test_find_partition_by_name_mbr_fail() {
-        let uefi = create_mock_uefi(BootDrive::Hd3);
-
-        assert_eq!(
-            find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
             GptDiskError::PartitionNotFound
         );
     }
