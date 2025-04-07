@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use core::mem;
-use gpt_disk_io::gpt_disk_types::{self, GptPartitionEntry};
-use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
+use gpt_disk_io::gpt_disk_types::{self, GptPartitionEntry, GptPartitionEntrySizeError};
+use gpt_disk_io::{Disk, DiskError};
+use libcrdy::uefi::{
+    BlockIoError, PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi,
+};
+use libcrdy::util::u32_to_usize;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::CStr16;
@@ -12,7 +18,7 @@ use uefi::CStr16;
 #[cfg(feature = "android")]
 use {gpt_disk_types::BlockSize, uefi::Guid};
 
-#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
     /// The disk block size is zero.
     #[error("disk block size is zero")]
@@ -67,6 +73,18 @@ pub enum GptDiskError {
     #[cfg(feature = "android")]
     #[error("partition size is zero or too large")]
     InvalidPartitionSize,
+
+    /// A block I/O operation failed.
+    #[error("block I/O error: {0}")]
+    BlockIo(DiskError<BlockIoError>),
+
+    /// Disk does not have a valid GPT.
+    #[error("disk does not have a valid GPT")]
+    GptMissing,
+
+    /// GPT partition entry array is invalid.
+    #[error("invalid GPT partition entry array")]
+    InvalidGptPartitionArray(GptPartitionEntrySizeError),
 }
 
 /// Open `DevicePath` protocol for `handle`.
@@ -372,6 +390,84 @@ pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), G
     open_partition_by_name(uefi, STATE_NAME)
 }
 
+/// 1-based index of a partition within the GPT's partition entry array.
+type PartitionNum = u32;
+
+/// Information about a disk's GPT.
+///
+/// This allows looking up information about partitions. Loading only
+/// requires a disk `Handle`. Internally, the `BlockIO` protocol is used
+/// to read data from the disk. No partition-specific UEFI protocols are
+/// used.
+#[derive(Debug)]
+struct Gpt {
+    partitions: Vec<(PartitionNum, GptPartitionEntry)>,
+}
+
+#[allow(unused)]
+impl Gpt {
+    /// Create a `Gpt` for the disk represented by `disk_handle`.
+    fn load(uefi: &dyn Uefi, disk_handle: Handle) -> Result<Self, GptDiskError> {
+        // See comment in `find_disk_block_io` for why the non-exclusive
+        // mode is used.
+        //
+        // Safety: nothing else is using the disk for the duration of
+        // this function.
+        let block_io = unsafe {
+            uefi.open_block_io(disk_handle)
+                .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
+        }?;
+
+        let block_size = block_io.media().block_size();
+        let mut disk = Disk::new(block_io).map_err(GptDiskError::BlockIo)?;
+        let mut block_buf = vec![0; u32_to_usize(block_size)];
+        let gpt_header = disk
+            .read_primary_gpt_header(&mut block_buf)
+            .map_err(GptDiskError::BlockIo)?;
+        if !gpt_header.is_signature_valid() {
+            return Err(GptDiskError::GptMissing);
+        }
+
+        let layout = gpt_header
+            .get_partition_entry_array_layout()
+            .map_err(GptDiskError::InvalidGptPartitionArray)?;
+        let partitions: Vec<_> = disk
+            .gpt_partition_entry_array_iter(layout, &mut block_buf)
+            .map_err(GptDiskError::BlockIo)?
+            .enumerate()
+            .filter_map(|(i, entry)| {
+                // Ignore invalid entries.
+                let entry = entry.ok()?;
+
+                // Ignore unused entries.
+                if !entry.is_used() {
+                    return None;
+                }
+
+                // Convert from the 0-based index to the 1-based partition number.
+                let partition_num = PartitionNum::try_from(i).ok()?.checked_add(1)?;
+
+                Some((partition_num, entry))
+            })
+            .collect();
+
+        Ok(Self { partitions })
+    }
+
+    /// Find a partition entry by name.
+    ///
+    /// If found, returns a tuple containing both `PartitionNum` and
+    /// `GptPartitionEntry`. If not found, returns `None`.
+    fn find_partition_by_name(
+        &self,
+        looking_for: &CStr16,
+    ) -> Option<&(PartitionNum, GptPartitionEntry)> {
+        self.partitions
+            .iter()
+            .find(|(_, entry)| is_gpt_partition_entry_named(entry, looking_for))
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -389,7 +485,7 @@ pub(crate) mod tests {
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::proto::media::block::BlockIO;
     use uefi::proto::media::partition::{MbrOsType, MbrPartitionRecord};
-    use uefi::{guid, CStr16, Char16};
+    use uefi::{cstr16, guid, CStr16, Char16};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
@@ -1176,5 +1272,44 @@ pub(crate) mod tests {
 
         // This should not match, the length of the requested name is too long.
         assert!(!is_gpt_partition_entry_named(&partition_info, &name));
+    }
+
+    /// Test successfully loading and using a `Gpt`.
+    #[test]
+    fn test_gpt_success() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        let gpt = Gpt::load(&uefi, DeviceKind::Hd1.handle()).unwrap();
+
+        // Check that all expected partitions were loaded (and no unused
+        // partition entries were included).
+        assert_eq!(gpt.partitions.len(), 2);
+
+        // Check that finding a nonexistent partition fails.
+        assert!(gpt.find_partition_by_name(cstr16!("invalid")).is_none());
+
+        // Check that finding a real partition succeeds.
+        let (pnum, partition) = gpt.find_partition_by_name(cstr16!("STATE")).unwrap();
+        assert_eq!(*pnum, 1);
+        assert_eq!(partition.name.chars().collect::<String>(), "STATE");
+    }
+
+    /// Test that `Gpt::load` fails on a non-blockio handle.
+    #[test]
+    fn test_gpt_load_no_block_io() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        assert_eq!(
+            Gpt::load(&uefi, DeviceKind::FilePath.handle()).unwrap_err(),
+            GptDiskError::OpenBlockIoProtocolFailed(Status::UNSUPPORTED)
+        );
+    }
+
+    /// Test that `Gpt::load` fails on a non-gpt disk.
+    #[test]
+    fn test_gpt_load_no_gpt() {
+        let uefi = create_mock_uefi(BootDrive::Hd3);
+        assert_eq!(
+            Gpt::load(&uefi, DeviceKind::Hd3.handle()).unwrap_err(),
+            GptDiskError::GptMissing
+        );
     }
 }
