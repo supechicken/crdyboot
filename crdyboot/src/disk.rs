@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+use core::mem;
+use gpt_disk_io::gpt_disk_types::{self, GptPartitionEntry};
 use libcrdy::uefi::{PartitionInfo, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
-use uefi::proto::media::partition::GptPartitionEntry;
-use uefi::{CStr16, Char16};
+use uefi::CStr16;
 
 #[cfg(feature = "android")]
-use {core::num::NonZeroU64, uefi::Guid};
+use {gpt_disk_types::BlockSize, uefi::Guid};
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
@@ -223,20 +224,12 @@ fn is_sibling_partition(uefi: &dyn Uefi, p1: Handle, p2: Handle) -> Result<bool,
 /// Any trailing chars in `partition_name` array after the first null
 /// are ignored.
 fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr16) -> bool {
-    // `PartitionInfo` is `repr(packed)`, which limits operations on
-    // fields. Copy the `name` field to a local variable to work around
-    // this.
-    let partition_name: [Char16; 36] = partition_info.partition_name;
-    // Compare including the terminating nul.
-    let name = name.as_slice_with_nul();
+    // Get iterators over the characters in `partition_info.name` and
+    // `name`. These iterators exclude the trailing null, if present.
+    let partition_name_chars = partition_info.name.chars();
+    let name_chars = name.as_slice().iter().copied();
 
-    // Get a slice the length of name to compare.
-    let Some(partition_name) = partition_name.get(..name.len()) else {
-        // Name is too long to match.
-        return false;
-    };
-
-    partition_name == name
+    name_chars.eq(partition_name_chars)
 }
 
 /// Get the partition size in bytes for the GPT partition with `name`.
@@ -253,13 +246,13 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
             .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
     };
 
-    let bytes_per_block = NonZeroU64::new(block_io.media().block_size().into())
-        .ok_or(GptDiskError::InvalidBlockSize)?;
+    let block_size =
+        BlockSize::new(block_io.media().block_size()).ok_or(GptDiskError::InvalidBlockSize)?;
 
     partition_info
-        .num_blocks()
-        .ok_or(GptDiskError::InvalidBlockSize)?
-        .checked_mul(bytes_per_block.get())
+        .lba_range()
+        .ok_or(GptDiskError::InvalidPartitionSize)?
+        .num_bytes(block_size)
         .ok_or(GptDiskError::InvalidPartitionSize)
 }
 
@@ -271,6 +264,18 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
 #[cfg(feature = "android")]
 pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid, GptDiskError> {
     Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)
+}
+
+/// Convert from the definition of `GptPartitionEntry` in the
+/// `uefi` crate to the one in the `gpt_disk_types` crate.
+fn convert_gpt_partition_entry_from_uefi(
+    entry: &uefi::proto::media::partition::GptPartitionEntry,
+) -> gpt_disk_types::GptPartitionEntry {
+    // Safety: the `GptPartitionEntry` type is defined differently
+    // in the two crates, but both are modeling the same packed C
+    // type in the UEFI spec; they are layout compatible and have no
+    // undefined padding bytes.
+    unsafe { mem::transmute_copy(entry) }
 }
 
 /// Get the handle and `GptPartitionEntry` of the named GPT partition.
@@ -298,6 +303,8 @@ pub fn find_partition_by_name(
         let PartitionInfo::Gpt(partition_info) = partition_info else {
             continue;
         };
+
+        let partition_info = convert_gpt_partition_entry_from_uefi(&partition_info);
 
         // Ignore partitions with a name other than `name`.
         if !is_gpt_partition_entry_named(&partition_info, name) {
@@ -362,6 +369,7 @@ pub(crate) mod tests {
     use super::*;
     use core::ffi::c_void;
     use core::{mem, slice};
+    use gpt_disk_types::{GptPartitionAttributes, GptPartitionType, LbaLe};
     use libcrdy::uefi::MockUefi;
     use libcrdy::util::usize_to_u64;
     use uefi::data_types::chars::NUL_16;
@@ -372,10 +380,8 @@ pub(crate) mod tests {
     use uefi::proto::device_path::build::{self, BuildError, BuildNode};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::proto::media::block::BlockIO;
-    use uefi::proto::media::partition::{
-        GptPartitionAttributes, GptPartitionEntry, GptPartitionType, MbrOsType, MbrPartitionRecord,
-    };
-    use uefi::{guid, CStr16};
+    use uefi::proto::media::partition::{MbrOsType, MbrPartitionRecord};
+    use uefi::{guid, CStr16, Char16};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
@@ -475,6 +481,10 @@ pub(crate) mod tests {
         }
 
         fn partition_info(self) -> Option<PartitionInfo> {
+            use uefi::proto::media::partition::{
+                GptPartitionAttributes, GptPartitionEntry, GptPartitionType,
+            };
+
             match self {
                 Self::Hd1Esp | Self::Hd2Esp => Some(PartitionInfo::Gpt(GptPartitionEntry {
                     partition_type_guid: GptPartitionType::EFI_SYSTEM_PARTITION,
@@ -984,10 +994,12 @@ pub(crate) mod tests {
         GptPartitionEntry {
             partition_type_guid: GptPartitionType(guid!("7ce8b0e4-20a9-4edd-9982-fe9c84e06e6f")),
             unique_partition_guid: guid!("1fa90113-672a-4c30-89c6-1b87fe019adc"),
-            starting_lba: 0,
-            ending_lba: 10000,
-            attributes: GptPartitionAttributes::empty(),
-            partition_name,
+            starting_lba: LbaLe::from_u64(0),
+            ending_lba: LbaLe::from_u64(10000),
+            attributes: GptPartitionAttributes::default(),
+            // Safety: `Char16` is a `repr(transparent)` wrapper around
+            // `u16`. `[u16; 36]` can be soundly transmuted to `[u8; 72]`.
+            name: unsafe { mem::transmute_copy(&partition_name) },
         }
     }
 
