@@ -14,7 +14,7 @@ use fs_err as fs;
 /// SHA-256 hash of the test data tarball.
 ///
 /// See `docs/test_data.md` for full instructions on updating the test data.
-pub const TEST_DATA_HASH: &str = "320da6cbb51e790bff956bfcd1e9b1a9114741583a7b8231bdc2fe2a1f64146a";
+pub const TEST_DATA_HASH: &str = "181bf29f6ba6a35b161addc5d2155e4f96b1bee8a16c3356d6b76b2c298065ce";
 
 pub struct Config {
     disk_path: Utf8PathBuf,

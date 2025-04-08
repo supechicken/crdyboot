@@ -18,7 +18,7 @@ cargo xtask setup --reven-private
 cargo xtask gen-test-data-tarball
 
 # Check what updates to the test are needed.
-cp workspace/vboot_test_disk.bin workspace/crdyboot_test_data
+tar xvf crdyboot_test_data_<XXXXXX>.tar.xz -C workspace
 cargo xtask check
 ```
 

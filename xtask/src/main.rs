@@ -511,6 +511,9 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
     let tmp_dir = TempDir::new()?;
     let tmp_dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
 
+    let android_test_disk_path = tmp_dir.join("android_test_disk.bin");
+    gen_disk::gen_android_test_disk(&android_test_disk_path)?;
+
     let data_dir_name = "crdyboot_test_data";
     let data_dir = tmp_dir.join(data_dir_name);
 
@@ -519,7 +522,7 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
 
     // Create and fill the directory that will be in the tarball.
     fs::create_dir(&data_dir)?;
-    let src_files = [conf.vboot_test_disk_path()];
+    let src_files = [conf.vboot_test_disk_path(), android_test_disk_path];
     for src in &src_files {
         fs::copy(src, data_dir.join(src.file_name().unwrap()))?;
     }
