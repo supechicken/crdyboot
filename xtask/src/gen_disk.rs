@@ -35,6 +35,35 @@ fn create_empty_file_with_size(path: &Utf8Path, size: &str) -> Result<()> {
     Ok(())
 }
 
+/// Custom partition attributes used by vboot.
+struct VbootAttrs {
+    /// A successful boot has occurred.
+    successful_boot: bool,
+    /// The priority can be between 1-15 (with 15 the highest priority),
+    /// or zero to indicate not bootable.
+    priority: u8,
+    /// Number of tries, between 0 and 15.
+    tries: u8,
+}
+
+impl VbootAttrs {
+    fn attribute_bits(&self) -> u64 {
+        assert!(self.tries <= 15);
+        assert!(self.priority <= 15);
+
+        let mut attribute_bits: u64 = 0;
+
+        if self.successful_boot {
+            attribute_bits |= 1 << 56;
+        }
+
+        attribute_bits |= u64::from(self.tries) << 52;
+        attribute_bits |= u64::from(self.priority) << 48;
+
+        attribute_bits
+    }
+}
+
 struct PartitionSettings<'a> {
     /// 1-based index of the partition.
     num: u32,
@@ -42,28 +71,16 @@ struct PartitionSettings<'a> {
     data_range: PartitionDataRange,
     type_guid: GptPartitionType,
     guid: Guid,
-    set_successful_boot_bit: bool,
-    // 15: highest, 1: lowest, 0: not bootable.
-    priority: Option<u8>,
-    // Contents of the partition.
+    vboot_attrs: Option<VbootAttrs>,
     data: &'a [u8],
 }
 
 impl PartitionSettings<'_> {
     fn attribute_bits(&self) -> u64 {
-        let mut attribute_bits: u64 = 0;
-
-        // ChromeOS-specific attributes.
-        if self.set_successful_boot_bit {
-            attribute_bits |= 1 << 56;
-        }
-        if let Some(priority) = self.priority {
-            assert!((1..=15).contains(&priority));
-            let priority: u64 = priority.into();
-            attribute_bits |= priority << 48;
-        }
-
-        attribute_bits
+        self.vboot_attrs
+            .as_ref()
+            .map(VbootAttrs::attribute_bits)
+            .unwrap_or(0)
     }
 }
 
@@ -247,10 +264,11 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
                 // Arbitrary, but must match the partition GUID in the vboot
                 // test `test_load_kernel`.
                 guid: guid!("c6fbb888-1b6d-4988-a66e-ace443df68f4"),
-                set_successful_boot_bit: true,
-                // Must be set to something between 1 and 15, but otherwise
-                // arbitrary.
-                priority: Some(1),
+                vboot_attrs: Some(VbootAttrs {
+                    successful_boot: true,
+                    priority: 1,
+                    tries: 0,
+                }),
                 data: &kern_a,
             },
             PartitionSettings {
@@ -264,8 +282,7 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
                 type_guid: GptPartitionType(guid!("0fc63daf-8483-4772-8e79-3d69d8477de4")),
                 // Arbitrary GUID.
                 guid: guid!("25532186-f207-0e47-9985-cc4b8847c1ad"),
-                set_successful_boot_bit: false,
-                priority: None,
+                vboot_attrs: None,
                 data: &gen_stateful_test_partition(stateful_partition_size_in_mib)?,
             },
         ],
@@ -320,8 +337,7 @@ pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
                 type_guid: GptPartitionType::EFI_SYSTEM,
                 // Arbitrary GUID.
                 guid: guid!("67f80b17-ae26-471c-83c5-2424f9f12874"),
-                set_successful_boot_bit: false,
-                priority: None,
+                vboot_attrs: None,
                 data: &esp_part_data,
             },
             PartitionSettings {
@@ -331,8 +347,7 @@ pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
                 type_guid: GptPartitionType::BASIC_DATA,
                 // Arbitrary GUID.
                 guid: guid!("73908410-c876-4ba9-b0ef-136baf49f21a"),
-                set_successful_boot_bit: false,
-                priority: None,
+                vboot_attrs: None,
                 data: &basic_part_data,
             },
         ],
@@ -437,8 +452,7 @@ pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
             type_guid: GptPartitionType::EFI_SYSTEM,
             // Arbitrary GUID.
             guid: guid!("21049f0f-75a3-4fba-beff-569ba248a19d"),
-            set_successful_boot_bit: false,
-            priority: None,
+            vboot_attrs: None,
             data: &part_data,
         }],
     };
@@ -943,5 +957,27 @@ mod tests {
 
         let r2 = PartitionDataRange::from_byte_range(512..1024);
         assert_eq!(r, r2);
+    }
+
+    #[test]
+    fn test_vboot_attrs() {
+        assert_eq!(
+            VbootAttrs {
+                successful_boot: true,
+                priority: 14,
+                tries: 0,
+            }
+            .attribute_bits(),
+            0x010e000000000000
+        );
+        assert_eq!(
+            VbootAttrs {
+                successful_boot: false,
+                priority: 15,
+                tries: 3,
+            }
+            .attribute_bits(),
+            0x003f000000000000
+        );
     }
 }
