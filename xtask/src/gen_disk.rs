@@ -36,6 +36,8 @@ fn create_empty_file_with_size(path: &Utf8Path, size: &str) -> Result<()> {
 }
 
 struct PartitionSettings<'a> {
+    /// 1-based index of the partition.
+    num: u32,
     label: &'a str,
     data_range: PartitionDataRange,
     type_guid: GptPartitionType,
@@ -90,12 +92,9 @@ impl DiskSettings<'_> {
 
         let mut gpt = GPT::new_from(&mut disk_file, SECTOR_SIZE, self.guid.to_bytes())?;
 
-        for (i, part) in self.partitions.iter().enumerate() {
-            // GPT partitions start at 1.
-            let part_num: u32 = (i + 1).try_into().unwrap();
-
+        for part in self.partitions {
             // Create the partition entry.
-            gpt[part_num] = gptman::GPTPartitionEntry {
+            gpt[part.num] = gptman::GPTPartitionEntry {
                 partition_type_guid: part.type_guid.0.to_bytes(),
                 unique_partition_guid: part.guid.to_bytes(),
                 starting_lba: part.data_range.0.start().0,
@@ -239,6 +238,7 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
         guid: guid!("d24199e7-33f0-4409-b677-1c04683552c5"),
         partitions: &[
             PartitionSettings {
+                num: 3,
                 label: "KERN-A",
                 data_range: PartitionDataRange::from_byte_range(
                     kernel_partition_start..kernel_partition_end,
@@ -254,6 +254,7 @@ pub fn gen_vboot_test_disk(conf: &Config) -> Result<()> {
                 data: &kern_a,
             },
             PartitionSettings {
+                num: 1,
                 label: "STATE",
                 // Put the stateful partition right after the kernel partition.
                 data_range: PartitionDataRange::from_byte_range(
@@ -313,6 +314,7 @@ pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
         guid: guid!("a2d46164-7684-4423-b165-5f6188732b93"),
         partitions: &[
             PartitionSettings {
+                num: 12,
                 label: "EFI System Partition",
                 data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(91)),
                 type_guid: GptPartitionType::EFI_SYSTEM,
@@ -323,6 +325,7 @@ pub fn gen_flexor_disk_image(conf: &Config) -> Result<()> {
                 data: &esp_part_data,
             },
             PartitionSettings {
+                num: 13,
                 label: "Basic Data Partition",
                 data_range: PartitionDataRange::from_byte_range(mib_to_byte(91)..mib_to_byte(199)),
                 type_guid: GptPartitionType::BASIC_DATA,
@@ -428,6 +431,7 @@ pub fn gen_enroller_disk(conf: &Config) -> Result<()> {
         // Arbitrary GUID.
         guid: guid!("4345f688-5dac-4ab0-a596-ad5bcaf30163"),
         partitions: &[PartitionSettings {
+            num: 1,
             label: "boot",
             data_range: PartitionDataRange::from_byte_range(mib_to_byte(1)..mib_to_byte(3)),
             type_guid: GptPartitionType::EFI_SYSTEM,
