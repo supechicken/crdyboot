@@ -13,7 +13,6 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::block::BlockIO;
 use uefi::proto::media::disk::DiskIo;
 use uefi::proto::media::fs::SimpleFileSystem;
-use uefi::proto::media::partition::{self, GptPartitionEntry, MbrPartitionRecord};
 use uefi::proto::{unsafe_protocol, Protocol};
 use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
@@ -96,8 +95,6 @@ pub trait Uefi {
 
     fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
 
-    fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>>;
-
     fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
@@ -105,8 +102,6 @@ pub trait Uefi {
     /// Find the [`Handle`] corresponding to the ESP partition that this
     /// executable is running from.
     fn find_esp_partition_handle(&self) -> uefi::Result<Option<Handle>>;
-
-    fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo>;
 
     /// Open the Block IO protocol for `handle`.
     ///
@@ -200,10 +195,6 @@ impl Uefi for UefiImpl {
         runtime::reset(reset_type, Status::SUCCESS, None);
     }
 
-    fn find_partition_info_handles(&self) -> uefi::Result<Vec<Handle>> {
-        boot::find_handles::<partition::PartitionInfo>()
-    }
-
     fn find_block_io_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<BlockIO>()
     }
@@ -242,34 +233,6 @@ impl Uefi for UefiImpl {
         // image was loaded from.
         let loaded_image = boot::open_protocol_exclusive::<LoadedImage>(boot::image_handle())?;
         Ok(loaded_image.device())
-    }
-
-    fn partition_info_for_handle(&self, handle: Handle) -> uefi::Result<PartitionInfo> {
-        // Use non-exclusive mode because opening disk handles in
-        // exclusive mode can be slow.
-        //
-        // Safety: the protocol is closed within this function, and
-        // there is no risk of it being mutated by other code during
-        // this function call.
-        let info = unsafe {
-            boot::open_protocol::<partition::PartitionInfo>(
-                OpenProtocolParams {
-                    handle,
-                    agent: boot::image_handle(),
-                    controller: None,
-                },
-                OpenProtocolAttributes::GetProtocol,
-            )
-        }?;
-
-        if let Some(gpt) = info.gpt_partition_entry() {
-            Ok(PartitionInfo::Gpt(*gpt))
-        } else if let Some(mbr) = info.mbr_partition_record() {
-            Ok(PartitionInfo::Mbr(*mbr))
-        } else {
-            // This should never happen in practice.
-            Err(Status::UNSUPPORTED.into())
-        }
     }
 
     unsafe fn open_block_io(&self, handle: Handle) -> uefi::Result<ScopedBlockIo> {
@@ -388,12 +351,6 @@ pub type ScopedBlockIo = ScopedProtocol<BlockIO>;
 pub type ScopedDevicePath = ScopedProtocol<DevicePath>;
 pub type ScopedDiskIo = ScopedProtocol<DiskIo>;
 pub type ScopedLoadedImage = ScopedProtocol<LoadedImage>;
-
-#[derive(Clone)]
-pub enum PartitionInfo {
-    Mbr(MbrPartitionRecord),
-    Gpt(GptPartitionEntry),
-}
 
 /// Iterator over all UEFI variable keys.
 pub enum VariableKeys {
