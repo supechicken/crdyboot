@@ -425,7 +425,7 @@ pub(crate) mod tests {
     use core::ffi::c_void;
     use core::{mem, slice};
     use gpt_disk_io::gpt_disk_types::{GptPartitionAttributes, GptPartitionType, LbaLe};
-    use libcrdy::uefi::{MockUefi, PartitionInfo};
+    use libcrdy::uefi::MockUefi;
     use libcrdy::util::usize_to_u64;
     use uefi::data_types::chars::NUL_16;
     use uefi::proto::device_path::build::acpi::Acpi;
@@ -435,8 +435,7 @@ pub(crate) mod tests {
     use uefi::proto::device_path::build::{self, BuildError, BuildNode};
     use uefi::proto::device_path::media::{PartitionFormat, PartitionSignature};
     use uefi::proto::media::block::BlockIO;
-    use uefi::proto::media::partition::{MbrOsType, MbrPartitionRecord};
-    use uefi::{cstr16, guid, CStr16, Char16};
+    use uefi::{cstr16, guid, CStr16, Char16, Guid};
     use uefi_raw::protocol::block::{BlockIoMedia, BlockIoProtocol};
     use uefi_raw::protocol::disk::DiskIoProtocol;
 
@@ -535,62 +534,6 @@ pub(crate) mod tests {
             ]
         }
 
-        fn partition_info(self) -> Option<PartitionInfo> {
-            use uefi::proto::media::partition::{
-                GptPartitionAttributes, GptPartitionEntry, GptPartitionType,
-            };
-
-            match self {
-                Self::Hd1Esp | Self::Hd2Esp => Some(PartitionInfo::Gpt(GptPartitionEntry {
-                    partition_type_guid: GptPartitionType::EFI_SYSTEM_PARTITION,
-                    unique_partition_guid: guid!("b1f85a2c-a582-1148-a677-73b11035c739"),
-                    starting_lba: 300_000,
-                    ending_lba: 400_000,
-                    attributes: GptPartitionAttributes::empty(),
-                    partition_name: init_partition_name(cstr16!("EFI-SYSTEM")),
-                })),
-                Self::Hd1State => Some(PartitionInfo::Gpt(GptPartitionEntry {
-                    partition_type_guid: GptPartitionType(guid!(
-                        "0fc63daf-8483-4772-8e79-3d69d8477de4"
-                    )),
-                    unique_partition_guid: guid!("25532186-f207-0e47-9985-cc4b8847c1ad"),
-                    starting_lba: 6_000_000,
-                    ending_lba: 6_002_047,
-                    attributes: GptPartitionAttributes::empty(),
-                    partition_name: init_partition_name(cstr16!("STATE")),
-                })),
-                Self::Hd3MbrPartition => Some(PartitionInfo::Mbr(MbrPartitionRecord {
-                    boot_indicator: 0,
-                    starting_chs: [1, 2, 3],
-                    os_type: MbrOsType(0),
-                    ending_chs: [4, 5, 6],
-                    starting_lba: 0,
-                    size_in_lba: 10000,
-                })),
-                Self::Hd2BootA => Some(PartitionInfo::Gpt(GptPartitionEntry {
-                    partition_type_guid: GptPartitionType(guid!(
-                        "fe3a2a5d-4f32-41a7-b725-accc3285a309"
-                    )),
-                    unique_partition_guid: guid!("48339261-bf07-4faa-84e2-63bf034ba881"),
-                    starting_lba: 6_000_000,
-                    ending_lba: 16_000_000,
-                    attributes: GptPartitionAttributes::from_bits_retain(0x010E000000000000),
-                    partition_name: init_partition_name(cstr16!("boot_a")),
-                })),
-                Self::Hd2BootB => Some(PartitionInfo::Gpt(GptPartitionEntry {
-                    partition_type_guid: GptPartitionType(guid!(
-                        "fe3a2a5d-4f32-41a7-b725-accc3285a309"
-                    )),
-                    unique_partition_guid: guid!("41673840-88b4-4db3-90b1-c0f328276647"),
-                    starting_lba: 6_000_000,
-                    ending_lba: 16_000_000,
-                    attributes: GptPartitionAttributes::from_bits_retain(0x003F000000000000),
-                    partition_name: init_partition_name(cstr16!("boot_b")),
-                })),
-                _ => None,
-            }
-        }
-
         fn partition_number(self) -> Option<u32> {
             match self {
                 Self::Hd1Esp | Self::Hd2Esp => Some(12),
@@ -603,22 +546,15 @@ pub(crate) mod tests {
         }
 
         fn partition_device_path_node(self) -> Option<HardDrive> {
-            match self.partition_info()? {
-                PartitionInfo::Gpt(gpt) => Some(HardDrive {
-                    partition_number: self.partition_number().unwrap(),
-                    partition_start: gpt.starting_lba,
-                    partition_size: gpt.num_blocks().unwrap(),
-                    partition_signature: PartitionSignature::Guid(gpt.unique_partition_guid),
-                    partition_format: PartitionFormat::GPT,
-                }),
-                PartitionInfo::Mbr(mbr) => Some(HardDrive {
-                    partition_number: self.partition_number().unwrap(),
-                    partition_start: mbr.starting_lba.into(),
-                    partition_size: mbr.size_in_lba.into(),
-                    partition_signature: PartitionSignature::Mbr([3; 4]),
-                    partition_format: PartitionFormat::MBR,
-                }),
-            }
+            Some(HardDrive {
+                partition_number: self.partition_number()?,
+
+                // The rest of these values aren't read, so put in default values.
+                partition_start: 0,
+                partition_size: 0,
+                partition_signature: PartitionSignature::Guid(Guid::default()),
+                partition_format: PartitionFormat::GPT,
+            })
         }
 
         fn create_device_path(self) -> Result<ScopedDevicePath, BuildError> {
@@ -829,13 +765,6 @@ pub(crate) mod tests {
                 BootDrive::HdWithNoEspDeviceHandle => Ok(None),
                 BootDrive::Invalid => Err(Status::INVALID_PARAMETER.into()),
             });
-        uefi.expect_find_partition_info_handles().returning(|| {
-            Ok(DeviceKind::all()
-                .iter()
-                .filter(|kind| kind.partition_info().is_some())
-                .map(|kind| kind.handle())
-                .collect())
-        });
         uefi.expect_find_block_io_handles().returning(|| {
             Ok(vec![
                 DeviceKind::Hd1.handle(),
@@ -849,8 +778,6 @@ pub(crate) mod tests {
                 DeviceKind::Hd3MbrPartition.handle(),
             ])
         });
-        uefi.expect_partition_info_for_handle()
-            .returning(|handle| Ok(DeviceKind::from_handle(handle).partition_info().unwrap()));
         uefi.expect_open_block_io().returning(|handle| {
             let media = if handle == DeviceKind::Hd1.handle() {
                 &HD1_MEDIA
