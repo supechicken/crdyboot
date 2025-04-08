@@ -268,21 +268,23 @@ fn avb_load_kernel(rk: &dyn RunKernel) -> Result<(), CrdybootError> {
 }
 
 fn get_flexor_cmdline(verbose: bool) -> String {
-    let base = "earlycon=efifb keep_bootcon earlyprintk=vga,keep \
-     console=tty1 init=/sbin/init \
+    let base = "keep_bootcon console=tty1 init=/sbin/init \
      cros_efi drm.trace=0x106 root=/dev/dm-0 rootwait ro \
      dm_verity.error_behavior=3 dm_verity.max_bios=-1 \
      dm_verity.dev_wait=1 noinitrd panic=60 vt.global_cursor_default=0 \
      kern_guid=%U add_efi_memmap noresume i915.modeset=1 vga=0x31e \
      kvm-intel.vmentry_l1d_flush=always";
 
-    let loglevel = if verbose { 7 } else { 1 };
-
-    // When verbose logging is enabled, turn off ratelimiting for kmsg:
-    // https://docs.kernel.org/admin-guide/sysctl/kernel.html#printk-devkmsg
-    let devkmsg = if verbose { "on" } else { "ratelimit" };
-
-    format!("{base} loglevel={loglevel} printk.devkmsg={devkmsg}")
+    // When verbose logging is enabled,
+    // * Set earlycon to efifb
+    // * Turn on VGA console and keep the kernel log on the screen
+    // * Set loglevel to 7
+    // * Turn off ratelimiting for kmsg (https://docs.kernel.org/admin-guide/sysctl/kernel.html#printk-devkmsg)
+    if verbose {
+        format!("{base} earlycon=efifb earlyprintk=vga,keep loglevel=7 printk.devkmsg=on")
+    } else {
+        format!("{base} loglevel=1 printk.devkmsg=ratelimit")
+    }
 }
 
 /// Use vboot to load the kernel from the appropriate kernel partition,
@@ -559,7 +561,8 @@ mod tests {
         let verbose = false;
         assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=1 printk.devkmsg=ratelimit"));
         let verbose = true;
-        assert!(get_flexor_cmdline(verbose).ends_with(" loglevel=7 printk.devkmsg=on"));
+        assert!(get_flexor_cmdline(verbose)
+            .ends_with(" earlycon=efifb earlyprintk=vga,keep loglevel=7 printk.devkmsg=on"));
     }
 
     /// Return true if `data` looks like a valid kernel buffer, false otherwise.
