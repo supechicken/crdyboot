@@ -676,7 +676,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
             requested_partitions.as_ptr(),
             slot.slot_suffix_cstr().as_ptr(),
             AvbSlotVerifyFlags::AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR,
-            AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_LOGGING,
+            AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_RESTART,
             &mut verify_data,
         )
     };
