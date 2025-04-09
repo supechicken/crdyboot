@@ -370,6 +370,11 @@ pub(crate) mod tests {
 
     pub(crate) static VBOOT_TEST_DISK: &[u8] =
         include_bytes!("../../workspace/crdyboot_test_data/vboot_test_disk.bin");
+    pub(crate) static ANDROID_TEST_DISK: &[u8] =
+        include_bytes!("../../workspace/crdyboot_test_data/android_test_disk.bin");
+
+    // All-zero data representing a disk that does not have a valid GPT.
+    pub(crate) static NON_GPT_TEST_DISK: &[u8] = &[0; 1024 * 2];
 
     // TODO(b/397698913): temporarily hardcode the start and length of
     // the stateful test partition within `VBOOT_TEST_DISK`.
@@ -640,6 +645,16 @@ pub(crate) mod tests {
             last_block: (STATEFUL_TEST_PARTITION_LEN / 512) - 1,
             ..HD1_MEDIA
         };
+        static HD2_MEDIA: BlockIoMedia = BlockIoMedia {
+            media_id: 200,
+            last_block: usize_to_u64((ANDROID_TEST_DISK.len() / 512) - 1),
+            ..HD1_MEDIA
+        };
+        static HD3_MEDIA: BlockIoMedia = BlockIoMedia {
+            media_id: 300,
+            last_block: usize_to_u64((NON_GPT_TEST_DISK.len() / 512) - 1),
+            ..HD1_MEDIA
+        };
 
         unsafe extern "efiapi" fn read_blocks(
             this: *const BlockIoProtocol,
@@ -648,8 +663,15 @@ pub(crate) mod tests {
             buffer_size: usize,
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
-            assert_eq!(media_id, HD1_MEDIA.media_id);
-            let src = VBOOT_TEST_DISK;
+            let src = if media_id == HD1_MEDIA.media_id {
+                VBOOT_TEST_DISK
+            } else if media_id == HD2_MEDIA.media_id {
+                ANDROID_TEST_DISK
+            } else if media_id == HD3_MEDIA.media_id {
+                NON_GPT_TEST_DISK
+            } else {
+                panic!("attempted to read blocks from {media_id}");
+            };
 
             if lba > (*(*this).media).last_block {
                 return uefi_raw::Status::INVALID_PARAMETER;
@@ -758,6 +780,10 @@ pub(crate) mod tests {
                 &HD1_MEDIA
             } else if handle == DeviceKind::Hd1State.handle() {
                 &HD1_STATE_MEDIA
+            } else if handle == DeviceKind::Hd2.handle() {
+                &HD2_MEDIA
+            } else if handle == DeviceKind::Hd3.handle() {
+                &HD3_MEDIA
             } else {
                 return Err(Status::UNSUPPORTED.into());
             };
