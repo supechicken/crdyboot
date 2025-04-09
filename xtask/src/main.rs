@@ -142,6 +142,15 @@ struct DeployAction {
     #[arg(long)]
     reboot: bool,
 
+    /// Override the target disk path (e.g. /dev/sda).
+    ///
+    /// This is useful if the DUT is booted from a USB but you want to
+    /// deploy to the internal disk (or vice versa).
+    ///
+    /// If not specified, the rootdev disk is used.
+    #[arg(long)]
+    disk: Option<String>,
+
     /// SSH target to deploy to.
     ///
     /// Generally this should be a host defined in your SSH config.
