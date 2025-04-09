@@ -483,7 +483,6 @@ pub(crate) mod tests {
         Hd2BootB,
 
         Hd3,
-        Hd3MbrPartition,
 
         FilePath,
         MacAddr,
@@ -528,7 +527,6 @@ pub(crate) mod tests {
                 Self::Hd2BootA,
                 Self::Hd2BootB,
                 Self::Hd3,
-                Self::Hd3MbrPartition,
                 Self::FilePath,
                 Self::MacAddr,
             ]
@@ -540,7 +538,6 @@ pub(crate) mod tests {
                 Self::Hd1State => Some(1),
                 Self::Hd2BootA => Some(13),
                 Self::Hd2BootB => Some(14),
-                Self::Hd3MbrPartition => Some(1),
                 _ => None,
             }
         }
@@ -612,10 +609,6 @@ pub(crate) mod tests {
                     nodes.push(partition.unwrap());
                 }
                 Self::Hd3 => nodes.extend(hd3),
-                Self::Hd3MbrPartition => {
-                    nodes.extend(hd3);
-                    nodes.push(partition.unwrap());
-                }
                 Self::FilePath => {
                     nodes.extend(hd1);
                     nodes.push(&path);
@@ -761,7 +754,7 @@ pub(crate) mod tests {
             .returning(move || match boot_drive {
                 BootDrive::Hd1 => Ok(Some(DeviceKind::Hd1Esp.handle())),
                 BootDrive::Hd2 => Ok(Some(DeviceKind::Hd2Esp.handle())),
-                BootDrive::Hd3 => Ok(Some(DeviceKind::Hd3MbrPartition.handle())),
+                BootDrive::Hd3 => Ok(None),
                 BootDrive::HdWithNoEspDeviceHandle => Ok(None),
                 BootDrive::Invalid => Err(Status::INVALID_PARAMETER.into()),
             });
@@ -775,7 +768,6 @@ pub(crate) mod tests {
                 DeviceKind::Hd2BootA.handle(),
                 DeviceKind::Hd2BootB.handle(),
                 DeviceKind::Hd3.handle(),
-                DeviceKind::Hd3MbrPartition.handle(),
             ])
         });
         uefi.expect_open_block_io().returning(|handle| {
