@@ -388,7 +388,9 @@ pub(crate) mod tests {
         /// 3. boot_b
         Hd2,
 
-        Hd3Mbr,
+        /// A non-GPT disk.
+        Hd3,
+
         HdWithNoEspDeviceHandle,
         Invalid,
     }
@@ -404,7 +406,9 @@ pub(crate) mod tests {
         Hd2BootA,
         Hd2BootB,
 
+        Hd3,
         Hd3MbrPartition,
+
         FilePath,
         MacAddr,
     }
@@ -424,7 +428,7 @@ pub(crate) mod tests {
             // non-zero size, each element is guaranteed to have a different
             // address.
             let index = self as usize;
-            static H: [u8; 10] = [0; 10];
+            static H: [u8; 11] = [0; 11];
             let ptr: *const u8 = &H[index];
             let ptr: *mut _ = ptr.cast_mut().cast();
             unsafe { Handle::from_ptr(ptr) }.unwrap()
@@ -447,6 +451,7 @@ pub(crate) mod tests {
                 Self::Hd2Esp,
                 Self::Hd2BootA,
                 Self::Hd2BootB,
+                Self::Hd3,
                 Self::Hd3MbrPartition,
                 Self::FilePath,
                 Self::MacAddr,
@@ -589,6 +594,7 @@ pub(crate) mod tests {
                     nodes.extend(hd2);
                     nodes.push(partition.unwrap());
                 }
+                Self::Hd3 => nodes.extend(hd3),
                 Self::Hd3MbrPartition => {
                     nodes.extend(hd3);
                     nodes.push(partition.unwrap());
@@ -720,7 +726,7 @@ pub(crate) mod tests {
             .returning(move || match boot_drive {
                 BootDrive::Hd1 => Ok(Some(DeviceKind::Hd1Esp.handle())),
                 BootDrive::Hd2 => Ok(Some(DeviceKind::Hd2Esp.handle())),
-                BootDrive::Hd3Mbr => Ok(Some(DeviceKind::Hd3MbrPartition.handle())),
+                BootDrive::Hd3 => Ok(Some(DeviceKind::Hd3MbrPartition.handle())),
                 BootDrive::HdWithNoEspDeviceHandle => Ok(None),
                 BootDrive::Invalid => Err(Status::INVALID_PARAMETER.into()),
             });
@@ -740,6 +746,8 @@ pub(crate) mod tests {
                 DeviceKind::Hd2Esp.handle(),
                 DeviceKind::Hd2BootA.handle(),
                 DeviceKind::Hd2BootB.handle(),
+                DeviceKind::Hd3.handle(),
+                DeviceKind::Hd3MbrPartition.handle(),
             ])
         });
         uefi.expect_partition_info_for_handle()
@@ -984,7 +992,7 @@ pub(crate) mod tests {
     /// Test that `find_partition_by_name` fails for MBR disks.
     #[test]
     fn test_find_partition_by_name_mbr_fail() {
-        let uefi = create_mock_uefi(BootDrive::Hd3Mbr);
+        let uefi = create_mock_uefi(BootDrive::Hd3);
 
         assert_eq!(
             find_partition_by_name(&uefi, cstr16!("STATE")).unwrap_err(),
