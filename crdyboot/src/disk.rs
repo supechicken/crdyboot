@@ -88,6 +88,17 @@ fn is_parent_disk(
     potential_parent: Handle,
     partition: Handle,
 ) -> Result<bool, GptDiskError> {
+    // A partition cannot be its own parent. This is important to check
+    // first, to avoid a potential panic when dropping `DevicePath`s
+    // below. This can occur because the protocol is opened in
+    // non-exclusive mode. If opened twice in non-exclusive mode, the
+    // first drop will succeed, but the second will fail if the firmware
+    // thinks the protocol is already closed. A failure in
+    // close_protocol currently causes a panic in uefi-rs. b/409609580
+    if partition == potential_parent {
+        return Ok(false);
+    }
+
     let potential_parent_device_path = device_path_for_handle(uefi, potential_parent)?;
     let potential_parent_device_path_node_iter = potential_parent_device_path.node_iter();
     let partition_device_path = device_path_for_handle(uefi, partition)?;
