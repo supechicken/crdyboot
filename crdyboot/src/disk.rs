@@ -472,9 +472,9 @@ pub(crate) mod tests {
                     partition_type_guid: GptPartitionType(guid!(
                         "0fc63daf-8483-4772-8e79-3d69d8477de4"
                     )),
-                    unique_partition_guid: guid!("1fa90113-672a-4c30-89c6-1b87fe019adc"),
+                    unique_partition_guid: guid!("25532186-f207-0e47-9985-cc4b8847c1ad"),
                     starting_lba: 6_000_000,
-                    ending_lba: 16_000_000,
+                    ending_lba: 6_002_047,
                     attributes: GptPartitionAttributes::empty(),
                     partition_name: init_partition_name(cstr16!("STATE")),
                 })),
@@ -622,7 +622,7 @@ pub(crate) mod tests {
 
     pub(crate) fn create_mock_uefi(boot_drive: BootDrive) -> MockUefi {
         static HD1_MEDIA: BlockIoMedia = BlockIoMedia {
-            media_id: 123,
+            media_id: 100,
             removable_media: false,
             media_present: true,
             logical_partition: false,
@@ -636,7 +636,7 @@ pub(crate) mod tests {
             optimal_transfer_length_granularity: 1,
         };
         static HD1_STATE_MEDIA: BlockIoMedia = BlockIoMedia {
-            media_id: 456,
+            media_id: 101,
             last_block: (STATEFUL_TEST_PARTITION_LEN / 512) - 1,
             ..HD1_MEDIA
         };
@@ -649,6 +649,7 @@ pub(crate) mod tests {
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
             assert_eq!(media_id, HD1_MEDIA.media_id);
+            let src = VBOOT_TEST_DISK;
 
             if lba > (*(*this).media).last_block {
                 return uefi_raw::Status::INVALID_PARAMETER;
@@ -657,7 +658,7 @@ pub(crate) mod tests {
             let dst: &mut [u8] = slice::from_raw_parts_mut(buffer.cast(), buffer_size);
 
             let offset = usize::try_from(lba * 512).unwrap();
-            let src = &VBOOT_TEST_DISK[offset..offset + dst.len()];
+            let src = &src[offset..offset + dst.len()];
 
             dst.copy_from_slice(src);
 
@@ -925,7 +926,7 @@ pub(crate) mod tests {
         // as setup.
         assert_eq!(
             get_partition_size_in_bytes(&uefi, pname).unwrap(),
-            (10_000_001 * 512)
+            STATEFUL_TEST_PARTITION_LEN
         );
     }
 
@@ -937,7 +938,7 @@ pub(crate) mod tests {
         let uefi = create_mock_uefi(BootDrive::Hd1);
         assert_eq!(
             get_partition_unique_guid(&uefi, pname).unwrap(),
-            guid!("1fa90113-672a-4c30-89c6-1b87fe019adc")
+            guid!("25532186-f207-0e47-9985-cc4b8847c1ad")
         );
     }
 
