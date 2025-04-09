@@ -153,7 +153,11 @@ pub fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError
     }
 }
 
-pub fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError> {
+/// Find the `Handle` for the disk that this executable is running from.
+///
+/// Note that this is the handle associated with the entire disk device,
+/// not an individual partition on the disk.
+fn find_boot_disk_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -163,7 +167,11 @@ pub fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError
         .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
 
     // Find the parent disk device of the logical partition device.
-    let disk_handle = find_parent_disk(uefi, &block_io_handles, partition_handle)?;
+    find_parent_disk(uefi, &block_io_handles, partition_handle)
+}
+
+pub fn find_disk_block_io(uefi: &dyn Uefi) -> Result<ScopedBlockIo, GptDiskError> {
+    let disk_handle = find_boot_disk_handle(uefi)?;
 
     // Open the protocol with `GetProtocol` instead of `Exclusive`. On
     // the X1Cg9, opening the protocol in exclusive mode takes over
