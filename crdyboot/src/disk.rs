@@ -756,9 +756,10 @@ pub(crate) mod tests {
         uefi.expect_open_block_io().returning(|handle| {
             let media = if handle == DeviceKind::Hd1.handle() {
                 &HD1_MEDIA
-            } else {
-                assert_eq!(handle, DeviceKind::Hd1State.handle());
+            } else if handle == DeviceKind::Hd1State.handle() {
                 &HD1_STATE_MEDIA
+            } else {
+                return Err(Status::UNSUPPORTED.into());
             };
 
             let bio = BlockIoProtocol {
