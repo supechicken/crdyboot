@@ -257,9 +257,7 @@ pub fn find_partition_by_name(
     let gpt = Gpt::load(uefi, boot_disk_handle)?;
 
     // Find the partition named `name`.
-    let (partition_num, entry) = gpt
-        .find_partition_by_name(name)
-        .ok_or(GptDiskError::PartitionNotFound)?;
+    let (partition_num, entry) = gpt.find_partition_by_name(name)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
     // and logical partition devices.
@@ -408,14 +406,15 @@ impl Gpt {
     /// Find a partition entry by name.
     ///
     /// If found, returns a tuple containing both `PartitionNum` and
-    /// `GptPartitionEntry`. If not found, returns `None`.
+    /// `GptPartitionEntry`. If not found, returns `PartitionNotFound`.
     fn find_partition_by_name(
         &self,
         looking_for: &CStr16,
-    ) -> Option<&(PartitionNum, GptPartitionEntry)> {
+    ) -> Result<&(PartitionNum, GptPartitionEntry), GptDiskError> {
         self.partitions
             .iter()
             .find(|(_, entry)| is_gpt_partition_entry_named(entry, looking_for))
+            .ok_or(GptDiskError::PartitionNotFound)
     }
 }
 
@@ -1093,7 +1092,10 @@ pub(crate) mod tests {
         assert_eq!(gpt.partitions.len(), 2);
 
         // Check that finding a nonexistent partition fails.
-        assert!(gpt.find_partition_by_name(cstr16!("invalid")).is_none());
+        assert_eq!(
+            gpt.find_partition_by_name(cstr16!("invalid")),
+            Err(GptDiskError::PartitionNotFound)
+        );
 
         // Check that finding a real partition succeeds.
         let (pnum, partition) = gpt.find_partition_by_name(cstr16!("STATE")).unwrap();
