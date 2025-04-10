@@ -240,7 +240,10 @@ pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64
 /// from.
 #[cfg(feature = "android")]
 pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid, GptDiskError> {
-    Ok(find_partition_by_name(uefi, name)?.1.unique_partition_guid)
+    let gpt = Gpt::load_boot_disk(uefi)?;
+    let (_, entry) = gpt.find_partition_by_name(name)?;
+
+    Ok(entry.unique_partition_guid)
 }
 
 /// Get the handle and `GptPartitionEntry` of the named GPT partition.
