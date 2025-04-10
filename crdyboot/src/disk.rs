@@ -248,7 +248,7 @@ pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid,
 /// This finds the `name` partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
-pub fn find_partition_by_name(
+fn find_partition_by_name(
     uefi: &dyn Uefi,
     name: &CStr16,
 ) -> Result<(Handle, GptPartitionEntry), GptDiskError> {
@@ -350,11 +350,18 @@ type PartitionNum = u32;
 /// to read data from the disk. No partition-specific UEFI protocols are
 /// used.
 #[derive(Debug)]
-struct Gpt {
+pub struct Gpt {
     partitions: Vec<(PartitionNum, GptPartitionEntry)>,
 }
 
 impl Gpt {
+    /// Create a `Gpt` for the disk that this executable is running from.
+    #[cfg(feature = "android")]
+    pub fn load_boot_disk(uefi: &dyn Uefi) -> Result<Self, GptDiskError> {
+        let disk_handle = find_boot_disk_handle(uefi)?;
+        Self::load(uefi, disk_handle)
+    }
+
     /// Create a `Gpt` for the disk represented by `disk_handle`.
     fn load(uefi: &dyn Uefi, disk_handle: Handle) -> Result<Self, GptDiskError> {
         // See comment in `find_disk_block_io` for why the non-exclusive
@@ -407,7 +414,7 @@ impl Gpt {
     ///
     /// If found, returns a tuple containing both `PartitionNum` and
     /// `GptPartitionEntry`. If not found, returns `PartitionNotFound`.
-    fn find_partition_by_name(
+    pub fn find_partition_by_name(
         &self,
         looking_for: &CStr16,
     ) -> Result<&(PartitionNum, GptPartitionEntry), GptDiskError> {

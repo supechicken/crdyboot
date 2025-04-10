@@ -3,8 +3,7 @@
 // found in the LICENSE file.
 
 use crate::alloc::string::ToString;
-use crate::disk;
-use crate::disk::GptDiskError;
+use crate::disk::{self, Gpt, GptDiskError};
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_data_free, avb_slot_verify_result_to_string,
@@ -837,7 +836,10 @@ fn get_priority_slot(uefi: &dyn Uefi) -> Result<BootSlot, AvbError> {
     let mut result_slot = BootSlot::A;
     for slot in BootSlot::all() {
         let name = slot.boot_part_name();
-        let (_, gpt_partition_entry) = disk::find_partition_by_name(uefi, name)
+        let gpt = Gpt::load_boot_disk(uefi)
+            .map_err(|error| AvbError::FailedFindPartition { name, error })?;
+        let (_, gpt_partition_entry) = gpt
+            .find_partition_by_name(name)
             .map_err(|error| AvbError::FailedFindPartition { name, error })?;
 
         let attributes = gpt_partition_entry.attributes;
