@@ -4,17 +4,18 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
-use gpt_disk_io::gpt_disk_types::{GptPartitionEntry, GptPartitionEntrySizeError};
+use core::ops::Range;
+use gpt_disk_io::gpt_disk_types::{BlockSize, GptPartitionEntry, GptPartitionEntrySizeError};
 use gpt_disk_io::{Disk, DiskError};
 use libcrdy::uefi::{BlockIoError, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
-use libcrdy::util::u32_to_usize;
+use libcrdy::util::{u32_to_usize, usize_to_u64};
 use uefi::prelude::*;
 use uefi::proto::device_path::media::HardDrive;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::CStr16;
 
 #[cfg(feature = "android")]
-use {gpt_disk_io::gpt_disk_types::BlockSize, uefi::Guid};
+use uefi::Guid;
 
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum GptDiskError {
@@ -327,6 +328,50 @@ pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<PartitionIo, GptDiskEr
     // Name of the stateful partition.
     const STATE_NAME: &CStr16 = cstr16!("STATE");
     open_partition_by_name(uefi, STATE_NAME)
+}
+
+/// Byte range of a partition's data.
+///
+/// Note that this represents the location of the data stored in a
+/// partition, not the partition entry in the GPT partition entry array.
+#[allow(unused)]
+struct PartitionDataRange(Range<u64>);
+
+#[allow(unused)]
+impl PartitionDataRange {
+    /// Create a `PartitionDataRange` from a `GptPartitionEntry` and `BlockSize`.
+    ///
+    /// Returns `None` if any error occurs.
+    fn from_partition_entry(entry: &GptPartitionEntry, block_size: BlockSize) -> Option<Self> {
+        let lba_range = entry.lba_range()?;
+        let byte_range = lba_range.to_byte_range(block_size)?;
+        // Convert from `InclusiveRange` to `Range`.
+        let start = *byte_range.start();
+        let end = byte_range.end().checked_add(1)?;
+        Some(Self(start..end))
+    }
+
+    /// Given a byte index that is relative to the start of the
+    /// partition, convert it to an absolute byte index within the whole
+    /// disk.
+    ///
+    /// Also perform some validatation:
+    /// * Verify that `relative_start_byte` is not past the end of the partition.
+    /// * Verify that `buf.len()` bytes starting from
+    ///   `relative_start_byte` are within the partition.
+    fn make_input_absolute(&self, relative_start_byte: u64, buf: &[u8]) -> Option<u64> {
+        let start_byte = self.0.start.checked_add(relative_start_byte)?;
+        if start_byte >= self.0.end {
+            return None;
+        }
+
+        let end_byte = start_byte.checked_add(usize_to_u64(buf.len()))?;
+        if end_byte > self.0.end {
+            return None;
+        }
+
+        Some(start_byte)
+    }
 }
 
 /// Read/write access to partition data.
@@ -1178,5 +1223,46 @@ pub(crate) mod tests {
             pio.read(1024 * 1024 * 1024, &mut buf).unwrap_err().status(),
             Status::INVALID_PARAMETER
         );
+    }
+
+    /// Test success and error cases of `PartitionDataRange::from_partition_entry`.
+    #[test]
+    fn test_partition_data_range_from_entry() {
+        let mut entry = GptPartitionEntry {
+            // End is inclusive, so this partition covers one block.
+            starting_lba: LbaLe::from_u64(1),
+            ending_lba: LbaLe::from_u64(1),
+            ..GptPartitionEntry::default()
+        };
+        let bs = BlockSize::BS_512;
+        assert_eq!(
+            PartitionDataRange::from_partition_entry(&entry, bs)
+                .unwrap()
+                .0,
+            512..1024
+        );
+
+        // Make the partition range invalid and verify `from_partition_entry` fails.
+        entry.ending_lba = LbaLe::from_u64(0);
+        assert!(PartitionDataRange::from_partition_entry(&entry, bs).is_none());
+    }
+
+    /// Test success and error cases of `PartitionDataRange::make_input_absolute`.
+    #[test]
+    fn test_partition_data_range_make_input_absolute() {
+        // 4-byte range (2, 3, 4, 5).
+        let range = PartitionDataRange(2..6);
+
+        assert_eq!(range.make_input_absolute(0, &[0; 4]).unwrap(), 2);
+        assert_eq!(range.make_input_absolute(3, &[]).unwrap(), 5);
+
+        // Invalid: the adjusted start is outside the range.
+        assert!(range.make_input_absolute(4, &[]).is_none());
+
+        // Invalid: the buffer doesn't fit in the range.
+        assert!(range.make_input_absolute(0, &[1, 2, 3, 4, 5]).is_none());
+
+        // Invalid: the adjusted end of the buffer is outside the range.
+        assert!(range.make_input_absolute(1, &[1, 2, 3, 4]).is_none());
     }
 }
