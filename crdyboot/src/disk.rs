@@ -216,20 +216,15 @@ fn is_gpt_partition_entry_named(partition_info: &GptPartitionEntry, name: &CStr1
 /// from.
 #[cfg(feature = "android")]
 pub fn get_partition_size_in_bytes(uefi: &dyn Uefi, name: &CStr16) -> Result<u64, GptDiskError> {
-    let (partition_handle, partition_info) = find_partition_by_name(uefi, name)?;
+    let gpt = Gpt::load_boot_disk(uefi)?;
 
-    let block_io = unsafe {
-        uefi.open_block_io(partition_handle)
-            .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
-    };
+    // Find the partition named `name`.
+    let (_, entry) = gpt.find_partition_by_name(name)?;
 
-    let block_size =
-        BlockSize::new(block_io.media().block_size()).ok_or(GptDiskError::InvalidBlockSize)?;
-
-    partition_info
+    entry
         .lba_range()
         .ok_or(GptDiskError::InvalidPartitionSize)?
-        .num_bytes(block_size)
+        .num_bytes(gpt.block_size)
         .ok_or(GptDiskError::InvalidPartitionSize)
 }
 
@@ -354,6 +349,8 @@ type PartitionNum = u32;
 /// used.
 #[derive(Debug)]
 pub struct Gpt {
+    #[cfg(feature = "android")]
+    block_size: BlockSize,
     partitions: Vec<(PartitionNum, GptPartitionEntry)>,
 }
 
@@ -410,7 +407,11 @@ impl Gpt {
             })
             .collect();
 
-        Ok(Self { partitions })
+        Ok(Self {
+            #[cfg(feature = "android")]
+            block_size: BlockSize::new(block_size).ok_or(GptDiskError::InvalidBlockSize)?,
+            partitions,
+        })
     }
 
     /// Find a partition entry by name.
