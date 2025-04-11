@@ -10,7 +10,6 @@ use gpt_disk_io::{Disk, DiskError};
 use libcrdy::uefi::{BlockIoError, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use libcrdy::util::{u32_to_usize, usize_to_u64};
 use uefi::prelude::*;
-use uefi::proto::device_path::media::HardDrive;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::{CStr16, Error};
 
@@ -239,63 +238,6 @@ pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid,
     let (_, entry) = gpt.find_partition_by_name(name)?;
 
     Ok(entry.unique_partition_guid)
-}
-
-/// Get the handle and `GptPartitionEntry` of the named GPT partition.
-///
-/// This finds the `name` partition by its label, and excludes
-/// partitions from disks other than the one this executable is running
-/// from.
-#[allow(unused)] // TODO(nicholasbishop): will be removed later
-fn find_partition_by_name(
-    uefi: &dyn Uefi,
-    name: &CStr16,
-) -> Result<(Handle, GptPartitionEntry), GptDiskError> {
-    // Find the boot disk and load its GPT.
-    let boot_disk_handle = find_boot_disk_handle(uefi)?;
-    let gpt = Gpt::load(uefi, boot_disk_handle)?;
-
-    // Find the partition named `name`.
-    let (partition_num, entry) = gpt.find_partition_by_name(name)?;
-
-    // Get all handles that support BlockIO. This includes both disk devices
-    // and logical partition devices.
-    let block_io_handles = uefi
-        .find_block_io_handles()
-        .map_err(|err| GptDiskError::BlockIoProtocolMissing(err.status()))?;
-
-    // Find the partition handle that matches `partition_num`. This is
-    // needed so that other code can open protocols (like BlockIO)
-    // targeting that specific partition.
-    for handle in block_io_handles {
-        // Ignore the handle if it's not a child of the boot disk.
-        if is_parent_disk(uefi, boot_disk_handle, handle) != Ok(true) {
-            continue;
-        }
-
-        // Get the handle's device path.
-        let Ok(dp) = device_path_for_handle(uefi, handle) else {
-            continue;
-        };
-
-        // Get the last node in the device path.
-        let Some(last_node) = dp.node_iter().last() else {
-            continue;
-        };
-
-        // Convert the node to the `HardDrive` type used for partitions.
-        let Ok(last_node) = <&HardDrive>::try_from(last_node) else {
-            continue;
-        };
-
-        // Check if this node's partition number matches the one we're
-        // looking for.
-        if last_node.partition_number() == *partition_num {
-            return Ok((handle, *entry));
-        }
-    }
-
-    Err(GptDiskError::PartitionNotFound)
 }
 
 /// Find a partition by name and open `PartitionIo`. This allows
@@ -553,6 +495,7 @@ pub(crate) mod tests {
         /// 1. ESP
         /// 2. boot_a
         /// 3. boot_b
+        #[cfg(feature = "android")]
         Hd2,
 
         /// A non-GPT disk.
@@ -736,11 +679,6 @@ pub(crate) mod tests {
             logical_blocks_per_physical_block: 1,
             optimal_transfer_length_granularity: 1,
         };
-        static HD1_STATE_MEDIA: BlockIoMedia = BlockIoMedia {
-            media_id: 101,
-            last_block: (STATEFUL_TEST_PARTITION_LEN / 512) - 1,
-            ..HD1_MEDIA
-        };
         static HD2_MEDIA: BlockIoMedia = BlockIoMedia {
             media_id: 200,
             last_block: usize_to_u64((ANDROID_TEST_DISK.len() / 512) - 1),
@@ -845,6 +783,7 @@ pub(crate) mod tests {
         uefi.expect_find_esp_partition_handle()
             .returning(move || match boot_drive {
                 BootDrive::Hd1 => Ok(Some(DeviceKind::Hd1Esp.handle())),
+                #[cfg(feature = "android")]
                 BootDrive::Hd2 => Ok(Some(DeviceKind::Hd2Esp.handle())),
                 BootDrive::Hd3 => Ok(None),
                 BootDrive::HdWithNoEspDeviceHandle => Ok(None),
@@ -865,8 +804,6 @@ pub(crate) mod tests {
         uefi.expect_open_block_io().returning(|handle| {
             let media = if handle == DeviceKind::Hd1.handle() {
                 &HD1_MEDIA
-            } else if handle == DeviceKind::Hd1State.handle() {
-                &HD1_STATE_MEDIA
             } else if handle == DeviceKind::Hd2.handle() {
                 &HD2_MEDIA
             } else if handle == DeviceKind::Hd3.handle() {
@@ -1016,43 +953,6 @@ pub(crate) mod tests {
             // `u16`. `[u16; 36]` can be soundly transmuted to `[u8; 72]`.
             name: unsafe { mem::transmute_copy(&partition_name) },
         }
-    }
-
-    /// Test that `find_partition_by_name` succeeds with a valid
-    /// sibling stateful partition.
-    #[test]
-    fn test_find_partition_by_name_success() {
-        let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert_eq!(
-            find_partition_by_name(&uefi, pname).unwrap().0,
-            DeviceKind::Hd1State.handle()
-        );
-    }
-
-    /// Test that `find_partition_by_name` fails with the name of a
-    /// partition that does not exist.
-    #[test]
-    fn test_find_partition_by_name_error() {
-        let pname = cstr16!("does not exist");
-        let uefi = create_mock_uefi(BootDrive::Hd1);
-        assert_eq!(
-            find_partition_by_name(&uefi, pname).unwrap_err(),
-            GptDiskError::PartitionNotFound
-        );
-    }
-
-    /// Test that `find_partition_by_name` fails if the only
-    /// stateful partition is on a different drive.
-    #[test]
-    fn test_find_partition_by_name_different_drive() {
-        let pname = cstr16!("STATE");
-        let uefi = create_mock_uefi(BootDrive::Hd2);
-
-        assert_eq!(
-            find_partition_by_name(&uefi, pname).unwrap_err(),
-            GptDiskError::PartitionNotFound
-        );
     }
 
     /// Test that `find_esp_partition_handle` handles a loaded image
