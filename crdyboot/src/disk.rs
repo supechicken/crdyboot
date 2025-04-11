@@ -12,7 +12,7 @@ use libcrdy::util::{u32_to_usize, usize_to_u64};
 use uefi::prelude::*;
 use uefi::proto::device_path::media::HardDrive;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
-use uefi::CStr16;
+use uefi::{CStr16, Error};
 
 #[cfg(feature = "android")]
 use uefi::Guid;
@@ -61,7 +61,6 @@ pub enum GptDiskError {
     PartitionNotFound,
 
     /// The partition size is zero or cannot fit into [`u64`].
-    #[cfg(feature = "android")]
     #[error("partition size is zero or too large")]
     InvalidPartitionSize,
 
@@ -247,6 +246,7 @@ pub fn get_partition_unique_guid(uefi: &dyn Uefi, name: &CStr16) -> Result<Guid,
 /// This finds the `name` partition by its label, and excludes
 /// partitions from disks other than the one this executable is running
 /// from.
+#[allow(unused)] // TODO(nicholasbishop): will be removed later
 fn find_partition_by_name(
     uefi: &dyn Uefi,
     name: &CStr16,
@@ -298,28 +298,29 @@ fn find_partition_by_name(
     Err(GptDiskError::PartitionNotFound)
 }
 
-/// Open the `PartitionIo` for the partition. This allows
+/// Find a partition by name and open `PartitionIo`. This allows
 /// byte-level access to partition data.
 pub fn open_partition_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<PartitionIo, GptDiskError> {
-    let partition_handle = find_partition_by_name(uefi, name)?.0;
+    // Find the boot disk and load its GPT.
+    let gpt = Gpt::load_boot_disk(uefi)?;
+
+    let (_, entry) = gpt.find_partition_by_name(name)?;
+
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
-
-    // Get the disk's media ID. This value is needed when calling disk
-    // IO operations.
-    let media_id = unsafe {
-        uefi.open_block_io(partition_handle)
-            .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))?
-            .media()
-            .media_id()
-    };
-
+    //
+    // Safety: nothing else is using the disk.
     let disk_io = unsafe {
-        uefi.open_disk_io(partition_handle)
+        uefi.open_disk_io(gpt.disk_handle)
             .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
     }?;
 
-    Ok(PartitionIo { disk_io, media_id })
+    Ok(PartitionIo {
+        disk_io,
+        media_id: gpt.disk_media_id,
+        byte_range: PartitionDataRange::from_partition_entry(entry, gpt.block_size)
+            .ok_or(GptDiskError::InvalidPartitionSize)?,
+    })
 }
 
 /// Open `PartitionIo` for the stateful partition. This allows
@@ -334,10 +335,8 @@ pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<PartitionIo, GptDiskEr
 ///
 /// Note that this represents the location of the data stored in a
 /// partition, not the partition entry in the GPT partition entry array.
-#[allow(unused)]
 struct PartitionDataRange(Range<u64>);
 
-#[allow(unused)]
 impl PartitionDataRange {
     /// Create a `PartitionDataRange` from a `GptPartitionEntry` and `BlockSize`.
     ///
@@ -376,10 +375,16 @@ impl PartitionDataRange {
 
 /// Read/write access to partition data.
 ///
+/// Internally this uses `ScopedDiskIo` to access the underlying
+/// disk. Note that this is the protocol for the entire disk, not for a
+/// particular partition. (See b/388506108 for details of how partition
+/// protocols can be a problem on some firmware.)
+///
 /// Only bytes within the partition's data range can be read or written.
 pub struct PartitionIo {
     disk_io: ScopedDiskIo,
     media_id: u32,
+    byte_range: PartitionDataRange,
 }
 
 impl PartitionIo {
@@ -391,6 +396,11 @@ impl PartitionIo {
     /// If the range of data to be read is not within the partition, an
     /// `INVALID_PARAMETER` error is returned.
     pub fn read(&mut self, start_byte: u64, dst: &mut [u8]) -> uefi::Result {
+        let start_byte = self
+            .byte_range
+            .make_input_absolute(start_byte, dst)
+            .ok_or(Error::from(Status::INVALID_PARAMETER))?;
+
         self.disk_io.read_disk(self.media_id, start_byte, dst)
     }
 
@@ -403,6 +413,11 @@ impl PartitionIo {
     /// `INVALID_PARAMETER` error is returned.
     #[cfg(feature = "android")]
     pub fn write(&mut self, start_byte: u64, src: &[u8]) -> uefi::Result {
+        let start_byte = self
+            .byte_range
+            .make_input_absolute(start_byte, src)
+            .ok_or(Error::from(Status::INVALID_PARAMETER))?;
+
         self.disk_io.write_disk(self.media_id, start_byte, src)
     }
 }
@@ -418,14 +433,14 @@ type PartitionNum = u32;
 /// used.
 #[derive(Debug)]
 pub struct Gpt {
-    #[cfg(feature = "android")]
+    disk_handle: Handle,
+    disk_media_id: u32,
     block_size: BlockSize,
     partitions: Vec<(PartitionNum, GptPartitionEntry)>,
 }
 
 impl Gpt {
     /// Create a `Gpt` for the disk that this executable is running from.
-    #[cfg(feature = "android")]
     pub fn load_boot_disk(uefi: &dyn Uefi) -> Result<Self, GptDiskError> {
         let disk_handle = find_boot_disk_handle(uefi)?;
         Self::load(uefi, disk_handle)
@@ -444,6 +459,7 @@ impl Gpt {
         }?;
 
         let block_size = block_io.media().block_size();
+        let disk_media_id = block_io.media().media_id();
         let mut disk = Disk::new(block_io).map_err(GptDiskError::BlockIo)?;
         let mut block_buf = vec![0; u32_to_usize(block_size)];
         let gpt_header = disk
@@ -477,8 +493,9 @@ impl Gpt {
             .collect();
 
         Ok(Self {
-            #[cfg(feature = "android")]
             block_size: BlockSize::new(block_size).ok_or(GptDiskError::InvalidBlockSize)?,
+            disk_handle,
+            disk_media_id,
             partitions,
         })
     }
@@ -526,12 +543,7 @@ pub(crate) mod tests {
     // All-zero data representing a disk that does not have a valid GPT.
     pub(crate) static NON_GPT_TEST_DISK: &[u8] = &[0; 1024 * 2];
 
-    // TODO(b/397698913): temporarily hardcode the start and length of
-    // the stateful test partition within `VBOOT_TEST_DISK`.
-    //
-    // This can be removed once we replace all use of UEFI partition
-    // protocols with UEFI disk protocols.
-    const STATEFUL_TEST_PARTITION_START: u64 = (1024 * 1024) * (64 + 1);
+    /// Length of the stateful test partition within `VBOOT_TEST_DISK`.
     const STATEFUL_TEST_PARTITION_LEN: u64 = 1024 * 1024;
 
     pub(crate) enum BootDrive {
@@ -802,9 +814,10 @@ pub(crate) mod tests {
             buffer_size: usize,
             buffer: *mut c_void,
         ) -> uefi_raw::Status {
-            assert_eq!(media_id, HD1_STATE_MEDIA.media_id);
+            assert_eq!(media_id, HD1_MEDIA.media_id);
 
-            let offset = usize::try_from(offset + STATEFUL_TEST_PARTITION_START).unwrap();
+            let offset = usize::try_from(offset).unwrap();
+
             let Some(src) = VBOOT_TEST_DISK.get(offset..offset + buffer_size) else {
                 return uefi_raw::Status::INVALID_PARAMETER;
             };
@@ -874,7 +887,7 @@ pub(crate) mod tests {
             Ok(ScopedBlockIo::for_test(Box::new(bio)))
         });
         uefi.expect_open_disk_io().returning(|handle| {
-            assert_eq!(handle, DeviceKind::Hd1State.handle());
+            assert_eq!(handle, DeviceKind::Hd1.handle());
             let dio = DiskIoProtocol {
                 revision: DiskIoProtocol::REVISION,
                 read_disk,
@@ -1218,9 +1231,11 @@ pub(crate) mod tests {
         pio.read(superblock_start + magic_offset, &mut buf).unwrap();
         assert_eq!(u16::from_le_bytes(buf), expected_magic);
 
-        // Verify that reading somewhere after the end of the partition fails.
+        // Verify that reading after the end of the partition fails.
         assert_eq!(
-            pio.read(1024 * 1024 * 1024, &mut buf).unwrap_err().status(),
+            pio.read(STATEFUL_TEST_PARTITION_LEN, &mut buf)
+                .unwrap_err()
+                .status(),
             Status::INVALID_PARAMETER
         );
     }
