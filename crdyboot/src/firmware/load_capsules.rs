@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::disk;
+use crate::disk::{self, PartitionIo};
 use crate::firmware::{FirmwareError, UpdateInfo};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -10,7 +10,7 @@ use core::error::Error;
 use core::fmt::{self, Display, Formatter};
 use ext4_view::{Ext4, Ext4Read, PathBuf};
 use libcrdy::page_alloc::ScopedPageAllocation;
-use libcrdy::uefi::{ScopedDiskIo, Uefi};
+use libcrdy::uefi::Uefi;
 use log::info;
 use uefi::boot::{AllocateType, MemoryType};
 
@@ -35,14 +35,11 @@ impl CapsuleLoader for CapsuleLoaderImpl {
         updates: &[UpdateInfo],
     ) -> Result<Vec<ScopedPageAllocation>, FirmwareError> {
         // Find and open the stateful partition block device.
-        let (stateful_disk_io, media_id) = disk::open_stateful_partition(uefi)
+        let pio = disk::open_stateful_partition(uefi)
             .map_err(FirmwareError::OpenStatefulPartitionFailed)?;
 
         // Create a reader and load the stateful filesystem.
-        let stateful_reader = Box::new(DiskReader {
-            disk_io: stateful_disk_io,
-            media_id,
-        });
+        let stateful_reader = Box::new(pio);
         let stateful_fs = Ext4::load(stateful_reader).map_err(FirmwareError::Ext4LoadFailed)?;
 
         // Load all capsules. Errors are logged but otherwise ignored.
@@ -96,19 +93,13 @@ fn load_one_capsule_from_disk(
     Ok(pages)
 }
 
-struct DiskReader {
-    disk_io: ScopedDiskIo,
-    media_id: u32,
-}
-
-impl Ext4Read for DiskReader {
+impl Ext4Read for PartitionIo {
     fn read(
         &mut self,
         start_byte: u64,
         dst: &mut [u8],
     ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-        self.disk_io
-            .read_disk(self.media_id, start_byte, dst)
+        self.read(start_byte, dst)
             .map_err(|err| ReadError::boxed(start_byte, dst, err))
     }
 }
@@ -189,11 +180,8 @@ mod tests {
     fn test_disk_reader_error() {
         let uefi = create_mock_uefi(BootDrive::Hd1);
 
-        let (stateful_disk_io, media_id) = disk::open_stateful_partition(&uefi).unwrap();
-        let mut reader = Box::new(DiskReader {
-            disk_io: stateful_disk_io,
-            media_id,
-        });
+        let mut pio = disk::open_stateful_partition(&uefi).unwrap();
+        let reader: &mut dyn Ext4Read = &mut pio;
         // The test disk is much smaller than 1GiB, so reading at this
         // large offset is expected to fail.
         let byte_offset_1gib = 1024 * 1024 * 1024;

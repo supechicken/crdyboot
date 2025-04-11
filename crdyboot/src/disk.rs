@@ -297,15 +297,9 @@ fn find_partition_by_name(
     Err(GptDiskError::PartitionNotFound)
 }
 
-/// Open the Disk IO protocol for the partition. This allows
+/// Open the `PartitionIo` for the partition. This allows
 /// byte-level access to partition data.
-///
-/// Returns a tuple containing the protocol and a media ID of type
-/// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_partition_by_name(
-    uefi: &dyn Uefi,
-    name: &CStr16,
-) -> Result<(ScopedDiskIo, u32), GptDiskError> {
+pub fn open_partition_by_name(uefi: &dyn Uefi, name: &CStr16) -> Result<PartitionIo, GptDiskError> {
     let partition_handle = find_partition_by_name(uefi, name)?.0;
     // See comment in `find_disk_block_io` for why the non-exclusive
     // mode is used.
@@ -324,18 +318,48 @@ pub fn open_partition_by_name(
             .map_err(|err| GptDiskError::OpenDiskIoProtocolFailed(err.status()))
     }?;
 
-    Ok((disk_io, media_id))
+    Ok(PartitionIo { disk_io, media_id })
 }
 
-/// Open the Disk IO protocol for the stateful partition. This allows
+/// Open `PartitionIo` for the stateful partition. This allows
 /// byte-level access to partition data.
-///
-/// Returns a tuple containing the protocol and a media ID of type
-/// `u32`. The ID is passed in as a parameter of the protocol's methods.
-pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<(ScopedDiskIo, u32), GptDiskError> {
+pub fn open_stateful_partition(uefi: &dyn Uefi) -> Result<PartitionIo, GptDiskError> {
     // Name of the stateful partition.
     const STATE_NAME: &CStr16 = cstr16!("STATE");
     open_partition_by_name(uefi, STATE_NAME)
+}
+
+/// Read/write access to partition data.
+///
+/// Only bytes within the partition's data range can be read or written.
+pub struct PartitionIo {
+    disk_io: ScopedDiskIo,
+    media_id: u32,
+}
+
+impl PartitionIo {
+    /// Read bytes from a partition.
+    ///
+    /// `start_byte` is relative to the partition's start (e.g. 0 is the
+    /// first byte in the partition).
+    ///
+    /// If the range of data to be read is not within the partition, an
+    /// `INVALID_PARAMETER` error is returned.
+    pub fn read(&mut self, start_byte: u64, dst: &mut [u8]) -> uefi::Result {
+        self.disk_io.read_disk(self.media_id, start_byte, dst)
+    }
+
+    /// Write bytes to a partition.
+    ///
+    /// `start_byte` is relative to the partition's start (e.g. 0 is the
+    /// first byte in the partition).
+    ///
+    /// If the range of data to be read is not within the partition, an
+    /// `INVALID_PARAMETER` error is returned.
+    #[cfg(feature = "android")]
+    pub fn write(&mut self, start_byte: u64, src: &[u8]) -> uefi::Result {
+        self.disk_io.write_disk(self.media_id, start_byte, src)
+    }
 }
 
 /// 1-based index of a partition within the GPT's partition entry array.
@@ -1131,6 +1155,28 @@ pub(crate) mod tests {
         assert_eq!(
             Gpt::load(&uefi, DeviceKind::Hd3.handle()).unwrap_err(),
             GptDiskError::GptMissing
+        );
+    }
+
+    /// Test success and error cases of `PartitionIo::read`.
+    #[test]
+    fn test_partition_disk_io_read() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        // Open the stateful partition, which contains an ext4 filesystem.
+        let mut pio = open_partition_by_name(&uefi, cstr16!("STATE")).unwrap();
+
+        // Read and verify the magic bytes from the superblock.
+        let superblock_start = 1024;
+        let magic_offset = 0x38;
+        let expected_magic = 0xef53;
+        let mut buf = [0; 2];
+        pio.read(superblock_start + magic_offset, &mut buf).unwrap();
+        assert_eq!(u16::from_le_bytes(buf), expected_magic);
+
+        // Verify that reading somewhere after the end of the partition fails.
+        assert_eq!(
+            pio.read(1024 * 1024 * 1024, &mut buf).unwrap_err().status(),
+            Status::INVALID_PARAMETER
         );
     }
 }

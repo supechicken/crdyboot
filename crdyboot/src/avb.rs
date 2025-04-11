@@ -150,11 +150,9 @@ impl AvbDiskOps for AvbDiskOpsImpl {
         let uefi = &UefiImpl;
         let name = CString16::try_from(name)
             .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
-        let (disk_io, media_id) = disk::open_partition_by_name(uefi, &name)
+        let mut pio = disk::open_partition_by_name(uefi, &name)
             .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
-        disk_io
-            .read_disk(media_id, start_byte, dst)
-            .map_err(map_uefi_status)
+        pio.read(start_byte, dst).map_err(map_uefi_status)
     }
 
     fn write_to_partition(
@@ -166,11 +164,9 @@ impl AvbDiskOps for AvbDiskOpsImpl {
         let uefi = &UefiImpl;
         let name = CString16::try_from(name)
             .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
-        let (mut disk_io, media_id) = disk::open_partition_by_name(uefi, &name)
+        let mut pio = disk::open_partition_by_name(uefi, &name)
             .map_err(|_| AvbIOResult::AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION)?;
-        disk_io
-            .write_disk(media_id, offset, buffer)
-            .map_err(map_uefi_status)
+        pio.write(offset, buffer).map_err(map_uefi_status)
     }
 
     fn get_size_of_partition(&mut self, name: &str) -> Result<u64, AvbIOResult> {
