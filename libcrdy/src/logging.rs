@@ -186,6 +186,13 @@ impl LogHistory {
     /// `name`. The variable is accessible at runtime, and is _not_ in
     /// nvram.
     fn store_to_var(&self, uefi: &dyn Uefi, name: &CStr16) {
+        // Return early if the firmware is really old. This fixes a bug
+        // on old Apple devices where the machine fails to boot if a
+        // too-large UEFI variable is created: b/411700794
+        if uefi.get_uefi_revision().major() < 2 {
+            return;
+        }
+
         let mut data = String::new();
         self.write(&mut data, self.lines.len());
 
@@ -269,6 +276,7 @@ mod tests {
     use super::*;
     use crate::uefi::MockUefi;
     use log::Level;
+    use uefi::table::Revision;
 
     #[test]
     fn test_record_format() {
@@ -359,6 +367,9 @@ mod tests {
         history.push("c".to_owned());
 
         let mut uefi = MockUefi::new();
+        uefi.expect_get_uefi_revision()
+            .times(1)
+            .return_const(Revision::EFI_2_70);
         uefi.expect_set_variable()
             .times(1)
             .withf(|name, vendor, attr, data| {
@@ -370,6 +381,20 @@ mod tests {
                     && data == "a\nb\nc\n".as_bytes()
             })
             .return_once(|_, _, _, _| Ok(()));
+        history.store_to_var(&uefi, cstr16!("name"));
+    }
+
+    /// Test that no history variable is written if the firmware version
+    /// is too old.
+    #[test]
+    fn test_log_history_store_to_var_old_firmware() {
+        let history = LogHistory::new(1);
+
+        let mut uefi = MockUefi::new();
+        uefi.expect_get_uefi_revision()
+            .times(1)
+            .return_const(Revision::EFI_1_10);
+        uefi.expect_set_variable().times(0);
         history.store_to_var(&uefi, cstr16!("name"));
     }
 }

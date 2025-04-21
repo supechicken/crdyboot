@@ -18,7 +18,8 @@ use uefi::runtime::{
     self, CapsuleBlockDescriptor, CapsuleHeader, CapsuleInfo, ResetType, Time, VariableAttributes,
     VariableKey, VariableVendor,
 };
-use uefi::{guid, CStr16, Handle, Status};
+use uefi::table::Revision;
+use uefi::{guid, system, CStr16, Handle, Status};
 
 pub use uefi_disk::BlockIoError;
 
@@ -33,6 +34,8 @@ pub const CRDYBOOT_VAR_VENDOR: VariableVendor =
 /// tests can use `MockUefi` instead.
 #[cfg_attr(feature = "test_util", mockall::automock)]
 pub trait Uefi {
+    fn get_uefi_revision(&self) -> Revision;
+
     fn get_time(&self) -> uefi::Result<Time>;
 
     /// Get an iterator over all UEFI variable keys.
@@ -133,6 +136,10 @@ pub trait Uefi {
 pub struct UefiImpl;
 
 impl Uefi for UefiImpl {
+    fn get_uefi_revision(&self) -> Revision {
+        system::uefi_revision()
+    }
+
     fn get_time(&self) -> uefi::Result<Time> {
         runtime::get_time()
     }
