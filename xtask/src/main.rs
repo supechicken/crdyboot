@@ -151,6 +151,10 @@ struct DeployAction {
     #[arg(long)]
     disk: Option<String>,
 
+    /// Partition number to deploy to.
+    #[arg(short, long, default_value_t = 12)]
+    partition: u32,
+
     /// SSH target to deploy to.
     ///
     /// Generally this should be a host defined in your SSH config.

@@ -108,7 +108,7 @@ pub fn run_deploy(conf: &Config, action: &DeployAction) -> Result<()> {
     } else {
         &get_rootdev(&action.target)?
     };
-    let esp_path = get_partition_path(disk, 12);
+    let esp_path = get_partition_path(disk, action.partition);
 
     let mount = RemoteMount::mount(MountOpts {
         ssh_target: action.target.clone(),
