@@ -98,6 +98,8 @@ pub trait Uefi {
 
     fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
 
+    fn find_sd_mmc_pass_through_handles(&self) -> uefi::Result<Vec<Handle>>;
+
     fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>>;
 
     fn device_path_for_handle(&self, handle: Handle) -> uefi::Result<ScopedDevicePath>;
@@ -212,6 +214,10 @@ impl Uefi for UefiImpl {
 
     fn find_nvme_express_pass_through_handles(&self) -> uefi::Result<Vec<Handle>> {
         boot::find_handles::<NvmeExpressPassThrough>()
+    }
+
+    fn find_sd_mmc_pass_through_handles(&self) -> uefi::Result<Vec<Handle>> {
+        boot::find_handles::<SdMmcPassThrough>()
     }
 
     fn find_simple_file_system_handles(&self) -> uefi::Result<Vec<Handle>> {
@@ -401,5 +407,11 @@ struct AtaPassThrough {
 #[unsafe_protocol("52c78312-8edc-4233-98f2-1a1aa5e388a5")]
 #[repr(C)]
 struct NvmeExpressPassThrough {
+    _data: [usize; 5],
+}
+
+#[unsafe_protocol("716ef0d9-ff83-4f69-81e9-518bd39a8e70")]
+#[repr(C)]
+struct SdMmcPassThrough {
     _data: [usize; 5],
 }
