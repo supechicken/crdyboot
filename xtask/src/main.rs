@@ -15,6 +15,7 @@ mod package;
 mod qemu;
 mod secure_boot;
 mod setup;
+mod source_checks;
 mod swtpm;
 mod util;
 mod vboot;
@@ -325,6 +326,7 @@ fn run_coverage(action: &CoverageAction) -> Result<()> {
 
 fn run_check(conf: &Config, action: &CheckAction) -> Result<()> {
     run_cargo_deny()?;
+    source_checks::check_for_banned_patterns()?;
     run_rustfmt(&FormatAction { check: true })?;
     run_clippy()?;
     run_tests(
