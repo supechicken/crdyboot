@@ -73,7 +73,9 @@ pub struct LoadedKernel<'a> {
 }
 
 impl LoadedKernel<'_> {
-    fn command_line_with_placeholders(&self) -> Option<&str> {
+    /// Get the kernel command-line with partition placeholders.
+    #[must_use]
+    pub fn command_line_with_placeholders(&self) -> Option<&str> {
         let cros_config = self.data.get(self.cros_config.clone())?;
 
         // Find the null terminator and narrow the slice to end just before

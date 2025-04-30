@@ -334,6 +334,16 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             kernel_cmdline = vboot_kernel
                 .command_line()
                 .ok_or(CrdybootError::GetCommandLineFailed)?;
+
+            // Log the vboot kernel command-line with placeholders, to
+            // avoid putting installation-specific partition UUIDs in
+            // the log.
+            info!(
+                "vboot cmdline: {}",
+                vboot_kernel
+                    .command_line_with_placeholders()
+                    .unwrap_or_default()
+            );
         }
         Err(err) => {
             // Loading via vboot failed. Log the error and move on to
@@ -343,13 +353,17 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             flexor_kernel = load_flexor_kernel_with_retry(rk, uefi)?;
             kernel_data = &flexor_kernel;
             kernel_cmdline = get_flexor_cmdline(rk.verbose_logging());
+
+            // The flexor kernel command-line has no device or
+            // installation-specific data in it, so it's OK to log
+            // directly.
+            info!("flexor cmdline: {kernel_cmdline}");
         }
     }
 
     // Convert kernel command line to UCS-2.
     let kernel_cmdline = CString16::try_from(kernel_cmdline.as_str())
         .map_err(|_| CrdybootError::CommandLineUcs2ConversionFailed)?;
-    info!("command line: {kernel_cmdline}");
 
     // Go ahead and free the workbuf, not needed anymore.
     drop(workbuf);
