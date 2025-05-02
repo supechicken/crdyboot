@@ -166,6 +166,7 @@ fn get_capsule_block_descriptors(capsules: &[&CapsuleHeader]) -> Vec<CapsuleBloc
 
     for capsule in capsules {
         let capsule_ptr: *const CapsuleHeader = *capsule;
+        info!("capsule image size: {}", capsule.capsule_image_size);
         descriptors.push(CapsuleBlockDescriptor {
             length: u64::from(capsule.capsule_image_size),
             address: capsule_ptr as u64,
