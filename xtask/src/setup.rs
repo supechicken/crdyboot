@@ -14,7 +14,7 @@ use command_run::Command;
 use tempfile::TempDir;
 
 /// Bump this version any time the setup step needs to be re-run.
-const SETUP_VERSION: u32 = 15;
+const SETUP_VERSION: u32 = 16;
 
 const VBOOT_REFERENCE_REPO: &str =
     "https://chromium.googlesource.com/chromiumos/platform/vboot_reference";
@@ -44,6 +44,13 @@ fn init_repo(repo: RepoRev) -> Result<()> {
 
     // Update the checkout if necessary.
     if current_commit != repo.rev {
+        // Ensure the revision has been fetched.
+        Command::with_args(
+            "git",
+            ["-C", repo.dir.as_str(), "fetch", "origin", repo.rev],
+        )
+        .run()?;
+
         Command::with_args("git", ["-C", repo.dir.as_str(), "checkout", repo.rev]).run()?;
     }
 
