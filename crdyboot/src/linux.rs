@@ -51,9 +51,9 @@ const FLEXOR_KERNEL_MAX_SIZE: usize = mib_to_bytes(32);
 
 /// List of valid `flexor_vmlinuz` SHA256 hashes.
 const VALID_FLEXOR_SHA256_HASHES: &[&str] = &[
-    // M138: gs://chromeos-releases/dev-channel/reven/16280.0.0/
-    // flexor_16280.0.0_reven_dev-channel.bin
-    "0c0fd7164df8b4551e110f71ec437c0b05af825d83ef606331c6e86795c49115",
+    // M136: gs://chromeos-releases/stable-channel/reven/16238.47.0/
+    // flexor_16238.47.0_reven_stable-channel.bin
+    "d159f94c1f92d95fdb6d4096c3ea9d708f223a82bfc7e216d6294b972405e6b3",
 ];
 
 /// Size (in bytes) of the buffer into which vboot loads the kernel
