@@ -839,7 +839,7 @@ fn get_priority_slot(uefi: &dyn Uefi) -> Result<BootSlot, AvbError> {
             .map_err(|error| AvbError::FailedFindPartition { name, error })?;
 
         let attributes = gpt_partition_entry.attributes;
-        let priority = CgptAttributes::from_u64(attributes.0.to_u64()).priority;
+        let priority = CgptAttributes::from_u64(attributes.0.to_u64()).priority();
         debug!("partition: {} priority: {}", name, priority);
         // TODO: check and update tries
         // b:393358402
