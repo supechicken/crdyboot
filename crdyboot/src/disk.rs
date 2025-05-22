@@ -5,13 +5,17 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Range;
-use gpt_disk_io::gpt_disk_types::{BlockSize, GptPartitionEntry, GptPartitionEntrySizeError};
+use gpt_disk_io::gpt_disk_types::{
+    BlockSize, GptHeader, GptPartitionAttributes, GptPartitionEntry, GptPartitionEntrySizeError,
+    U64Le,
+};
 use gpt_disk_io::{Disk, DiskError};
 use libcrdy::uefi::{BlockIoError, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use libcrdy::util::{u32_to_usize, usize_to_u64};
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::{CStr16, Error};
+use vboot::CgptAttributes;
 
 #[cfg(feature = "android")]
 use uefi::Guid;
@@ -365,7 +369,7 @@ impl PartitionIo {
 }
 
 /// 1-based index of a partition within the GPT's partition entry array.
-type PartitionNum = u32;
+pub type PartitionNum = u32;
 
 /// Information about a disk's GPT.
 ///
@@ -454,6 +458,116 @@ impl Gpt {
             .iter()
             .find(|(_, entry)| is_gpt_partition_entry_named(entry, looking_for))
             .ok_or(GptDiskError::PartitionNotFound)
+    }
+
+    /// Find a partition entry by partition num.
+    ///
+    /// If found, returns a `GptPartitionEntry`. If not found, returns `PartitionNotFound`.
+    pub fn find_partition_by_num(
+        &mut self,
+        partition_num: PartitionNum,
+    ) -> Result<&mut GptPartitionEntry, GptDiskError> {
+        let (_, entry) = self
+            .partitions
+            .iter_mut()
+            .find(|(num, _)| *num == partition_num)
+            .ok_or(GptDiskError::PartitionNotFound)?;
+        Ok(entry)
+    }
+
+    /// Update partition entry attributes for a given partition.
+    ///
+    /// If given a valid partition number, updates the partition to the given
+    /// attributes and updates the gpt headers for validity.
+    #[allow(dead_code)]
+    pub fn update_partition_entry_attributes(
+        &mut self,
+        uefi: &dyn Uefi,
+        attributes: CgptAttributes,
+        partition_num: PartitionNum,
+    ) -> Result<(), GptDiskError> {
+        let entry = self.find_partition_by_num(partition_num)?;
+        let current_attributes = entry.attributes.0.to_u64();
+        if attributes.to_u64() == current_attributes {
+            // No change to write.
+            return Ok(());
+        }
+
+        // Update the local copy so we stay in sync.
+        entry.attributes = GptPartitionAttributes(U64Le::from_u64(attributes.to_u64()));
+
+        // Get the block_io which we will use to write.
+        // Safety: nothing else is using the disk for the duration of
+        // this function.
+        let block_io = unsafe {
+            uefi.open_block_io(self.disk_handle)
+                .map_err(|err| GptDiskError::OpenBlockIoProtocolFailed(err.status()))
+        }?;
+
+        let mut disk = Disk::new(block_io).map_err(GptDiskError::BlockIo)?;
+        let mut header_buf = vec![0; u32_to_usize(self.block_size.to_u32())];
+
+        // Get the primary header, and use it to update the primary partition table.
+        let mut primary_header = disk
+            .read_primary_gpt_header(&mut header_buf)
+            .map_err(GptDiskError::BlockIo)?;
+
+        self.update_attributes(attributes, partition_num, &mut disk, &mut primary_header)?;
+        disk.write_primary_gpt_header(&primary_header, &mut header_buf)
+            .map_err(GptDiskError::BlockIo)?;
+
+        // Get the secondary header, and use it to update the secondary partition table.
+        let mut secondary_header = disk
+            .read_secondary_gpt_header(&mut header_buf)
+            .map_err(GptDiskError::BlockIo)?;
+
+        self.update_attributes(attributes, partition_num, &mut disk, &mut secondary_header)?;
+        disk.write_secondary_gpt_header(&secondary_header, &mut header_buf)
+            .map_err(GptDiskError::BlockIo)?;
+
+        // Now manually flush so we catch any errors writing.
+        disk.flush().map_err(GptDiskError::BlockIo)
+    }
+
+    /// Updates the partition entry attributes for the given gpt header's table
+    /// and updates the header `Crc32` values.
+    #[allow(dead_code)]
+    fn update_attributes(
+        &mut self,
+        attributes: CgptAttributes,
+        partition_num: PartitionNum,
+        disk: &mut Disk<ScopedBlockIo>,
+        gpt_header: &mut GptHeader,
+    ) -> Result<(), GptDiskError> {
+        let layout = gpt_header
+            .get_partition_entry_array_layout()
+            .map_err(GptDiskError::InvalidGptPartitionArray)?;
+        let buffer_size: usize = layout
+            .num_bytes_rounded_to_block(self.block_size)
+            .ok_or(GptDiskError::InvalidBlockSize)?
+            .try_into()
+            .map_err(|_| GptDiskError::InvalidBlockSize)?;
+        let mut block_buf = vec![0; buffer_size];
+        let mut entry_array = disk
+            .read_gpt_partition_entry_array(layout, &mut block_buf)
+            .map_err(GptDiskError::BlockIo)?;
+
+        // Get the reference to the entry to update.
+        // `partition_num` is guaranteed to be valid and >= 1 from prior search of `partitions`.
+        let entry = entry_array
+            .get_partition_entry_mut(partition_num.checked_sub(1).unwrap())
+            .ok_or(GptDiskError::PartitionNotFound)?;
+        entry.attributes = GptPartitionAttributes(U64Le::from_u64(attributes.to_u64()));
+
+        // Write the changes.
+        disk.write_gpt_partition_entry_array(&entry_array)
+            .map_err(GptDiskError::BlockIo)?;
+
+        // Now update the header with new CRC32 values.
+        let crc32 = entry_array.calculate_crc32();
+        gpt_header.partition_entry_array_crc32 = crc32;
+        gpt_header.update_header_crc32();
+        Ok(())
     }
 }
 
@@ -1094,6 +1208,19 @@ pub(crate) mod tests {
         assert_eq!(partition.name.chars().collect::<String>(), "STATE");
     }
 
+    /// Test successfully loading and using a `Gpt`.
+    #[test]
+    fn test_find_partition_by_num() {
+        let uefi = create_mock_uefi(BootDrive::Hd1);
+        let mut gpt = Gpt::load(&uefi, DeviceKind::Hd1.handle()).unwrap();
+
+        // Check that finding a real partition succeeds.
+        let partition = gpt
+            .find_partition_by_num(PartitionNum::try_from(1).unwrap())
+            .unwrap();
+        assert_eq!(partition.name.chars().collect::<String>(), "STATE");
+    }
+
     /// Test that `Gpt::load` fails on a non-blockio handle.
     #[test]
     fn test_gpt_load_no_block_io() {
@@ -1111,6 +1238,26 @@ pub(crate) mod tests {
         assert_eq!(
             Gpt::load(&uefi, DeviceKind::Hd3.handle()).unwrap_err(),
             GptDiskError::GptMissing
+        );
+    }
+
+    /// Test successfully loading and using a `Gpt`.
+    #[cfg(feature = "android")]
+    #[test]
+    fn test_gpt_write() {
+        let uefi = create_mock_uefi(BootDrive::Hd2);
+        let mut gpt = Gpt::load(&uefi, DeviceKind::Hd2.handle()).unwrap();
+
+        // Check that writing a partition succeeds.
+        let attributes = CgptAttributes::from_u64(0x010f000000000000);
+        gpt.update_partition_entry_attributes(&uefi, attributes, 13)
+            .unwrap();
+
+        // Check that writing to invalid partition fails
+        assert_eq!(
+            gpt.update_partition_entry_attributes(&uefi, attributes, 255)
+                .unwrap_err(),
+            GptDiskError::PartitionNotFound
         );
     }
 
