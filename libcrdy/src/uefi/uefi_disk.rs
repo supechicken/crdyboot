@@ -12,9 +12,13 @@ pub enum BlockIoError {
     #[error("failed to read {0} blocks starting at block {1}: {2}")]
     Read(usize, Lba, Status),
 
-    /// Attempted to write to the disk. This is currently not supported.
-    #[error("attempted to write to a read-only device")]
-    ReadOnly,
+    /// Failed to write blocks.
+    #[error("failed to write {0} blocks starting at block {1}: {2}")]
+    Write(usize, Lba, Status),
+
+    /// Failed to flush blocks.
+    #[error("failed to flush writes: {0}")]
+    Flush(Status),
 }
 
 impl gpt_disk_io::BlockIo for ScopedBlockIo {
@@ -39,14 +43,17 @@ impl gpt_disk_io::BlockIo for ScopedBlockIo {
             .map_err(|err| BlockIoError::Read(dst.len(), start_lba, err.status()))
     }
 
-    fn write_blocks(&mut self, _start_lba: Lba, _src: &[u8]) -> Result<(), Self::Error> {
-        // For now we don't need writes, so return an error.
-        Err(BlockIoError::ReadOnly)
+    fn write_blocks(&mut self, start_lba: Lba, dst: &[u8]) -> Result<(), Self::Error> {
+        let media_id = self.media().media_id();
+        (**self)
+            .write_blocks(media_id, start_lba.0, dst)
+            .map_err(|err| BlockIoError::Write(dst.len(), start_lba, err.status()))
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // For now we don't need writes, so return an error.
-        Err(BlockIoError::ReadOnly)
+        (**self)
+            .flush_blocks()
+            .map_err(|err| BlockIoError::Flush(err.status()))
     }
 }
 
@@ -95,13 +102,23 @@ mod tests {
     }
 
     unsafe extern "efiapi" fn write_blocks(
-        _: *mut BlockIoProtocol,
-        _: u32,
-        _: u64,
-        _: usize,
-        _: *const c_void,
+        this: *mut BlockIoProtocol,
+        media_id: u32,
+        lba: u64,
+        buffer_size: usize,
+        buffer: *const c_void,
     ) -> uefi_raw::Status {
-        unimplemented!()
+        assert_eq!((*(*this).media).media_id, media_id);
+        assert_eq!(media_id, MEDIA.media_id);
+
+        assert_eq!(lba, 123);
+        assert_eq!(buffer_size, 1024);
+
+        let dst: &[u8] = unsafe { slice::from_raw_parts(buffer.cast::<u8>(), buffer_size) };
+        assert_eq!(dst[0], 10);
+        assert_eq!(dst[1023], 20);
+
+        Status::SUCCESS
     }
 
     unsafe extern "efiapi" fn reset(_: *mut BlockIoProtocol, _: bool) -> uefi_raw::Status {
@@ -109,7 +126,7 @@ mod tests {
     }
 
     unsafe extern "efiapi" fn flush_blocks(_: *mut BlockIoProtocol) -> uefi_raw::Status {
-        unimplemented!()
+        Status::SUCCESS
     }
 
     fn create_block_io() -> ScopedBlockIo {
@@ -139,11 +156,7 @@ mod tests {
         assert_eq!(buf[0], 10);
         assert_eq!(buf[1023], 20);
 
-        // Writing is not currently allowed.
-        assert_eq!(
-            block_io.write_blocks(Lba(0), &[]),
-            Err(BlockIoError::ReadOnly)
-        );
-        assert_eq!(block_io.flush(), Err(BlockIoError::ReadOnly));
+        block_io.write_blocks(Lba(123), &buf).unwrap();
+        block_io.flush().unwrap();
     }
 }

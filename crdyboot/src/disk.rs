@@ -728,8 +728,6 @@ pub(crate) mod tests {
             _buffer_size: usize,
             _buffer: *const c_void,
         ) -> uefi_raw::Status {
-            assert_eq!(media_id, HD1_MEDIA.media_id);
-
             if lba > (*(*this).media).last_block {
                 return uefi_raw::Status::INVALID_PARAMETER;
             }
@@ -742,7 +740,7 @@ pub(crate) mod tests {
         }
 
         unsafe extern "efiapi" fn flush_blocks(_: *mut BlockIoProtocol) -> uefi_raw::Status {
-            unimplemented!()
+            uefi_raw::Status::SUCCESS
         }
 
         unsafe extern "efiapi" fn read_disk(
