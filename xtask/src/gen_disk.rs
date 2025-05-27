@@ -611,7 +611,7 @@ fn fat_write_file<T: ReadWriteSeek>(
 
 /// Copy all the files in `src_dir` to the `EFI/BOOT` directory on the
 /// system partition in the disk image at `disk_path`.
-fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
+pub fn update_boot_files(disk_path: &Utf8Path, src_dir: &Utf8Path) -> Result<()> {
     modify_system_partition(disk_path, |root_dir| {
         let dst_efi_dir = root_dir.open_dir("EFI")?;
         let dst_boot_dir = dst_efi_dir.open_dir("BOOT")?;

@@ -54,6 +54,7 @@ enum Action {
     #[command(name = "cov")]
     Coverage(CoverageAction),
     Deploy(DeployAction),
+    DeployToImage(DeployToImageAction),
     #[command(name = "fmt")]
     Format(FormatAction),
     Lint(LintAction),
@@ -160,6 +161,25 @@ struct DeployAction {
     ///
     /// Generally this should be a host defined in your SSH config.
     target: String,
+}
+
+/// Deploy crdyboot to an OS image file.
+#[derive(Parser)]
+struct DeployToImageAction {
+    /// Deploy crdyshim in addition to crdyboot.
+    #[arg(long)]
+    crdyshim: bool,
+
+    /// Create the file that enables verbose logs at runtime.
+    #[arg(long)]
+    enable_verbose_logs: bool,
+
+    /// Delete the file that enables verbose logs at runtime.
+    #[arg(long, conflicts_with("enable_verbose_logs"))]
+    disable_verbose_logs: bool,
+
+    /// Image file to deploy to.
+    image: Utf8PathBuf,
 }
 
 /// Run "cargo fmt" on all the code.
@@ -618,6 +638,7 @@ fn main() -> Result<()> {
         Action::Check(action) => run_check(&conf, action),
         Action::Coverage(action) => run_coverage(action),
         Action::Deploy(action) => deploy::run_deploy(&conf, action),
+        Action::DeployToImage(action) => deploy::run_deploy_to_image(&conf, action),
         Action::Format(action) => run_rustfmt(action),
         Action::Lint(_) => run_clippy(),
         Action::Setup(action) => setup::run_setup(&conf, action),

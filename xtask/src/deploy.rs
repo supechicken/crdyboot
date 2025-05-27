@@ -4,10 +4,12 @@
 
 use crate::arch::Arch;
 use crate::config::{Config, EfiExe};
-use crate::DeployAction;
+use crate::{gen_disk, DeployAction, DeployToImageAction, VerboseRuntimeLogs};
 use anyhow::Result;
+use camino::Utf8Path;
 use camino::Utf8PathBuf;
 use command_run::Command;
+use tempfile::TempDir;
 
 struct MountOpts {
     /// SSH remote.
@@ -167,6 +169,48 @@ pub fn run_deploy(conf: &Config, action: &DeployAction) -> Result<()> {
         Command::with_args("ssh", [&action.target, "reboot"])
             .disable_check()
             .run()?;
+    }
+
+    Ok(())
+}
+
+pub fn run_deploy_to_image(conf: &Config, action: &DeployToImageAction) -> Result<()> {
+    let tmp_dir = TempDir::new()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+    // Copy files to a temporary staging directory.
+    for arch in Arch::all() {
+        if action.crdyshim {
+            // Copy the signed crdyshim executable.
+            fs_err::copy(
+                conf.crdyshim_signed_path(arch),
+                tmp_path.join(arch.efi_file_name("boot")),
+            )?;
+        }
+
+        // Copy the crdyboot executable.
+        fs_err::copy(
+            conf.target_exec_path(arch, EfiExe::Crdyboot),
+            tmp_path.join(arch.efi_file_name("crdyboot")),
+        )?;
+
+        // Copy the crdyboot signature.
+        fs_err::copy(
+            conf.crdyboot_signature_path(arch),
+            tmp_path
+                .join(arch.efi_file_name("crdyboot"))
+                .with_extension("sig"),
+        )?;
+    }
+
+    gen_disk::update_boot_files(&action.image, tmp_path)?;
+
+    // If requested, create or delete the file that controls verbose
+    // logging.
+    if action.enable_verbose_logs {
+        gen_disk::update_verbose_boot_file(&action.image, VerboseRuntimeLogs(true))?;
+    } else if action.disable_verbose_logs {
+        gen_disk::update_verbose_boot_file(&action.image, VerboseRuntimeLogs(false))?;
     }
 
     Ok(())
