@@ -979,13 +979,14 @@ pub fn install_uefi_test_tool(conf: &Config, operation: Operation) -> Result<()>
 }
 
 /// Size in MiB of the trivial esp that is generated.
-// This must be smaller than 64MiB which is the current partition size
-// in the reven layout. It must be larger than the typical bootloader
-// and filesystem overhead.
-// 2MiB is sufficient with a bit of slack for any dev work.
-// This can be removed when the ESP is able to be generated
-// at build time (b/388905930).
-const TRIVIAL_ESP_MIB: u64 = 2;
+///
+/// This must not exceed 64MiB, which is the current partition size
+/// in the reven layout. It must be larger than the typical bootloader
+/// and filesystem overhead.
+///
+/// This can be removed when the ESP is able to be generated
+/// at build time (b/388905930).
+const TRIVIAL_ESP_MIB: u64 = 16;
 
 /// Generate a data file `esp.img` containing a trivial ESP filesystem
 /// with just the bootx86.efi binary.
