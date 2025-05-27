@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 use crate::alloc::string::ToString;
-use crate::disk::{self, Gpt, GptDiskError};
+use crate::disk::{self, Gpt, GptDiskError, PartitionNum};
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
     avb_slot_verify, avb_slot_verify_data_free, avb_slot_verify_result_to_string,
@@ -115,6 +115,14 @@ pub enum AvbError {
     /// Failed looking up the boot partition uuid.
     #[error("failed reading the boot partition UUID: {0}")]
     FailedBootPartUuid(GptDiskError),
+
+    /// Failed loading the boot disk.
+    #[error("failed loading the boot disk: {0}")]
+    FailedLoadBootDisk(GptDiskError),
+
+    /// Failed updating the gpt partition entry attributes.
+    #[error("failed updating the gpt partition entry attributes: {0}")]
+    FailedUpdateAttributes(GptDiskError),
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -662,7 +670,8 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
         ptr::null(),
     ];
 
-    let slot = get_priority_slot(&UefiImpl)?;
+    let mut gpt = Gpt::load_boot_disk(&UefiImpl).map_err(AvbError::FailedLoadBootDisk)?;
+    let (slot, mut attributes, partition_num) = get_priority_slot(&UefiImpl, &mut gpt)?;
 
     let mut verify_data: *mut AvbSlotVerifyData = ptr::null_mut();
     let res = unsafe {
@@ -676,7 +685,26 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
         )
     };
     if res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK {
+        attributes.make_unbootable();
+        gpt.update_partition_entry_attributes(&UefiImpl, attributes, partition_num)
+            .map_err(AvbError::FailedUpdateAttributes)?;
         return Err(AvbError::AvbVerifyFailure(res));
+    }
+
+    if attributes.tries() != 0 {
+        if attributes.successful() {
+            // Tries should be 0 when successful, give a warning but let
+            // userspace handle this.
+            warn!(
+                "Boot partition {} has both tries and successful attributes",
+                slot.boot_part_name()
+            );
+        } else {
+            // Safety: tries is guaranteed to be >= 1.
+            attributes.set_tries(attributes.tries().checked_sub(1).unwrap());
+            gpt.update_partition_entry_attributes(&UefiImpl, attributes, partition_num)
+                .map_err(AvbError::FailedUpdateAttributes)?;
+        }
     }
 
     if log_enabled!(log::Level::Debug) {
@@ -756,32 +784,42 @@ impl BootSlot {
 }
 
 /// Determines which boot slot to use based on partition priority.
+/// Returns the slot, the Cgpt attributes for the slot, and the
+/// partition number of the slot. Also marks partitions which have
+/// exceeded their `tries` as unbootable.
 /// Return Err if we don't find a bootable partition.
-fn get_priority_slot(uefi: &dyn Uefi) -> Result<BootSlot, AvbError> {
+fn get_priority_slot(
+    uefi: &dyn Uefi,
+    gpt: &mut Gpt,
+) -> Result<(BootSlot, CgptAttributes, PartitionNum), AvbError> {
     // Priority must be > 0 or the partition is not bootable per standard.
     let mut max_priority: u8 = 0;
     let mut result_slot = BootSlot::A;
+    let mut result_attributes = CgptAttributes::from_u64(0);
+    let mut result_partition_num = 0;
     for slot in BootSlot::all() {
         let name = slot.boot_part_name();
-        let gpt = Gpt::load_boot_disk(uefi)
-            .map_err(|error| AvbError::FailedFindPartition { name, error })?;
-        let (_, gpt_partition_entry) = gpt
+        let (partition_num, gpt_partition_entry) = gpt
             .find_partition_by_name(name)
             .map_err(|error| AvbError::FailedFindPartition { name, error })?;
 
-        let attributes = gpt_partition_entry.attributes;
-        let priority = CgptAttributes::from_u64(attributes.0.to_u64()).priority();
-        debug!("partition: {} priority: {}", name, priority);
-        // TODO: check and update tries
-        // b:393358402
-        if priority > max_priority {
-            max_priority = priority;
+        let mut attributes = CgptAttributes::from_u64(gpt_partition_entry.attributes.0.to_u64());
+        debug!("partition: {} attributes: {:?}", name, attributes);
+        if !attributes.successful() && attributes.tries() == 0 && attributes.priority() != 0 {
+            // This partition can't be booted, set all attributes to 0 to signify this.
+            attributes.make_unbootable();
+            gpt.update_partition_entry_attributes(uefi, attributes, *partition_num)
+                .map_err(AvbError::FailedUpdateAttributes)?;
+        } else if attributes.priority() > max_priority {
+            max_priority = attributes.priority();
             result_slot = *slot;
+            result_attributes = attributes;
+            result_partition_num = *partition_num;
         }
     }
 
     if max_priority != 0 {
-        Ok(result_slot)
+        Ok((result_slot, result_attributes, result_partition_num))
     } else {
         Err(AvbError::NoBootablePartition)
     }
@@ -904,6 +942,10 @@ pub(crate) mod tests {
         // In default setup boot_a has priority 14, success 1
         // boot_b has priority 15, success 0, tries 3
         let uefi = create_mock_uefi(BootDrive::Hd2);
-        assert_eq!(get_priority_slot(&uefi), Ok(BootSlot::B));
+        let mut gpt = Gpt::load_boot_disk(&uefi).unwrap();
+        let (boot_slot, attributes, partition_number) = get_priority_slot(&uefi, &mut gpt).unwrap();
+        assert_eq!(boot_slot, BootSlot::B);
+        assert_eq!(attributes, CgptAttributes::from_u64(0x3F000000000000));
+        assert_eq!(partition_number, 14);
     }
 }
