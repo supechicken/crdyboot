@@ -239,20 +239,8 @@ pub fn load_kernel<'kernel>(
         kernel_buffer: kernel_buffer.cast(),
         kernel_buffer_size,
 
-        // Initialize outputs.
-        disk_handle: ptr::null_mut(),
-        partition_number: 0,
-        bootloader_offset: 0,
-        bootloader_size: 0,
-        partition_guid: [0; 16],
-        flags: 0,
-        ramdisk: ptr::null_mut(),
-        ramdisk_size: 0,
-        bootconfig: ptr::null_mut(),
-        bootconfig_size: 0,
-        vboot_cmdline_buffer: ptr::null_mut(),
-        vboot_cmdline_size: 0,
-        vendor_cmdline_buffer: ptr::null_mut(),
+        // Initialize everything else to zeroes.
+        ..Default::default()
     };
 
     let mut disk = Disk::new(disk_io);

@@ -102,6 +102,7 @@ fn gen_fwlib_bindings(include_dirs: &[PathBuf], target: Target) {
         .blocklist_type("__uint64_t")
         .use_core()
         .ctypes_prefix("core::ffi")
+        .derive_default(true)
         // Turn off a bunch of layout tests because they generate
         // "reference to packed field is unaligned" warnings.
         .layout_tests(false)
