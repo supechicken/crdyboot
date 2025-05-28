@@ -128,6 +128,10 @@ fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
 // BootImage boot header page size.
 const BOOT_HEADER_PAGE_SIZE: usize = 4096;
 
+const BOOT_PARTITION_NAME: &CStr = c"boot";
+const INIT_PARTITION_NAME: &CStr = c"init_boot";
+const VENDOR_BOOT_PARTITION_NAME: &CStr = c"vendor_boot";
+
 pub struct AvbDiskOpsImpl;
 
 // Allow pass by value as it makes the usage easier.
@@ -649,16 +653,12 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
 
     let mut avbops = create_ops(&mut disk_ops_ref);
 
-    let boot_partition_name = c"boot";
-    let init_partition_name = c"init_boot";
-    let vendor_boot_partition_name = c"vendor_boot";
-
     // Null-pointer terminated list of partitions for
     // the call to `avb_slot_verify`.
     let requested_partitions = [
-        boot_partition_name.as_ptr(),
-        init_partition_name.as_ptr(),
-        vendor_boot_partition_name.as_ptr(),
+        BOOT_PARTITION_NAME.as_ptr(),
+        INIT_PARTITION_NAME.as_ptr(),
+        VENDOR_BOOT_PARTITION_NAME.as_ptr(),
         ptr::null(),
     ];
 
@@ -686,50 +686,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let verify_cmdline = unsafe { CStr::from_ptr((*verify_data).cmdline) };
     debug!("verify cmdline: {}", verify_cmdline.to_string_lossy());
 
-    let mut boot = None;
-    let mut init_boot = None;
-    let mut vendor_boot = None;
-
-    // Convert the loaded_partitions list to a slice of AvbPartitionData
-    let parts: &[AvbPartitionData] = unsafe {
-        slice::from_raw_parts(
-            (*verify_data).loaded_partitions,
-            (*verify_data).num_loaded_partitions,
-        )
-    };
-    debug!("Loaded partition count {}", parts.len());
-
-    // Locate the three useful partitions:
-    // * boot (kernel)
-    // * init_boot (initramfs)
-    // * vendor_boot (initramfs)
-    //
-    // There will be three resulting buffers to pass to the kernel loader:
-    //  * kernel
-    //  * initramfs : created from the two initramfs buffers and
-    //    bootconfig options
-    //  * cmdline (kernel command line with necessary modifications applied)
-    for part in parts {
-        let name = unsafe { CStr::from_ptr(part.partition_name) };
-        debug!("Loaded partition {}: {part:?}", name.to_string_lossy());
-        if name == boot_partition_name {
-            boot = Some(part);
-        } else if name == init_partition_name {
-            init_boot = Some(part);
-        } else if name == vendor_boot_partition_name {
-            vendor_boot = Some(part);
-        }
-    }
-
-    let Some(boot) = boot else {
-        return Err(AvbError::MissingAvbPartition("boot"));
-    };
-    let Some(vendor_boot) = vendor_boot else {
-        return Err(AvbError::MissingAvbPartition("vendor_boot"));
-    };
-    let Some(init_boot) = init_boot else {
-        return Err(AvbError::MissingAvbPartition("init_boot"));
-    };
+    let (boot, init_boot, vendor_boot) = get_boot_parts(verify_data)?;
 
     // Load the kernel buffer from the boot partition header.
     let kernel_buffer = load_kernel(boot)?;
@@ -745,33 +702,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
 
     let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data)?;
 
-    // Convert the verified command line to UCS-2.
-    let mut cmdline = verify_cmdline
-        .to_str()
-        .ok()
-        .and_then(|x| CString16::try_from(x).ok())
-        .ok_or(AvbError::VerifiedCommandlineMalformed)?;
-
-    // Append the vendor command line after the avb verify
-    // command line.
-    // Safe unwrap: the ' ' will convert to Char16.
-    cmdline.push(Char16::try_from(' ').unwrap());
-    cmdline.push_str(vendor_data.cmdline.as_ref());
-    info!("combined command line: {cmdline}");
-
-    // TODO: Have this handle dynamic boot slots.
-    // TODO: have this be part of bootconfig once this handles bootconfig.
-    cmdline.push_str(cstr16!(" androidboot.slot_suffix="));
-    cmdline.push_str(slot.slot_suffix_cstr16());
-
-    // Add the UUID of the boot partition needed for the second stage to
-    // load the file system.
-    // TODO: Put as bootconfig once it is supported.
-    let boot_part_uuid = get_android_boot_part_uuid(&UefiImpl, slot)?;
-    cmdline.push_str(cstr16!(" androidboot.boot_part_uuid="));
-    cmdline.push_str(&boot_part_uuid);
-
-    cmdline.push_str(cstr16!(" androidboot.verifiedbootstate=orange"));
+    let cmdline = generate_cmdline(verify_cmdline, &vendor_data, slot, &UefiImpl)?;
 
     // At this point the cmdline, kernel and initramfs buffers
     // are allocated locally to this function.
@@ -863,6 +794,104 @@ fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<CString
     let guid = disk::get_partition_unique_guid(uefi, name).map_err(AvbError::FailedBootPartUuid)?;
     let boot_part_string = guid.to_string();
     Ok(CString16::try_from(boot_part_string.as_str()).unwrap())
+}
+
+/// Given the `verify_cmdline` output, return the three useful partitions
+/// `boot`, `init_boot`, and `vendor_boot` in that order.
+fn get_boot_parts<'a>(
+    verify_data: *mut AvbSlotVerifyData,
+) -> Result<
+    (
+        &'a AvbPartitionData,
+        &'a AvbPartitionData,
+        &'a AvbPartitionData,
+    ),
+    AvbError,
+> {
+    let mut boot = None;
+    let mut init_boot = None;
+    let mut vendor_boot = None;
+
+    // Convert the loaded_partitions list to a slice of AvbPartitionData
+    let parts: &[AvbPartitionData] = unsafe {
+        slice::from_raw_parts(
+            (*verify_data).loaded_partitions,
+            (*verify_data).num_loaded_partitions,
+        )
+    };
+    debug!("Loaded partition count {}", parts.len());
+
+    // Locate the three useful partitions:
+    // * boot (kernel)
+    // * init_boot (initramfs)
+    // * vendor_boot (initramfs)
+    //
+    // There will be three resulting buffers to pass to the kernel loader:
+    //  * kernel
+    //  * initramfs : created from the two initramfs buffers and
+    //    bootconfig options
+    //  * cmdline (kernel command line with necessary modifications applied)
+    for part in parts {
+        let name = unsafe { CStr::from_ptr(part.partition_name) };
+        debug!("Loaded partition {}: {part:?}", name.to_string_lossy());
+        if name == BOOT_PARTITION_NAME {
+            boot = Some(part);
+        } else if name == INIT_PARTITION_NAME {
+            init_boot = Some(part);
+        } else if name == VENDOR_BOOT_PARTITION_NAME {
+            vendor_boot = Some(part);
+        }
+    }
+
+    let Some(boot) = boot else {
+        return Err(AvbError::MissingAvbPartition("boot"));
+    };
+    let Some(init_boot) = init_boot else {
+        return Err(AvbError::MissingAvbPartition("init_boot"));
+    };
+    let Some(vendor_boot) = vendor_boot else {
+        return Err(AvbError::MissingAvbPartition("vendor_boot"));
+    };
+
+    Ok((boot, init_boot, vendor_boot))
+}
+
+/// Generates the `cmdline` for the kernel as a `CString16`
+fn generate_cmdline(
+    verify_cmdline: &CStr,
+    vendor_data: &VendorData,
+    slot: BootSlot,
+    uefi: &dyn Uefi,
+) -> Result<CString16, AvbError> {
+    // Convert the verified command line to UCS-2.
+    let mut cmdline = verify_cmdline
+        .to_str()
+        .ok()
+        .and_then(|x| CString16::try_from(x).ok())
+        .ok_or(AvbError::VerifiedCommandlineMalformed)?;
+
+    // Append the vendor command line after the avb verify
+    // command line.
+    // Safe unwrap: the ' ' will convert to Char16.
+    cmdline.push(Char16::try_from(' ').unwrap());
+    cmdline.push_str(vendor_data.cmdline.as_ref());
+    info!("combined command line: {cmdline}");
+
+    // TODO: Have this handle dynamic boot slots.
+    // TODO: have this be part of bootconfig once this handles bootconfig.
+    cmdline.push_str(cstr16!(" androidboot.slot_suffix="));
+    cmdline.push_str(slot.slot_suffix_cstr16());
+
+    // Add the UUID of the boot partition needed for the second stage to
+    // load the file system.
+    // TODO: Put as bootconfig once it is supported.
+    let boot_part_uuid = get_android_boot_part_uuid(uefi, slot)?;
+    cmdline.push_str(cstr16!(" androidboot.boot_part_uuid="));
+    cmdline.push_str(&boot_part_uuid);
+
+    cmdline.push_str(cstr16!(" androidboot.verifiedbootstate=orange"));
+
+    Ok(cmdline)
 }
 
 #[cfg(test)]
