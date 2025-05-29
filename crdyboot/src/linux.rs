@@ -29,6 +29,7 @@ use log::info;
 use object::read::pe::PeFile64;
 use sha2::{Digest, Sha256};
 use uefi::boot::{self, AllocateType, MemoryType};
+use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::tcg::PcrIndex;
 use uefi::{cstr16, CStr16, CString16, Handle, Status};
@@ -154,6 +155,8 @@ trait RunKernel {
 
     fn verbose_logging(&self) -> bool;
 
+    fn log_esp_device_path(&self, uefi: &dyn Uefi);
+
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str];
 
     fn open_file_loader(&self, handle: Handle) -> Result<Box<dyn FileLoader>, CrdybootError>;
@@ -189,6 +192,30 @@ impl RunKernel for RunKernelImpl {
 
     fn verbose_logging(&self) -> bool {
         does_verbose_file_exist()
+    }
+
+    /// Log the device path of the ESP.
+    ///
+    /// This can give a hint as to the type of hard drive in use, which can
+    /// help when debugging if the Flexor data partition doesn't load (see
+    /// docstring of `connect_disk_handles`).
+    fn log_esp_device_path(&self, uefi: &dyn Uefi) {
+        let Ok(Some(handle)) = uefi.find_esp_partition_handle() else {
+            info!("failed to get ESP handle");
+            return;
+        };
+
+        let Ok(dp) = uefi.device_path_for_handle(handle) else {
+            info!("failed to get ESP device path");
+            return;
+        };
+
+        let Ok(dp) = dp.to_string(DisplayOnly(false), AllowShortcuts(false)) else {
+            info!("failed to get ESP device path string");
+            return;
+        };
+
+        info!("ESP device path: {dp}");
     }
 
     fn get_valid_flexor_sha256_hashes(&self) -> &'static [&'static str] {
@@ -429,6 +456,8 @@ fn load_flexor_kernel_with_retry(
     rk: &dyn RunKernel,
     uefi: &dyn Uefi,
 ) -> Result<Vec<u8>, CrdybootError> {
+    rk.log_esp_device_path(uefi);
+
     match load_flexor_kernel(rk, uefi) {
         Ok(flexor_kernel) => Ok(flexor_kernel),
         Err(err) => {
@@ -670,6 +699,10 @@ mod tests {
         rk.expect_verbose_logging().times(1).return_const(false);
     }
 
+    fn expect_log_esp_device_path(rk: &mut MockRunKernel) {
+        rk.expect_log_esp_device_path().times(1).return_const(());
+    }
+
     fn expect_get_valid_flexor_sha256_hashes(
         rk: &mut MockRunKernel,
         hashes: &'static [&'static str],
@@ -758,6 +791,7 @@ mod tests {
         expect_update_mem_attrs(&mut rk);
         expect_launch_next_stage(&mut rk);
         expect_verbose_logging(&mut rk);
+        expect_log_esp_device_path(&mut rk);
         expect_get_valid_flexor_sha256_hashes(&mut rk, &[SHA_256_OF_TEST_PE]);
         expect_open_file_loader(&mut rk);
 
@@ -777,6 +811,7 @@ mod tests {
 
         expect_allocate_pages(&mut rk);
         expect_get_vbpubk_from_image(&mut rk, INVALID_VBPUBK);
+        expect_log_esp_device_path(&mut rk);
         expect_find_ata_pass_through_handles(&mut uefi);
         expect_find_nvme_express_pass_through_handles(&mut uefi);
         expect_find_sd_mmc_pass_through_handles(&mut uefi);
