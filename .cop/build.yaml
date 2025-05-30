@@ -6,4 +6,4 @@ steps:
   - '-c'
   - |
      cargo xtask setup
-     cargo xtask check --vm-tests
+     RUSTFLAGS="-Dwarnings" cargo xtask check --vm-tests

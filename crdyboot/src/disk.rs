@@ -837,7 +837,7 @@ pub(crate) mod tests {
 
         unsafe extern "efiapi" fn write_blocks(
             this: *mut BlockIoProtocol,
-            media_id: u32,
+            _media_id: u32,
             lba: u64,
             _buffer_size: usize,
             _buffer: *const c_void,
