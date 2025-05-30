@@ -165,25 +165,13 @@ fn current_time(uefi: &dyn Uefi) -> Option<Time> {
     }
 }
 
-/// Delete a UEFI variable.
-///
-/// If deletion fails, log the error but otherwise ignore it.
-fn delete_variable_no_error(uefi: &dyn Uefi, name: &CStr16, vendor: &VariableVendor) {
-    if let Err(err) = uefi.delete_variable(name, vendor) {
-        warn!(
-            "failed to delete variable {name}-{vendor}: {err}",
-            vendor = vendor.0
-        );
-    }
-}
-
 /// Try to read a variable and convert it to an `UpdateInfo`.
 ///
 /// Returns `Ok(Some(_))` if successful, `Ok(None)` for non-update
 /// variables, and `Err` if something goes wrong.
 ///
 /// If a variable looks like it should contain update info, but parsing
-/// the data fails, the variable will be deleted.
+/// the data fails, an error is returned.
 fn get_update_from_var(
     uefi: &dyn Uefi,
     key: uefi::Result<VariableKey>,
@@ -215,9 +203,6 @@ fn get_update_from_var(
     match UpdateInfo::new(key.name.clone(), attrs, data) {
         Ok(info) => Ok(Some(info)),
         Err(err) => {
-            // Delete the malformed variable.
-            delete_variable_no_error(uefi, &key.name, &FWUPDATE_VENDOR);
-
             warn!("could not populate update info for {}", key.name);
             Err(err)
         }
@@ -522,19 +507,6 @@ pub(crate) mod tests {
         assert_eq!(current_time(&uefi), Some(create_time()));
     }
 
-    /// Test that `delete_variable_no_error` does not panic if an error
-    /// occurs.
-    #[test]
-    fn test_delete_variable_no_error() {
-        let mut uefi = MockUefi::new();
-        uefi.expect_delete_variable().returning(|name, vendor| {
-            assert_eq!(name, VAR_NAME);
-            assert_eq!(*vendor, FWUPDATE_VENDOR);
-            Err(Status::DEVICE_ERROR.into())
-        });
-        delete_variable_no_error(&uefi, VAR_NAME, &FWUPDATE_VENDOR);
-    }
-
     fn new_var_key(name: &CStr16, vendor: VariableVendor) -> VariableKey {
         VariableKey {
             name: name.to_owned(),
@@ -583,16 +555,11 @@ pub(crate) mod tests {
         ));
     }
 
-    /// Test that `get_update_from_var` deletes a variable with invalid
-    /// data and returns an error.
+    /// Test that `get_update_from_var` returns an error for a variable
+    /// with invalid data.
     #[test]
     fn test_get_update_from_var_invalid_data() {
-        let mut uefi = create_mock_uefi_with_get_var();
-        uefi.expect_delete_variable().returning(|name, vendor| {
-            assert_eq!(name, BAD_VAR_NAME);
-            assert_eq!(*vendor, FWUPDATE_VENDOR);
-            Ok(())
-        });
+        let uefi = create_mock_uefi_with_get_var();
 
         let var = Ok(new_var_key(BAD_VAR_NAME, FWUPDATE_VENDOR));
         assert!(matches!(
@@ -630,12 +597,7 @@ pub(crate) mod tests {
     /// variables.
     #[test]
     fn test_get_update_table_skip() {
-        let mut uefi = create_mock_uefi_with_get_var();
-        uefi.expect_delete_variable().returning(|name, vendor| {
-            assert_eq!(name, BAD_VAR_NAME);
-            assert_eq!(*vendor, FWUPDATE_VENDOR);
-            Ok(())
-        });
+        let uefi = create_mock_uefi_with_get_var();
 
         let mut info = create_update_info();
         info.set_time_attempted(create_time());
