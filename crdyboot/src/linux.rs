@@ -481,6 +481,16 @@ fn load_flexor_kernel_with_retry(
 /// device, the internal drive might be ata, nvme, or emmc, so try all
 /// of them.)
 fn connect_disk_handles(uefi: &dyn Uefi) {
+    // TODO(nicholasbishop): it's possible that this could replace some
+    // or all of the other calls to `connect_handles`, however that will
+    // require retesting a significant number of devices.
+    info!("connecting boot disk handles...");
+    if let Ok(disk_handle) = crate::disk::find_boot_disk_handle(uefi) {
+        connect_handles(uefi, &[disk_handle]);
+    } else {
+        info!("boot disk handle not found");
+    }
+
     info!("connecting ata handles...");
     match uefi.find_ata_pass_through_handles() {
         Ok(handles) => connect_handles(uefi, &handles),
@@ -572,7 +582,7 @@ fn validate_flexor_kernel(buffer: &[u8], valid_hashes: &[&str]) -> Result<(), Cr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::disk::tests::{create_mock_uefi, BootDrive};
+    use crate::disk::tests::{create_mock_uefi, BootDrive, DeviceKind};
     use crate::vbpubk::tests::create_test_pe;
     use core::ptr;
     use libcrdy::fs::MockFileLoader;
@@ -815,6 +825,7 @@ mod tests {
         expect_find_ata_pass_through_handles(&mut uefi);
         expect_find_nvme_express_pass_through_handles(&mut uefi);
         expect_find_sd_mmc_pass_through_handles(&mut uefi);
+        expect_connect_controller_recursive(&mut uefi, DeviceKind::Hd1.handle());
         expect_connect_controller_recursive(&mut uefi, get_ata_handle());
         expect_connect_controller_recursive(&mut uefi, get_nvme_handle());
         expect_connect_controller_recursive(&mut uefi, get_emmc_handle());

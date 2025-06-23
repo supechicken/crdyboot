@@ -168,7 +168,7 @@ pub fn find_esp_partition_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError
 ///
 /// Note that this is the handle associated with the entire disk device,
 /// not an individual partition on the disk.
-fn find_boot_disk_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
+pub fn find_boot_disk_handle(uefi: &dyn Uefi) -> Result<Handle, GptDiskError> {
     let partition_handle = find_esp_partition_handle(uefi)?;
 
     // Get all handles that support BlockIO. This includes both disk devices
@@ -620,7 +620,7 @@ pub(crate) mod tests {
     }
 
     #[derive(Clone, Copy, PartialEq)]
-    enum DeviceKind {
+    pub(crate) enum DeviceKind {
         Hd1 = 0,
         Hd1Esp,
         Hd1State,
@@ -639,7 +639,7 @@ pub(crate) mod tests {
     impl DeviceKind {
         /// Get the handle for this device. This will always return the
         /// same handle for the given `kind`.
-        fn handle(self) -> Handle {
+        pub(crate) fn handle(self) -> Handle {
             // A handle is basically a void pointer. We don't care what the
             // particular value of that pointer is, it just needs to
             // consistent for each `DeviceKind`.
