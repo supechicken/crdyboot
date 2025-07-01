@@ -91,6 +91,8 @@ fn run(crdyboot: &dyn Crdyboot) -> Result<(), CrdybootError> {
         info!("failed to update SBAT revocations: {err:?}");
     }
 
+    info!("crdyboot version: {}", env!("CARGO_PKG_VERSION"));
+
     // For debugging purposes, conditionally copy SBAT revocations to a
     // runtime-accessible UEFI variable.
     crdyboot.maybe_copy_sbat_revocations();

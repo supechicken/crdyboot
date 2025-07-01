@@ -439,6 +439,8 @@ fn run(crdyshim: &dyn Crdyshim) -> Result<(), CrdyshimError> {
     // little code as possible prior to this point.
     crdyshim.self_revocation_check(&revocations)?;
 
+    info!("crdyshim version: {}", env!("CARGO_PKG_VERSION"));
+
     // Base file name of the next stage. The actual file name will have
     // an arch suffix and extension, e.g. "crdybootx64.efi".
     let next_stage_name = cstr16!("crdyboot");
