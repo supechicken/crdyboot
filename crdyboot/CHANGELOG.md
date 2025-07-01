@@ -1,6 +1,19 @@
 # Crdyboot Changelog
 
+## 1.0.6
+
 ## 1.0.5
+* Fix Flexor boot on several HP devices. <https://crrev.com/c/6298654>,
+  <https://crrev.com/c/6292488>, <https://crrev.com/c/6479500>,
+  <https://crrev.com/c/6665078>
+* Create the `BootloaderSupportsFwupd` UEFI variable which tells `fwupd`
+  that the bootloader can install capsule updates.
+  <https://crrev.com/c/6344512>
+* Add Aarch64 support. <https://crrev.com/c/6352300>
+* Drop the `firmware_update` and `flexor` feature flags, these are
+  always enabled now. <https://crrev.com/c/6360613>
+* Avoid using the `PARTITION_INFO` protocol, as it's not supported on all
+  devices. <https://crrev.com/c/6448617>
 
 ## 1.0.4
 * Update to uefi-0.33. <https://crrev.com/c/6022537>
