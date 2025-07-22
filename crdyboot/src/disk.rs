@@ -12,6 +12,7 @@ use gpt_disk_io::gpt_disk_types::{
 use gpt_disk_io::{Disk, DiskError};
 use libcrdy::uefi::{BlockIoError, ScopedBlockIo, ScopedDevicePath, ScopedDiskIo, Uefi};
 use libcrdy::util::{u32_to_usize, usize_to_u64};
+use log::info;
 use uefi::prelude::*;
 use uefi::proto::device_path::{DeviceSubType, DeviceType};
 use uefi::{CStr16, Error};
@@ -521,9 +522,16 @@ impl Gpt {
             .read_secondary_gpt_header(&mut header_buf)
             .map_err(GptDiskError::BlockIo)?;
 
-        self.update_attributes(attributes, partition_num, &mut disk, &mut secondary_header)?;
-        disk.write_secondary_gpt_header(&secondary_header, &mut header_buf)
-            .map_err(GptDiskError::BlockIo)?;
+        if let Err(err) =
+            self.update_attributes(attributes, partition_num, &mut disk, &mut secondary_header)
+        {
+            // TODO( b/433783004 ) usb drives are not guaranteed to have valid secondary
+            // headers at back of disk.
+            info!("Failed to update secondary GPT header: {err}");
+        } else {
+            disk.write_secondary_gpt_header(&secondary_header, &mut header_buf)
+                .map_err(GptDiskError::BlockIo)?;
+        }
 
         // Now manually flush so we catch any errors writing.
         disk.flush().map_err(GptDiskError::BlockIo)
