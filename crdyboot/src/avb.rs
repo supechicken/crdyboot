@@ -697,7 +697,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
             // userspace handle this.
             warn!(
                 "Boot partition {} has both tries and successful attributes",
-                slot.boot_part_name()
+                slot.vbmeta_part_name()
             );
         } else {
             // Safety: tries is guaranteed to be >= 1.
@@ -757,12 +757,12 @@ impl BootSlot {
         &[Self::A, Self::B]
     }
 
-    /// Get the `CStr16` representation of the boot partititon name
+    /// Get the `CStr16` representation of the vbmeta partititon name
     /// for the given slot.
-    fn boot_part_name(self) -> &'static CStr16 {
+    fn vbmeta_part_name(self) -> &'static CStr16 {
         match self {
-            BootSlot::A => cstr16!("boot_a"),
-            BootSlot::B => cstr16!("boot_b"),
+            BootSlot::A => cstr16!("vbmeta_a"),
+            BootSlot::B => cstr16!("vbmeta_b"),
         }
     }
 
@@ -798,7 +798,7 @@ fn get_priority_slot(
     let mut result_attributes = CgptAttributes::from_u64(0);
     let mut result_partition_num = 0;
     for slot in BootSlot::all() {
-        let name = slot.boot_part_name();
+        let name = slot.vbmeta_part_name();
         let (partition_num, gpt_partition_entry) = gpt
             .find_partition_by_name(name)
             .map_err(|error| AvbError::FailedFindPartition { name, error })?;
@@ -828,7 +828,7 @@ fn get_priority_slot(
 /// Look up the UUID of the boot partition and return as a `CString16`.
 /// Return Err if there was an issue looking it up.
 fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<CString16, AvbError> {
-    let name = slot.boot_part_name();
+    let name = slot.vbmeta_part_name();
     let guid = disk::get_partition_unique_guid(uefi, name).map_err(AvbError::FailedBootPartUuid)?;
     let boot_part_string = guid.to_string();
     Ok(CString16::try_from(boot_part_string.as_str()).unwrap())
@@ -939,13 +939,13 @@ pub(crate) mod tests {
 
     #[test]
     fn test_get_priority_slot_basic() {
-        // In default setup boot_a has priority 14, success 1
-        // boot_b has priority 15, success 0, tries 3
+        // In default setup vbmeta_a has priority 14, success 1
+        // vbmeta_b has priority 15, success 0, tries 3
         let uefi = create_mock_uefi(BootDrive::Hd2);
         let mut gpt = Gpt::load_boot_disk(&uefi).unwrap();
         let (boot_slot, attributes, partition_number) = get_priority_slot(&uefi, &mut gpt).unwrap();
         assert_eq!(boot_slot, BootSlot::B);
         assert_eq!(attributes, CgptAttributes::from_u64(0x3F000000000000));
-        assert_eq!(partition_number, 14);
+        assert_eq!(partition_number, 16);
     }
 }
