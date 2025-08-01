@@ -294,6 +294,8 @@ pub fn gen_android_test_disk(path: &Utf8Path) -> Result<()> {
     let esp_size_in_mib = 1;
     let boot_a_size_in_mib = 1;
     let boot_b_size_in_mib = 1;
+    let vbmeta_a_size_in_mib = 1;
+    let vbmeta_b_size_in_mib = 1;
 
     // Use empty data for all the partitions, nothing currently reads
     // that data.
@@ -307,15 +309,25 @@ pub fn gen_android_test_disk(path: &Utf8Path) -> Result<()> {
     let boot_a_end = boot_a_start + mib_to_byte(boot_a_size_in_mib);
     let boot_b_start = boot_a_end;
     let boot_b_end = boot_b_start + mib_to_byte(boot_b_size_in_mib);
+    let vbmeta_a_start = boot_b_end;
+    let vbmeta_a_end = vbmeta_a_start + mib_to_byte(vbmeta_a_size_in_mib);
+    let vbmeta_b_start = vbmeta_a_end;
+    let vbmeta_b_end = vbmeta_b_start + mib_to_byte(vbmeta_b_size_in_mib);
 
     let android_boot_guid = GptPartitionType(guid!("fe3a2a5d-4f32-41a7-b725-accc3285a309"));
+    let android_vbmeta_guid = GptPartitionType(guid!("88434509-d9d1-487d-b82c-15ef964cbd4b"));
 
     let disk = DiskSettings {
         path,
         // Partition sizes plus extra space for GPT headers.
         size: &format!(
             "{}MiB",
-            esp_size_in_mib + boot_a_size_in_mib + boot_b_size_in_mib + 2
+            esp_size_in_mib
+                + boot_a_size_in_mib
+                + boot_b_size_in_mib
+                + vbmeta_a_size_in_mib
+                + vbmeta_b_size_in_mib
+                + 2
         ),
         // Arbitrary GUID.
         guid: guid!("b0cf0ac4-d4c4-4791-997b-c146c802c83c"),
@@ -337,11 +349,7 @@ pub fn gen_android_test_disk(path: &Utf8Path) -> Result<()> {
                 type_guid: android_boot_guid,
                 // Arbitrary GUID.
                 guid: guid!("48339261-bf07-4faa-84e2-63bf034ba881"),
-                vboot_attrs: Some(VbootAttrs {
-                    successful_boot: true,
-                    priority: 14,
-                    tries: 0,
-                }),
+                vboot_attrs: None,
                 data: &data,
             },
             PartitionSettings {
@@ -351,6 +359,30 @@ pub fn gen_android_test_disk(path: &Utf8Path) -> Result<()> {
                 type_guid: android_boot_guid,
                 // Arbitrary GUID.
                 guid: guid!("41673840-88b4-4db3-90b1-c0f328276647"),
+                vboot_attrs: None,
+                data: &data,
+            },
+            PartitionSettings {
+                num: 15,
+                label: "vbmeta_a",
+                data_range: PartitionDataRange::from_byte_range(vbmeta_a_start..vbmeta_a_end),
+                type_guid: android_vbmeta_guid,
+                // Arbitrary GUID.
+                guid: guid!("880062ac-60af-402c-a8cd-d321fa3f4146"),
+                vboot_attrs: Some(VbootAttrs {
+                    successful_boot: true,
+                    priority: 14,
+                    tries: 0,
+                }),
+                data: &data,
+            },
+            PartitionSettings {
+                num: 16,
+                label: "vbmeta_b",
+                data_range: PartitionDataRange::from_byte_range(vbmeta_b_start..vbmeta_b_end),
+                type_guid: android_vbmeta_guid,
+                // Arbitrary GUID.
+                guid: guid!("8ae7710a-e709-44aa-8c8e-b454f48319fb"),
                 vboot_attrs: Some(VbootAttrs {
                     successful_boot: false,
                     priority: 15,
