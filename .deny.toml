@@ -17,7 +17,7 @@ multiple-versions = "warn"
 skip = [
      { name = "bitflags", version = "1.3.2" },
      { name = "hashbrown", version = "0.12.3" },
-     { name = "itertools", version = "0.9.0" },
+     { name = "itertools", version = "0.10.5" },
      { name = "thiserror", version = "1.0.40" },
      { name = "thiserror-impl", version = "1.0.40" },
      { name = "windows-sys", version = "0.52.0" },

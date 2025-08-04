@@ -5,18 +5,10 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use core::cmp::min;
-use core::ffi::c_int;
+use core::ffi::{c_char, c_int};
 use core::{slice, str};
 use log::{Level, Record};
 use printf_compat as printf;
-
-// TODO(b/403257806): make c_char unsigned on aarch64. This is needed
-// because printf-compat-0.1.1 uses cty for C definitions, and cty
-// diverges slightly from core::ffi.
-#[cfg(not(target_arch = "aarch64"))]
-use core::ffi::c_char;
-#[cfg(target_arch = "aarch64")]
-use core::ffi::c_uchar as c_char;
 
 // `core::ffi::c_size_t` is not yet stabilized:
 // https://github.com/rust-lang/rust/issues/88345
