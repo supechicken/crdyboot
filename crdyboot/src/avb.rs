@@ -427,7 +427,7 @@ impl<'a> VendorData<'a> {
                 specified: ramdisk_table_entry_size,
                 required_size: size_of::<vendor_ramdisk_table_entry_v4>(),
             });
-        };
+        }
 
         if ramdisk_table_size
             < ramdisk_table_entry_count
@@ -485,7 +485,7 @@ impl<'a> VendorData<'a> {
         // Ensure the ramdisk size is non-zero.
         if ramdisk_size == 0 {
             return Err(AvbError::InvalidRamdiskSize(0));
-        };
+        }
 
         // For now ignore the recovery and any additional ramdisk entries
         // and only select the single platform entry.

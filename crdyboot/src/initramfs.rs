@@ -171,7 +171,7 @@ impl InitramfsProtoHolder {
             )
         } {
             error!("Unable to uninstall the device path: {err}.");
-        };
+        }
     }
 
     fn uninstall_protocol(&mut self) {
@@ -186,7 +186,7 @@ impl InitramfsProtoHolder {
                 self.proto_ptr(),
             ) {
                 error!("Unable to uninstall the LoadFile2Protocol: {err}.");
-            };
+            }
             self.uninstall_device_protocol(handle);
         }
     }
