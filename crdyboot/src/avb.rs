@@ -676,12 +676,12 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let mut verify_data: *mut AvbSlotVerifyData = ptr::null_mut();
     let res = unsafe {
         avb_slot_verify(
-            &mut avbops,
+            &raw mut avbops,
             requested_partitions.as_ptr(),
             slot.slot_suffix_cstr().as_ptr(),
             AvbSlotVerifyFlags::AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR,
             AvbHashtreeErrorMode::AVB_HASHTREE_ERROR_MODE_RESTART,
-            &mut verify_data,
+            &raw mut verify_data,
         )
     };
     if res != AvbSlotVerifyResult::AVB_SLOT_VERIFY_RESULT_OK {

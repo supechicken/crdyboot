@@ -125,7 +125,7 @@ unsafe fn init_vb2_context(
             .len()
             .try_into()
             .map_err(|_| LoadKernelError::BadNumericConversion("workbuf length"))?,
-        &mut ctx_ptr,
+        &raw mut ctx_ptr,
     ));
     if status != ReturnCode::VB2_SUCCESS {
         return Err(LoadKernelError::ApiInitFailed(status));
@@ -248,7 +248,7 @@ pub fn load_kernel<'kernel>(
 
     info!("LoadKernel");
     let status = ReturnCode(unsafe {
-        vboot_sys::vb2api_load_kernel(ctx_ptr, &mut params, disk_info.as_mut_ptr())
+        vboot_sys::vb2api_load_kernel(ctx_ptr, &raw mut params, disk_info.as_mut_ptr())
     });
     if status != ReturnCode::VB2_SUCCESS {
         return Err(LoadKernelError::LoadKernelFailed(status));
