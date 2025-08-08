@@ -56,7 +56,7 @@ impl Swtpm {
             "--terminate",
             // Send verbose logs to a file.
             "--log",
-            &format!("file={},level=10", log_path),
+            &format!("file={log_path},level=10"),
         ]);
 
         if version == TpmVersion::V2 {
@@ -64,10 +64,7 @@ impl Swtpm {
         }
 
         // Print the command before spawning it.
-        println!(
-            "launching swtpm: {}",
-            format!("{:?}", cmd).replace('\"', "")
-        );
+        println!("launching swtpm: {}", format!("{cmd:?}").replace('\"', ""));
         let child = ScopedChild::new(cmd.spawn()?);
 
         // Add an artificial short delay here to give the swtpm time to

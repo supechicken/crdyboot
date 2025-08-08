@@ -31,7 +31,7 @@ impl FromStr for Operation {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Note that `Unset` is intentionally not included.
         for op in [Operation::Tpm1Deactivated, Operation::Tpm1ExtendFail] {
-            if s == format!("{}", op) {
+            if s == format!("{op}") {
                 return Ok(op);
             }
         }

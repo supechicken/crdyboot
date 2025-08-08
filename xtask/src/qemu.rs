@@ -225,7 +225,7 @@ impl QemuOpts {
             cmd.args(swtpm.qemu_args());
         }
         // Print the qemu command before spawning it.
-        println!("{}", format!("{:?}", cmd).replace('\"', ""));
+        println!("{}", format!("{cmd:?}").replace('\"', ""));
 
         let process = Arc::new(Mutex::new(ScopedChild::new(cmd.spawn()?)));
 
