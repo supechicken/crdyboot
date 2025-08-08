@@ -137,7 +137,7 @@ pub enum CrdybootError {
 /// This is implemented as a trait to allow for mocking.
 #[cfg_attr(test, mockall::automock)]
 // Named lifetimes are required by automock.
-#[allow(clippy::needless_lifetimes)]
+#[allow(clippy::elidable_lifetime_names)]
 trait RunKernel {
     fn allocate_pages(
         &self,
