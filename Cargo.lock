@@ -306,6 +306,7 @@ dependencies = [
  "uefi",
  "uefi-raw",
  "vboot",
+ "zerocopy",
 ]
 
 [[package]]
