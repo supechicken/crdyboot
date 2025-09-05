@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::alloc::string::ToString;
+use crate::alloc::string::{String, ToString};
 use crate::disk::{self, Gpt, GptDiskError, PartitionNum};
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
@@ -15,6 +15,7 @@ use bootimg::{
 };
 use core::ffi::{CStr, FromBytesUntilNulError};
 use core::ops::Deref;
+use core::str::Utf8Error;
 use core::{ptr, slice, str};
 use libcrdy::page_alloc::{PageAllocationError, ScopedPageAllocation};
 use libcrdy::uefi::{Uefi, UefiImpl};
@@ -124,13 +125,17 @@ pub enum AvbError {
     #[error("failed updating the gpt partition entry attributes: {0}")]
     FailedUpdateAttributes(GptDiskError),
 
-    /// Bootconfig trailer is invalid size
-    #[error("invalid size for the bootconfig trailer: {0}")]
-    InvalidTrailerSize(usize),
+    /// Bootconfig buffer is invalid size
+    #[error("invalid size for the bootconfig buffer: expected {0}, actual {1}")]
+    InvalidBufferSize(usize, usize),
 
     /// Failed to write boot config size into `u32`
     #[error("boot config is too large for u32")]
     BootConfigTooLarge,
+
+    /// Boot config is not valid
+    #[error("boot config is not valid: {0}")]
+    BootConfigInvalid(Utf8Error),
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -597,6 +602,88 @@ fn load_kernel(boot_part: &AvbPartitionData) -> Result<KernelData, AvbError> {
     Ok(KernelData::new(kernel_buffer, kernel_src.len()))
 }
 
+struct BootConfig {
+    /// Bootconfig data
+    config: String,
+}
+
+impl BootConfig {
+    /// Creates a new `BootConfig` from bootconfig data.
+    pub fn new(data: &[u8]) -> Result<Self, AvbError> {
+        let config = str::from_utf8(data)
+            .map_err(AvbError::BootConfigInvalid)?
+            .to_string();
+        Ok(Self { config })
+    }
+
+    /// The size of the bootconfig with trailer.
+    pub fn write_size(&self) -> Result<usize, AvbError> {
+        self.config
+            .len()
+            .checked_add(BOOTCONFIG_TRAILER_SIZE)
+            .ok_or(AvbError::BootConfigTooLarge)
+    }
+
+    /// Adds the dynamically determined androidboot values to the boot config.
+    pub fn add_android_boot_values(
+        &mut self,
+        slot: BootSlot,
+        uefi: &dyn Uefi,
+    ) -> Result<(), AvbError> {
+        self.config.push_str("androidboot.slot_suffix=");
+        self.config.push_str(slot.slot_suffix_str());
+        self.config.push('\n');
+
+        // Add the UUID of the boot partition needed for the second stage to
+        // load the file system.
+        let boot_part_uuid = get_android_boot_part_uuid(uefi, slot)?;
+        self.config.push_str("androidboot.boot_part_uuid=");
+        self.config.push_str(&boot_part_uuid);
+        self.config.push('\n');
+
+        self.config
+            .push_str("androidboot.verifiedbootstate=orange\n");
+        Ok(())
+    }
+
+    /// Writes the bootconfig and trailer to `buffer` which should be `write_size()`.
+    pub fn write(&self, buffer: &mut [u8]) -> Result<(), AvbError> {
+        if buffer.len() != self.write_size()? {
+            return Err(AvbError::InvalidBufferSize(
+                self.write_size()?,
+                buffer.len(),
+            ));
+        }
+
+        let (config_buf, trailer_buf) = buffer.split_at_mut(self.config.len());
+        config_buf.copy_from_slice(self.config.as_bytes());
+        self.write_trailer(trailer_buf)
+    }
+
+    /// Writes the `trailer` for the given `bootconfig` based on the definition from
+    /// <https://docs.kernel.org/admin-guide/bootconfig.html#attaching-a-boot-config-to-initrd>
+    /// Panics if `trailer.len()` != `BOOTCONFIG_TRAILER_SIZE`
+    fn write_trailer(&self, trailer: &mut [u8]) -> Result<(), AvbError> {
+        assert!(trailer.len() == BOOTCONFIG_TRAILER_SIZE);
+        let size: u32 = self
+            .config
+            .len()
+            .try_into()
+            .map_err(|_| AvbError::BootConfigTooLarge)?;
+        let checksum: u32 = self
+            .config
+            .as_bytes()
+            .iter()
+            .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
+        let (size_buf, rest) = trailer.split_at_mut(4);
+        let (checksum_buf, magic_buf) = rest.split_at_mut(4);
+        size_buf.copy_from_slice(&size.to_le_bytes());
+        checksum_buf.copy_from_slice(&checksum.to_le_bytes());
+        magic_buf.copy_from_slice(BOOTCONFIG_MAGIC.as_bytes());
+        Ok(())
+    }
+}
+
 /// Assemble the initramfs by concatenating the vendor and
 /// generic (init) ramdisks.
 /// Allocates a buffer to contain the assembled initramfs.
@@ -609,24 +696,20 @@ fn load_kernel(boot_part: &AvbPartitionData) -> Result<KernelData, AvbError> {
 fn assemble_initramfs(
     vendor_data: &VendorData,
     init_data: &BootImageParts,
+    slot: BootSlot,
+    uefi: &dyn Uefi,
 ) -> Result<ScopedPageAllocation, AvbError> {
     let vendor_initramfs = vendor_data.initramfs;
     let generic_initramfs = init_data.initramfs;
-    let bootconfig = vendor_data.bootconfig;
+    let mut bootconfig = BootConfig::new(vendor_data.bootconfig)?;
+    bootconfig.add_android_boot_values(slot, uefi)?;
 
     // Generic ramdisk must have a size.
     if generic_initramfs.is_empty() {
         return Err(AvbError::InvalidRamdiskSize(0));
     }
 
-    let bootconfig_size = if bootconfig.is_empty() {
-        0
-    } else {
-        bootconfig
-            .len()
-            .checked_add(BOOTCONFIG_TRAILER_SIZE)
-            .ok_or(AvbError::InitramfsTooLarge)?
-    };
+    let bootconfig_size = bootconfig.write_size()?;
 
     // Size of the combined initramfs data.
     let initramfs_size = generic_initramfs
@@ -660,25 +743,14 @@ fn assemble_initramfs(
         .copy_from_slice(generic_initramfs);
 
     // Append the bootconfig after the generic_initramfs
-    if bootconfig_size != 0 {
-        let bootconfig_trailer_start = initramfs_buffer
-            .len()
-            .checked_sub(BOOTCONFIG_TRAILER_SIZE)
-            .expect("initramfs should fit bootconfig");
-        let bootconfig_start = bootconfig_trailer_start
-            .checked_sub(bootconfig.len())
-            .expect("initramfs should fit bootconfig trailer");
-        initramfs_buffer
-            .get_mut(bootconfig_start..bootconfig_trailer_start)
-            .expect("buffer should be large enough")
-            .copy_from_slice(bootconfig);
-
-        // Append the bootconfig trailer
-        let trailer_slice = initramfs_buffer
-            .get_mut(bootconfig_trailer_start..)
-            .expect("buffer should be large enough");
-        write_bootconfig_trailer(bootconfig, trailer_slice)?;
-    }
+    let bootconfig_start = initramfs_buffer
+        .len()
+        .checked_sub(bootconfig_size)
+        .expect("initramfs should fit bootconfig");
+    let bootconfig_slice = initramfs_buffer
+        .get_mut(bootconfig_start..)
+        .expect("buffer should be large enough");
+    bootconfig.write(bootconfig_slice)?;
 
     Ok(initramfs_buffer)
 }
@@ -776,9 +848,9 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     );
     debug!("vendor cmdline: {}", vendor_data.cmdline);
 
-    let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data)?;
+    let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data, slot, &UefiImpl)?;
 
-    let cmdline = generate_cmdline(verify_cmdline, &vendor_data, slot, &UefiImpl)?;
+    let cmdline = generate_cmdline(verify_cmdline, &vendor_data)?;
 
     // At this point the cmdline, kernel and initramfs buffers
     // are allocated locally to this function.
@@ -814,19 +886,19 @@ impl BootSlot {
         }
     }
 
+    /// Get the `str` representation of the slot suffix.
+    fn slot_suffix_str(self) -> &'static str {
+        match self {
+            BootSlot::A => "_a",
+            BootSlot::B => "_b",
+        }
+    }
+
     /// Get the `CStr` representation of the slot suffix.
     fn slot_suffix_cstr(self) -> &'static CStr {
         match self {
             BootSlot::A => c"_a",
             BootSlot::B => c"_b",
-        }
-    }
-
-    /// Get the `CStr16` representation of the slot suffix.
-    fn slot_suffix_cstr16(self) -> &'static CStr16 {
-        match self {
-            BootSlot::A => cstr16!("_a"),
-            BootSlot::B => cstr16!("_b"),
         }
     }
 }
@@ -873,13 +945,12 @@ fn get_priority_slot(
     }
 }
 
-/// Look up the UUID of the boot partition and return as a `CString16`.
+/// Look up the UUID of the boot partition and return as a `String`.
 /// Return Err if there was an issue looking it up.
-fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<CString16, AvbError> {
+fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<String, AvbError> {
     let name = slot.vbmeta_part_name();
     let guid = disk::get_partition_unique_guid(uefi, name).map_err(AvbError::FailedBootPartUuid)?;
-    let boot_part_string = guid.to_string();
-    Ok(CString16::try_from(boot_part_string.as_str()).unwrap())
+    Ok(guid.to_string())
 }
 
 /// Given the `verify_cmdline` output, return the three useful partitions
@@ -946,8 +1017,6 @@ fn get_boot_parts<'a>(
 fn generate_cmdline(
     verify_cmdline: &CStr,
     vendor_data: &VendorData,
-    slot: BootSlot,
-    uefi: &dyn Uefi,
 ) -> Result<CString16, AvbError> {
     // Convert the verified command line to UCS-2.
     let mut cmdline = verify_cmdline
@@ -962,45 +1031,7 @@ fn generate_cmdline(
     cmdline.push(Char16::try_from(' ').unwrap());
     cmdline.push_str(vendor_data.cmdline.as_ref());
     info!("combined command line: {cmdline}");
-
-    // TODO: Have this handle dynamic boot slots.
-    // TODO: have this be part of bootconfig once this handles bootconfig.
-    cmdline.push_str(cstr16!(" androidboot.slot_suffix="));
-    cmdline.push_str(slot.slot_suffix_cstr16());
-
-    // Add the UUID of the boot partition needed for the second stage to
-    // load the file system.
-    // TODO: Put as bootconfig once it is supported.
-    let boot_part_uuid = get_android_boot_part_uuid(uefi, slot)?;
-    cmdline.push_str(cstr16!(" androidboot.boot_part_uuid="));
-    cmdline.push_str(&boot_part_uuid);
-
-    cmdline.push_str(cstr16!(" androidboot.verifiedbootstate=orange"));
-
     Ok(cmdline)
-}
-
-/// Writes the `trailer` for the given `bootconfig` based on the definition from
-/// <https://docs.kernel.org/admin-guide/bootconfig.html#attaching-a-boot-config-to-initrd>
-fn write_bootconfig_trailer(bootconfig: &[u8], trailer: &mut [u8]) -> Result<(), AvbError> {
-    if trailer.len() != BOOTCONFIG_TRAILER_SIZE {
-        return Err(AvbError::InvalidTrailerSize(trailer.len()));
-    }
-
-    let size: u32 = bootconfig
-        .len()
-        .try_into()
-        .map_err(|_| AvbError::BootConfigTooLarge)?;
-    let checksum: u32 = bootconfig
-        .iter()
-        .fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
-    let (size_buf, rest) = trailer.split_at_mut(4);
-    let (checksum_buf, magic_buf) = rest.split_at_mut(4);
-    size_buf.copy_from_slice(&size.to_le_bytes());
-    checksum_buf.copy_from_slice(&checksum.to_le_bytes());
-    magic_buf.copy_from_slice(BOOTCONFIG_MAGIC.as_bytes());
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -1021,26 +1052,67 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_write_bootconfig_trailer() {
-        let mut buffer = [0u8; BOOTCONFIG_TRAILER_SIZE];
+    fn test_write_bootconfig() {
         const EMPTY_CONFIG_TRAILER: &[u8; BOOTCONFIG_TRAILER_SIZE] =
             b"\x00\x00\x00\x00\x00\x00\x00\x00#BOOTCONFIG\n";
-        let empty_config = [0u8; 0];
         const TEST_CONFIG_TRAILER: &[u8; BOOTCONFIG_TRAILER_SIZE] =
             b"\x7A\x00\x00\x00\xC1\x2F\x00\x00#BOOTCONFIG\n";
+        const TEST_CONFIG_TRAILER_2: &[u8; BOOTCONFIG_TRAILER_SIZE] =
+            b"\xFA\x00\x00\x00\x54\x5D\x00\x00#BOOTCONFIG\n";
         const TEST_CONFIG_STRING: &str = "androidboot.hardware.platform=android-desktop
 androidboot.hardware=android-desktop
 androidboot.load_modules_parallel=true
 ";
+        const TEST_CONFIG_STRING_2: &str = "androidboot.hardware.platform=android-desktop
+androidboot.hardware=android-desktop
+androidboot.load_modules_parallel=true
+androidboot.slot_suffix=_b
+androidboot.boot_part_uuid=8ae7710a-e709-44aa-8c8e-b454f48319fb
+androidboot.verifiedbootstate=orange
+";
 
-        write_bootconfig_trailer(&empty_config, &mut buffer).unwrap();
+        // Writing an empty config will only be a trailer.
+        let empty_config = [0u8; 0];
+        let empty_bootconfig = BootConfig::new(&empty_config).unwrap();
+        let mut buffer = [0u8; BOOTCONFIG_TRAILER_SIZE];
+        assert_eq!(
+            empty_bootconfig.write_size().unwrap(),
+            BOOTCONFIG_TRAILER_SIZE
+        );
+        empty_bootconfig.write(&mut buffer).unwrap();
         assert_eq!(&buffer[..], EMPTY_CONFIG_TRAILER);
 
-        write_bootconfig_trailer(TEST_CONFIG_STRING.as_bytes(), &mut buffer).unwrap();
-        assert_eq!(&buffer[..], TEST_CONFIG_TRAILER);
+        let mut test_bootconfig = BootConfig::new(TEST_CONFIG_STRING.as_bytes()).unwrap();
 
-        let mut wrong_size_buffer = [0u8; 4];
-        let result = write_bootconfig_trailer(&empty_config, &mut wrong_size_buffer);
-        assert_eq!(result, Err(AvbError::InvalidTrailerSize(4)));
+        // Test that writing to a buffer that's too small throws an error
+        let expected_size = TEST_CONFIG_STRING.len() + BOOTCONFIG_TRAILER_SIZE;
+        let result = test_bootconfig.write(&mut buffer);
+        assert_eq!(
+            result,
+            Err(AvbError::InvalidBufferSize(
+                expected_size,
+                BOOTCONFIG_TRAILER_SIZE
+            ))
+        );
+
+        let mut buffer = [0u8; TEST_CONFIG_STRING.len() + BOOTCONFIG_TRAILER_SIZE];
+        test_bootconfig.write(&mut buffer).unwrap();
+        assert_eq!(
+            &buffer[..TEST_CONFIG_STRING.len()],
+            TEST_CONFIG_STRING.as_bytes()
+        );
+        assert_eq!(&buffer[TEST_CONFIG_STRING.len()..], TEST_CONFIG_TRAILER);
+
+        let uefi = create_mock_uefi(BootDrive::Hd2);
+        test_bootconfig
+            .add_android_boot_values(BootSlot::B, &uefi)
+            .unwrap();
+        let mut buffer = [0u8; TEST_CONFIG_STRING_2.len() + BOOTCONFIG_TRAILER_SIZE];
+        test_bootconfig.write(&mut buffer).unwrap();
+        assert_eq!(
+            &buffer[..TEST_CONFIG_STRING_2.len()],
+            TEST_CONFIG_STRING_2.as_bytes()
+        );
+        assert_eq!(&buffer[TEST_CONFIG_STRING_2.len()..], TEST_CONFIG_TRAILER_2);
     }
 }
