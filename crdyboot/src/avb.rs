@@ -55,10 +55,10 @@ pub enum AvbError {
     #[error("the partition header is not V4")]
     UnsupportedPartitionHeaderVersion,
 
-    /// Unsupported number of ramdisks in the vendor
+    /// Unsupported multiples of ramdisks in the vendor
     /// partition.
-    #[error("only one ramdisk is supported for the vendor partition, found: {0}")]
-    UnsupportedVendorRamdiskCount(u32),
+    #[error("multiple ramdisks of type {0} found in the vendor partition, only one is supported")]
+    MultipleVendorRamdiskFragments(u32),
 
     /// Invalid kernel size.
     #[error("invalid kernel size: {0}")]
@@ -855,6 +855,8 @@ androidboot.verifiedbootstate=orange
             initramfs: b"vendor ",
             cmdline: CString16::from(cstr16!("cmdline")),
             bootconfig: b"",
+            dlkm_ramdisk: b"dlkm ",
+            recovery_ramdisk: b"recovery",
         };
 
         let bi = BootImageParts {

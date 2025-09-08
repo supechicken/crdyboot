@@ -4,7 +4,8 @@
 
 use crate::avb::AvbError;
 use bootimg::{
-    vendor_ramdisk_table_entry_v4, BootImage, VendorImageHeader, VENDOR_RAMDISK_TYPE_PLATFORM,
+    vendor_ramdisk_table_entry_v4, BootImage, VendorImageHeader, VENDOR_RAMDISK_TYPE_DLKM,
+    VENDOR_RAMDISK_TYPE_PLATFORM, VENDOR_RAMDISK_TYPE_RECOVERY,
 };
 use core::ffi::CStr;
 use core::mem::size_of;
@@ -96,6 +97,10 @@ pub struct VendorData<'a> {
     pub initramfs: &'a [u8],
     pub cmdline: CString16,
     pub bootconfig: &'a [u8],
+    #[cfg_attr(not(test), expect(unused))]
+    pub dlkm_ramdisk: &'a [u8],
+    #[cfg_attr(not(test), expect(unused))]
+    pub recovery_ramdisk: &'a [u8],
 }
 
 impl<'a> VendorData<'a> {
@@ -125,7 +130,15 @@ impl<'a> VendorData<'a> {
         // data:
         let initramfs = vendor_data
             .get(ranges.platform_ramdisk)
-            .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
+            .ok_or(AvbError::IndexOutOfBounds("platform ramdisk"))?;
+
+        let dlkm_ramdisk = vendor_data
+            .get(ranges.dlkm_ramdisk)
+            .ok_or(AvbError::IndexOutOfBounds("dlkm ramdisk"))?;
+
+        let recovery_ramdisk = vendor_data
+            .get(ranges.recovery_ramdisk)
+            .ok_or(AvbError::IndexOutOfBounds("recovery ramdisk"))?;
 
         // Slice into the bootconfig data.
         let bootconfig = vendor_data
@@ -136,6 +149,8 @@ impl<'a> VendorData<'a> {
             initramfs,
             cmdline: ranges.cmdline,
             bootconfig,
+            recovery_ramdisk,
+            dlkm_ramdisk,
         })
     }
 }
@@ -149,6 +164,8 @@ struct VendorRanges {
     ramdisk_table: Range<usize>,
     bootconfig: Range<usize>,
     platform_ramdisk: Range<usize>,
+    dlkm_ramdisk: Range<usize>,
+    recovery_ramdisk: Range<usize>,
 }
 
 impl VendorRanges {
@@ -293,46 +310,42 @@ impl VendorRanges {
 
         // Iterate over the ramdisk entries finding the ones that
         // are interesting.
-        // This bootloader only looks for a single platform section.
-        let mut platform_ramdisk_count: u32 = 0;
-
+        // This bootloader only supports a single fragment of each
+        // type.
         for ramdisk_entry in ramdisk_entries {
             let name = CStr::from_bytes_until_nul(&ramdisk_entry.ramdisk_name)
                 .unwrap()
                 .to_string_lossy();
             debug!("Ramdisk entry: {name} {ramdisk_entry:?}");
-            // For now just include the platform ramdisk.
-            if ramdisk_entry.ramdisk_type == VENDOR_RAMDISK_TYPE_PLATFORM {
-                platform_ramdisk_count = platform_ramdisk_count.checked_add(1).unwrap();
-                // Only handle a single platform_ramdisk for now.
-                if platform_ramdisk_count == 1 {
-                    // Ramdisk table's offset is an offset into the ramdisk section
-                    // of the overall data.
-                    let ramdisk_start = ranges
-                        .ramdisk
-                        .start
-                        .checked_add(u32_to_usize(ramdisk_entry.ramdisk_offset))
-                        .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
-                    let ramdisk_end = ramdisk_start
-                        .checked_add(u32_to_usize(ramdisk_entry.ramdisk_size))
-                        .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
 
-                    // TODO: check here that this ramdisk range fits in
-                    // ranges.ramdisk? A range.contains() check could
-                    // be done.
-                    ranges.platform_ramdisk = Range {
-                        start: ramdisk_start,
-                        end: ramdisk_end,
-                    };
+            let ramdisk_fragment = match ramdisk_entry.ramdisk_type {
+                VENDOR_RAMDISK_TYPE_PLATFORM => &mut ranges.platform_ramdisk,
+                VENDOR_RAMDISK_TYPE_DLKM => &mut ranges.dlkm_ramdisk,
+                VENDOR_RAMDISK_TYPE_RECOVERY => &mut ranges.recovery_ramdisk,
+                other => {
+                    warn!("unexpected ramdisk fragment of type {other}");
+                    continue;
                 }
-            }
-        }
+            };
 
-        // For now only support a single platform ramdisk.
-        if platform_ramdisk_count != 1 {
-            return Err(AvbError::UnsupportedVendorRamdiskCount(
-                platform_ramdisk_count,
-            ))?;
+            if !(*ramdisk_fragment).is_empty() {
+                return Err(AvbError::MultipleVendorRamdiskFragments(
+                    ramdisk_entry.ramdisk_type,
+                ));
+            }
+
+            // The ramdisk table entry offset is an offset from the
+            // start of the ramdisk section in the overall buffer.
+            let start = ranges
+                .ramdisk
+                .start
+                .checked_add(u32_to_usize(ramdisk_entry.ramdisk_offset))
+                .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk {name}"))?;
+            let end = start
+                .checked_add(u32_to_usize(ramdisk_entry.ramdisk_size))
+                .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk {name}"))?;
+
+            *ramdisk_fragment = Range { start, end };
         }
 
         // The cmdline range could be determined by determining
@@ -415,6 +428,8 @@ pub(crate) mod tests {
         assert_eq!(b"VENDOR_RAMDISK", res.initramfs);
         assert_eq!(cstr16!("vendor cmdline"), res.cmdline);
         assert_eq!(b"bootconfig value", res.bootconfig);
+        assert_eq!(b"VENDOR_RECOVERY", res.recovery_ramdisk);
+        assert_eq!(b"VENDOR_DLKM", res.dlkm_ramdisk);
     }
 
     #[test]
