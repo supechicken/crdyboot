@@ -12,6 +12,8 @@ extern crate alloc;
 
 #[cfg(feature = "android")]
 mod avb;
+#[cfg(feature = "android")]
+mod boot_image;
 mod disk;
 mod firmware;
 #[cfg(feature = "android")]
