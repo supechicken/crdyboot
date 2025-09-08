@@ -67,6 +67,7 @@ enum Action {
     GenVbootReturnCodeStrings(GenVbootReturnCodeStringsAction),
     GenEsp(GenEspAction),
     UpdateSbatRevocations(UpdateSbatRevocations),
+    GenBootImageTestData(GenBootImageTestDataAction),
 }
 
 /// Build crdyboot.
@@ -292,6 +293,10 @@ struct GenEspAction {}
 /// Update libcrdy/sbat_revocations.csv.
 #[derive(Parser)]
 struct UpdateSbatRevocations {}
+
+/// Generate Android boot image test data.
+#[derive(Parser)]
+struct GenBootImageTestDataAction {}
 
 /// Optional features that are selected when doing unit tests
 /// and lint checks.
@@ -583,6 +588,92 @@ fn gen_test_data_tarball(conf: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Generate a bootimg test files with arbitrary data
+/// to include in the crdyboot/boot_image.rs tests.
+fn generate_boot_image_test_data(conf: &Config) -> Result<()> {
+    // Use mkbootimg from the third_party repository.
+    let mkbootimg = conf.repo_path().join("third_party/mkbootimg/mkbootimg.py");
+
+    let out_dir = conf.repo_path().join("crdyboot/test_data/bootimg");
+    fs::create_dir_all(&out_dir)?;
+
+    let boot_out = out_dir.join("test_boot.img");
+    let init_out = out_dir.join("test_init.img");
+    let vendor_out = out_dir.join("test_vendor.img");
+
+    let tmp_dir = TempDir::new()?;
+    let dir = Utf8Path::from_path(tmp_dir.path()).unwrap();
+
+    let kernel = dir.join("kernel");
+    fs::write(&kernel, "KERNEL")?;
+    Command::with_args(
+        &mkbootimg,
+        [
+            "--header_version",
+            "4",
+            "--kernel",
+            kernel.as_str(),
+            "--output",
+            boot_out.as_str(),
+        ],
+    )
+    .run()?;
+
+    let init_ramdisk = dir.join("init_ramdisk");
+    fs::write(&init_ramdisk, "INIT_RAMDISK")?;
+    Command::with_args(
+        &mkbootimg,
+        [
+            "--header_version",
+            "4",
+            "--ramdisk",
+            init_ramdisk.as_str(),
+            "--output",
+            init_out.as_str(),
+        ],
+    )
+    .run()?;
+
+    let vendor_ramdisk = dir.join("vendor_ramdisk");
+    let vendor_recovery = dir.join("vendor_recovery");
+    let vendor_dlkm = dir.join("vendor_dlkm");
+    let bootconfig = dir.join("bootconfig");
+    fs::write(&vendor_ramdisk, "VENDOR_RAMDISK")?;
+    fs::write(&vendor_recovery, "VENDOR_RECOVERY")?;
+    fs::write(&vendor_dlkm, "VENDOR_DLKM")?;
+    fs::write(&bootconfig, "bootconfig value")?;
+    Command::with_args(
+        &mkbootimg,
+        [
+            "--header_version",
+            "4",
+            "--vendor_cmdline",
+            "vendor cmdline",
+            "--vendor_bootconfig",
+            bootconfig.as_str(),
+            "--vendor_ramdisk",
+            vendor_ramdisk.as_str(),
+            "--ramdisk_type",
+            "RECOVERY",
+            "--ramdisk_name",
+            "recovery",
+            "--vendor_ramdisk_fragment",
+            vendor_recovery.as_str(),
+            "--ramdisk_type",
+            "DLKM",
+            "--ramdisk_name",
+            "dlkm",
+            "--vendor_ramdisk_fragment",
+            vendor_dlkm.as_str(),
+            "--vendor_boot",
+            vendor_out.as_str(),
+        ],
+    )
+    .run()?;
+
+    Ok(())
+}
+
 fn run_qemu(conf: &Config, action: &QemuAction) -> Result<()> {
     let ovmf = if action.ia32 {
         conf.ovmf_paths(Arch::Ia32)
@@ -649,5 +740,6 @@ fn main() -> Result<()> {
         Action::GenVbootReturnCodeStrings(_) => vboot::gen_return_code_strings(&conf),
         Action::GenEsp(_) => gen_disk::gen_trivial_esp_image(&conf, &VerboseRuntimeLogs(false)),
         Action::UpdateSbatRevocations(_) => secure_boot::update_sbat_revocations(),
+        Action::GenBootImageTestData(_) => generate_boot_image_test_data(&conf),
     }
 }
