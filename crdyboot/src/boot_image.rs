@@ -324,3 +324,38 @@ impl<'a> VendorData<'a> {
         })
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use uefi::cstr16;
+
+    pub(crate) static TEST_BOOT_IMAGE: &[u8] = include_bytes!("../test_data/bootimg/test_boot.img");
+    pub(crate) static TEST_INIT_BOOT_IMAGE: &[u8] =
+        include_bytes!("../test_data/bootimg/test_init.img");
+    pub(crate) static TEST_VENDOR_BOOT_IMAGE: &[u8] =
+        include_bytes!("../test_data/bootimg/test_vendor.img");
+
+    /// Test parsing a boot image with only a kernel.
+    #[test]
+    fn test_boot_image() {
+        let res = BootImageParts::from_boot_partition(TEST_BOOT_IMAGE).unwrap();
+        assert_eq!(b"KERNEL", res.kernel);
+    }
+
+    /// Test parsing the vendor boot image with a ramdisk.
+    #[test]
+    fn test_init_boot_image() {
+        let res = BootImageParts::from_boot_partition(TEST_INIT_BOOT_IMAGE).unwrap();
+        assert_eq!(b"INIT_RAMDISK", res.initramfs);
+    }
+
+    /// Test parsing the vendor image with multiple ramdisks.
+    #[test]
+    fn test_vendor_boot_image() {
+        let res = VendorData::from_vendor_partition(TEST_VENDOR_BOOT_IMAGE).unwrap();
+        assert_eq!(b"VENDOR_RAMDISK", res.initramfs);
+        assert_eq!(cstr16!("vendor cmdline"), res.cmdline);
+        assert_eq!(b"bootconfig value", res.bootconfig);
+    }
+}
