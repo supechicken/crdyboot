@@ -8,6 +8,7 @@ use bootimg::{
 };
 use core::ffi::CStr;
 use core::mem::size_of;
+use core::ops::Range;
 use core::slice;
 use libcrdy::util::u32_to_usize;
 use log::{debug, warn};
@@ -325,6 +326,37 @@ impl<'a> VendorData<'a> {
     }
 }
 
+struct RangeBuilder {
+    page_size: usize,
+    /// End of any previous sections
+    end: usize,
+}
+
+impl RangeBuilder {
+    #[cfg_attr(not(test), expect(unused))]
+    fn new(page_size: usize) -> Self {
+        Self { page_size, end: 0 }
+    }
+
+    #[cfg_attr(not(test), expect(unused))]
+    fn next_range(&mut self, size: u32) -> Option<Range<usize>> {
+        let size = u32_to_usize(size);
+
+        // Create the range starting at the end of the previous section
+        // of the length of the data for this section.
+        let range = Range {
+            start: self.end,
+            end: self.end.checked_add(size)?,
+        };
+
+        // Find the end of the section for this newly added
+        // range. They align on a page_size boundary.
+        self.end = range.end.checked_next_multiple_of(self.page_size)?;
+
+        Some(range)
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -357,5 +389,39 @@ pub(crate) mod tests {
         assert_eq!(b"VENDOR_RAMDISK", res.initramfs);
         assert_eq!(cstr16!("vendor cmdline"), res.cmdline);
         assert_eq!(b"bootconfig value", res.bootconfig);
+    }
+
+    #[test]
+    fn test_range_builder() {
+        let mut rb = RangeBuilder::new(1024);
+
+        // Section with a size of 25.
+        assert_eq!(rb.next_range(25).unwrap(), Range { start: 0, end: 25 });
+
+        // Confirm the end includes the page_size.
+        assert_eq!(rb.end, 1024);
+
+        // A section with a size of 0 is OK and does
+        // not cause an error.
+        assert_eq!(
+            rb.next_range(0).unwrap(),
+            Range {
+                start: 1024,
+                end: 1024
+            }
+        );
+        // Confirm the end has not changed due to
+        // a 0 size section.
+        assert_eq!(rb.end, 1024);
+
+        // Added range larger than a single page size.
+        assert_eq!(
+            rb.next_range(1026).unwrap(),
+            Range {
+                start: 1024,
+                end: 2050
+            }
+        );
+        assert_eq!(rb.end, 1024 * 3);
     }
 }
