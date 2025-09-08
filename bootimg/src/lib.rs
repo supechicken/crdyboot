@@ -27,4 +27,7 @@ mod bootimg_private {
     include!("../../third_party/mkbootimg/rust/bootimg_priv.rs");
 }
 // Subset of the generated items that are required externally.
-pub use bootimg_private::{vendor_ramdisk_table_entry_v4, VENDOR_RAMDISK_TYPE_PLATFORM};
+pub use bootimg_private::{
+    vendor_ramdisk_table_entry_v4, VENDOR_RAMDISK_TYPE_DLKM, VENDOR_RAMDISK_TYPE_PLATFORM,
+    VENDOR_RAMDISK_TYPE_RECOVERY,
+};
