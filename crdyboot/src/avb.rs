@@ -256,9 +256,9 @@ impl Deref for KernelData {
     }
 }
 
-fn load_kernel(boot_part: &AvbPartitionData) -> Result<KernelData, AvbError> {
+fn load_kernel(boot_image: &BootImageParts) -> Result<KernelData, AvbError> {
     // From the "boot" partition only the kernel is used.
-    let kernel_src = BootImageParts::from_avb_boot_partition(boot_part)?.kernel;
+    let kernel_src = boot_image.kernel;
 
     // Kernel must be non-zero.
     if kernel_src.is_empty() {
@@ -541,23 +541,26 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     let verify_cmdline = unsafe { CStr::from_ptr((*verify_data).cmdline) };
     debug!("verify cmdline: {}", verify_cmdline.to_string_lossy());
 
-    let (boot, init_boot, vendor_boot) = get_boot_parts(verify_data)?;
+    let part_data = get_boot_partitions(verify_data)?;
 
-    // Load the kernel buffer from the boot partition header.
-    let kernel_buffer = load_kernel(boot)?;
+    let boot_data = BootImageParts::from_boot_partition(part_data.boot)?;
 
     // Parse the "generic" `initramfs` from the "init_boot" partition.
     // The initramfs is the only part of this partition that is used.
-    let init_data = BootImageParts::from_avb_boot_partition(init_boot)?;
+    let init_data = BootImageParts::from_boot_partition(part_data.init_boot)?;
 
-    // Slice up the vendor boot partition data.
-    let vendor_data = VendorData::from_avb_vendor_partition(vendor_boot)?;
+    // Parse the vendor_boot partition.
+    let vendor_data = VendorData::from_vendor_partition(part_data.vendor_boot)?;
+
     debug!("vendor bootconfig_size: {}", vendor_data.bootconfig.len());
     debug!(
         "vendor bootconfig: {:?}",
         str::from_utf8(vendor_data.bootconfig)
     );
     debug!("vendor cmdline: {}", vendor_data.cmdline);
+
+    // Load the kernel buffer from the boot partition header.
+    let kernel_buffer = load_kernel(&boot_data)?;
 
     let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data, slot, &UefiImpl)?;
 
@@ -664,18 +667,20 @@ fn get_android_boot_part_uuid(uefi: &dyn Uefi, slot: BootSlot) -> Result<String,
     Ok(guid.to_string())
 }
 
-/// Given the `verify_cmdline` output, return the three useful partitions
-/// `boot`, `init_boot`, and `vendor_boot` in that order.
-fn get_boot_parts<'a>(
+struct BootPartitions<'a> {
+    boot: &'a [u8],
+    init_boot: &'a [u8],
+    vendor_boot: &'a [u8],
+}
+
+/// Find the three expected partitions for this bootloader
+/// from the AVB verified result in `verify_data`.
+/// `verify_data` is expected to be the valid result
+/// from a call to `avb_slot_verify`.
+/// This bootloader expects `boot`, `init_boot`, and `vendor_boot`.
+fn get_boot_partitions<'a>(
     verify_data: *mut AvbSlotVerifyData,
-) -> Result<
-    (
-        &'a AvbPartitionData,
-        &'a AvbPartitionData,
-        &'a AvbPartitionData,
-    ),
-    AvbError,
-> {
+) -> Result<BootPartitions<'a>, AvbError> {
     let mut boot = None;
     let mut init_boot = None;
     let mut vendor_boot = None;
@@ -721,7 +726,17 @@ fn get_boot_parts<'a>(
         return Err(AvbError::MissingAvbPartition("vendor_boot"));
     };
 
-    Ok((boot, init_boot, vendor_boot))
+    // Safety: `verify_data` originates from a call to avb_slot_verify
+    // and expected to be valid.
+    let boot = unsafe { slice::from_raw_parts(boot.data, boot.data_size) };
+    let init_boot = unsafe { slice::from_raw_parts(init_boot.data, init_boot.data_size) };
+    let vendor_boot = unsafe { slice::from_raw_parts(vendor_boot.data, vendor_boot.data_size) };
+
+    Ok(BootPartitions {
+        boot,
+        init_boot,
+        vendor_boot,
+    })
 }
 
 /// Generates the `cmdline` for the kernel as a `CString16`

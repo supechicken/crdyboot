@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 use crate::avb::AvbError;
-use avb::avb_sys::AvbPartitionData;
 use bootimg::{
     vendor_ramdisk_table_entry_v4, BootImage, VendorImageHeader, VENDOR_RAMDISK_TYPE_PLATFORM,
 };
@@ -28,10 +27,7 @@ pub struct BootImageParts<'a> {
 impl<'a> BootImageParts<'a> {
     /// Determine the section slices for a partition with a
     /// `BootImage` header.
-    pub fn from_avb_boot_partition(
-        partition: &AvbPartitionData,
-    ) -> Result<BootImageParts<'a>, AvbError> {
-        let data = unsafe { slice::from_raw_parts(partition.data, partition.data_size) };
+    pub fn from_boot_partition(data: &'a [u8]) -> Result<BootImageParts<'a>, AvbError> {
         let header = BootImage::parse(data).map_err(AvbError::BootImageHeaderParseError)?;
         let BootImage::V4(header) = header else {
             return Err(AvbError::UnsupportedPartitionHeaderVersion);
@@ -105,9 +101,7 @@ impl<'a> VendorData<'a> {
     /// Determine the section slices for a partition with a
     /// `VendorImageHeader`.
     #[expect(clippy::too_many_lines)]
-    pub fn from_avb_vendor_partition(
-        vendor_part: &AvbPartitionData,
-    ) -> Result<VendorData<'a>, AvbError> {
+    pub fn from_vendor_partition(vendor_data: &'a [u8]) -> Result<VendorData<'a>, AvbError> {
         // vendor boot image layout comment from [bootimg.h vendor v4]:
         // The structure of the vendor boot image version 4, which is required to be
         // present when a version 4 boot image is used, is as follows:
@@ -165,7 +159,6 @@ impl<'a> VendorData<'a> {
         // [bootimg.h vendor v4]: https://android.googlesource.com/platform/system/tools/mkbootimg/+/refs/heads/main/include/bootimg/bootimg.h#344
 
         // The vendor_boot partition contains a VendorImageHeader V4.
-        let vendor_data = unsafe { slice::from_raw_parts(vendor_part.data, vendor_part.data_size) };
         let vendor_header =
             VendorImageHeader::parse(vendor_data).map_err(AvbError::VendorImageHeaderParseError)?;
         let VendorImageHeader::V4(vendor_header) = vendor_header else {
