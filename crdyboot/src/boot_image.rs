@@ -101,8 +101,58 @@ pub struct VendorData<'a> {
 impl<'a> VendorData<'a> {
     /// Determine the section slices for a partition with a
     /// `VendorImageHeader`.
-    #[expect(clippy::too_many_lines)]
     pub fn from_vendor_partition(vendor_data: &'a [u8]) -> Result<VendorData<'a>, AvbError> {
+        // Parse the ranges into vendor_data for the various sections and
+        // ramdisks.
+        let ranges = VendorRanges::from_vendor_partition_data(vendor_data)?;
+
+        // This bootloader requires a non-zero vendor ramdisk size.
+        // If there needs to be zero length vendor ramdisk support
+        // it could be added.
+        if ranges.ramdisk.is_empty() {
+            return Err(AvbError::InvalidRamdiskSize(0))?;
+        }
+
+        // Expect a zero dtb on an x86 image, warn otherwise.
+        if !ranges.dtb.is_empty() {
+            warn!("vendor dtb section is non-zero and ignored.");
+        }
+
+        // For now ignore the recovery and any additional ramdisk entries
+        // and only select the single platform entry.
+
+        // Get a slice for the platform ramdisk into the vendor
+        // data:
+        let initramfs = vendor_data
+            .get(ranges.platform_ramdisk)
+            .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
+
+        // Slice into the bootconfig data.
+        let bootconfig = vendor_data
+            .get(ranges.bootconfig)
+            .ok_or(AvbError::IndexOutOfBounds("bootconfig"))?;
+
+        Ok(VendorData {
+            initramfs,
+            cmdline: ranges.cmdline,
+            bootconfig,
+        })
+    }
+}
+
+#[derive(Default, PartialEq)]
+struct VendorRanges {
+    header: Range<usize>,
+    cmdline: CString16,
+    ramdisk: Range<usize>,
+    dtb: Range<usize>,
+    ramdisk_table: Range<usize>,
+    bootconfig: Range<usize>,
+    platform_ramdisk: Range<usize>,
+}
+
+impl VendorRanges {
+    fn from_vendor_partition_data(vendor_data: &[u8]) -> Result<Self, AvbError> {
         // vendor boot image layout comment from [bootimg.h vendor v4]:
         // The structure of the vendor boot image version 4, which is required to be
         // present when a version 4 boot image is used, is as follows:
@@ -167,65 +217,45 @@ impl<'a> VendorData<'a> {
         };
         let vendor_base = vendor_header._base;
 
-        // This bootloader requires a non-zero vendor ramdisk size.
-        if vendor_base.vendor_ramdisk_size == 0 {
-            return Err(AvbError::InvalidRamdiskSize(0))?;
-        }
+        let mut ranges = VendorRanges::default();
 
         // Page size for the vendor boot partition is specified in
         // the header.
-        let page_size = u32_to_usize(vendor_base.page_size);
+        let mut range_builder = RangeBuilder::new(u32_to_usize(vendor_base.page_size));
 
-        // Find the section lengths and offsets of each section.
-        // Each section is a multiple of the `page_size`.
-        // The header is at the front of the buffer.
-        let vendor_boot_header_section_bytes = u32_to_usize(vendor_base.header_size)
-            .checked_next_multiple_of(page_size)
+        // Vendor boot header is the first section.
+        ranges.header = range_builder
+            .next_range(vendor_base.header_size)
             .ok_or(AvbError::IndexOutOfBounds("vendor header"))?;
 
-        // Length of the 'vendor ramdisk section'.
-        let ramdisk_section_bytes = u32_to_usize(vendor_base.vendor_ramdisk_size)
-            .checked_next_multiple_of(page_size)
+        // Ramdisk section follows the vendor boot header.
+        ranges.ramdisk = range_builder
+            .next_range(vendor_base.vendor_ramdisk_size)
             .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk"))?;
-        // Length of the dtb section.
-        let dtb_section_bytes = u32_to_usize(vendor_base.dtb_size)
-            .checked_next_multiple_of(page_size)
+
+        // Dtb follows the ramdisk section.
+        ranges.dtb = range_builder
+            .next_range(vendor_base.dtb_size)
             .ok_or(AvbError::IndexOutOfBounds("vendor dtb"))?;
-        // Length of the vendor ramdisk table section in bytes.
-        let ramdisk_table_section_bytes = u32_to_usize(vendor_header.vendor_ramdisk_table_size)
-            .checked_next_multiple_of(page_size)
+
+        // Ramdisk table follows the dtb.
+        ranges.ramdisk_table = range_builder
+            .next_range(vendor_header.vendor_ramdisk_table_size)
             .ok_or(AvbError::IndexOutOfBounds("vendor ramdisk table"))?;
 
-        // Expect a zero dtb on an x86 image, warn otherwise.
-        if dtb_section_bytes != 0 {
-            warn!("vendor dtb section is non-zero and ignored.");
-        }
-
-        // Calculate the offset to the ramdisk_table section.
-        let ramdisk_table_offset = {
-            || {
-                vendor_boot_header_section_bytes
-                    .checked_add(ramdisk_section_bytes)?
-                    .checked_add(dtb_section_bytes)
-            }
-        }()
-        .ok_or(AvbError::IndexOutOfBounds("ramdisk_table"))?;
-
-        let bootconfig_size = u32_to_usize(vendor_header.bootconfig_size);
-        // Calculate the offset to the bootconfig section following
-        // the ramdisk_table section.
-        let bootconfig_offset_bytes = ramdisk_table_offset
-            .checked_add(ramdisk_table_section_bytes)
+        // Bootconfig follows the ramdisk table.
+        ranges.bootconfig = range_builder
+            .next_range(vendor_header.bootconfig_size)
             .ok_or(AvbError::IndexOutOfBounds("bootconfig"))?;
 
-        // Parse the vendor_ramdisk_table of vendor_ramdisk_table_entry_v4
-        // entries describing the ramdisks in the ramdisk section.
+        // Parse the ramdisk table to locate the offsets into
+        // the ramdisk section.
 
         // Bounds check the table's declared sizes.
-        let ramdisk_table_size = u32_to_usize(vendor_header.vendor_ramdisk_table_size);
         let ramdisk_table_entry_count = u32_to_usize(vendor_header.vendor_ramdisk_table_entry_num);
         let ramdisk_table_entry_size = u32_to_usize(vendor_header.vendor_ramdisk_table_entry_size);
 
+        // Check that the parsed size matches the expected size.
         if size_of::<vendor_ramdisk_table_entry_v4>() != ramdisk_table_entry_size {
             return Err(AvbError::RamdiskTableEntrySize {
                 specified: ramdisk_table_entry_size,
@@ -233,7 +263,9 @@ impl<'a> VendorData<'a> {
             });
         }
 
-        if ramdisk_table_size
+        // Confirm the declared ramdisk table size fits in the ramdisk table
+        // section.
+        if ranges.ramdisk_table.len()
             < ramdisk_table_entry_count
                 .checked_mul(ramdisk_table_entry_size)
                 .ok_or(AvbError::IndexOutOfBounds("ramdisk_table"))?
@@ -241,13 +273,15 @@ impl<'a> VendorData<'a> {
             return Err(AvbError::IndexOutOfBounds("ramdisk_table"));
         }
 
-        let ramdisk_table = ramdisk_table_offset
-            .checked_add(ramdisk_table_size)
-            .and_then(|x| vendor_data.get(ramdisk_table_offset..x))
+        // Get a slice into vendor_data to the ramdisk table itself.
+        let ramdisk_table = vendor_data
+            .get(ranges.ramdisk_table.clone())
             .ok_or(AvbError::IndexOutOfBounds("ramdisk_table"))?;
 
         // Get a slice to the table of vendor_ramdisk_table_entry_v4 entries
         // in the ramdisk table section.
+        // Safety: The bounds are checked above that the count of entries fits in
+        // the ramdisk_table section.
         let ramdisk_entries = unsafe {
             slice::from_raw_parts(
                 ramdisk_table
@@ -257,9 +291,11 @@ impl<'a> VendorData<'a> {
             )
         };
 
+        // Iterate over the ramdisk entries finding the ones that
+        // are interesting.
+        // This bootloader only looks for a single platform section.
         let mut platform_ramdisk_count: u32 = 0;
-        let mut ramdisk_offset = 0;
-        let mut ramdisk_size = 0;
+
         for ramdisk_entry in ramdisk_entries {
             let name = CStr::from_bytes_until_nul(&ramdisk_entry.ramdisk_name)
                 .unwrap()
@@ -268,13 +304,26 @@ impl<'a> VendorData<'a> {
             // For now just include the platform ramdisk.
             if ramdisk_entry.ramdisk_type == VENDOR_RAMDISK_TYPE_PLATFORM {
                 platform_ramdisk_count = platform_ramdisk_count.checked_add(1).unwrap();
-                if ramdisk_size == 0 {
-                    // The individual ramdisk offsets are from the start of the
-                    // whole ramdisk section which follows the header.
-                    ramdisk_offset = vendor_boot_header_section_bytes
+                // Only handle a single platform_ramdisk for now.
+                if platform_ramdisk_count == 1 {
+                    // Ramdisk table's offset is an offset into the ramdisk section
+                    // of the overall data.
+                    let ramdisk_start = ranges
+                        .ramdisk
+                        .start
                         .checked_add(u32_to_usize(ramdisk_entry.ramdisk_offset))
                         .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
-                    ramdisk_size = u32_to_usize(ramdisk_entry.ramdisk_size);
+                    let ramdisk_end = ramdisk_start
+                        .checked_add(u32_to_usize(ramdisk_entry.ramdisk_size))
+                        .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
+
+                    // TODO: check here that this ramdisk range fits in
+                    // ranges.ramdisk? A range.contains() check could
+                    // be done.
+                    ranges.platform_ramdisk = Range {
+                        start: ramdisk_start,
+                        end: ramdisk_end,
+                    };
                 }
             }
         }
@@ -286,43 +335,22 @@ impl<'a> VendorData<'a> {
             ))?;
         }
 
-        // Ensure the ramdisk size is non-zero.
-        if ramdisk_size == 0 {
-            return Err(AvbError::InvalidRamdiskSize(0));
-        }
-
-        // For now ignore the recovery and any additional ramdisk entries
-        // and only select the single platform entry.
-
-        // Get a slice pointing to the ramdisk offset of
-        // for the length of the ramdisk.
-        let initramfs = ramdisk_offset
-            .checked_add(ramdisk_size)
-            .and_then(|x| vendor_data.get(ramdisk_offset..x))
-            .ok_or(AvbError::IndexOutOfBounds("ramdisk"))?;
-
-        // Slice into the bootconfig data.
-        let bootconfig = bootconfig_offset_bytes
-            .checked_add(bootconfig_size)
-            .and_then(|x| vendor_data.get(bootconfig_offset_bytes..x))
-            .ok_or(AvbError::IndexOutOfBounds("bootconfig"))?;
-
+        // The cmdline range could be determined by determining
+        // the offset into the vendor_base.cmdline [u8; 2048] member.
+        // Instead of setting the scope here just parse the cmdline
+        // into a cstr and return it.
         let cmdline = CStr::from_bytes_until_nul(&vendor_base.cmdline)
             .map_err(AvbError::VendorCommandlineUnterminated)?;
 
         // Convert the CStr to &str then to CString16.
         // Return an error if any of those fail.
-        let cmdline = cmdline
+        ranges.cmdline = cmdline
             .to_str()
             .ok()
             .and_then(|x| CString16::try_from(x).ok())
             .ok_or(AvbError::VendorCommandlineMalformed)?;
 
-        Ok(VendorData {
-            initramfs,
-            cmdline,
-            bootconfig,
-        })
+        Ok(ranges)
     }
 }
 
@@ -333,12 +361,10 @@ struct RangeBuilder {
 }
 
 impl RangeBuilder {
-    #[cfg_attr(not(test), expect(unused))]
     fn new(page_size: usize) -> Self {
         Self { page_size, end: 0 }
     }
 
-    #[cfg_attr(not(test), expect(unused))]
     fn next_range(&mut self, size: u32) -> Option<Range<usize>> {
         let size = u32_to_usize(size);
 
