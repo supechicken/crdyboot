@@ -136,6 +136,10 @@ pub enum AvbError {
     /// Boot config is not valid
     #[error("boot config is not valid: {0}")]
     BootConfigInvalid(Utf8Error),
+
+    /// Buffer does not have enough space
+    #[error("allocated buffer is too small")]
+    BufferTooSmall,
 }
 
 fn verify_result_to_str(r: AvbSlotVerifyResult) -> &'static str {
@@ -684,6 +688,62 @@ impl BootConfig {
     }
 }
 
+/// Assemble the initramfs and bootconfig values into
+/// the passed `initramfs_buffer`.
+/// This uses the `bootconfig` parameter and ignores
+/// the `bootconfig` member of `vendor_data`.
+fn assemble_initramfs_buffer(
+    initramfs_buffer: &mut [u8],
+    vendor_data: &VendorData,
+    init_data: &BootImageParts,
+    bootconfig: &BootConfig,
+) -> Result<(), AvbError> {
+    struct Appender<'a> {
+        end: usize,
+        buffer: &'a mut [u8],
+    }
+
+    impl Appender<'_> {
+        fn append_initramfs(&mut self, buffer: &[u8]) -> Result<(), AvbError> {
+            let start = self.end;
+            self.end = start
+                .checked_add(buffer.len())
+                .ok_or(AvbError::InitramfsTooLarge)?;
+            self.buffer
+                .get_mut(start..self.end)
+                .ok_or(AvbError::BufferTooSmall)?
+                .copy_from_slice(buffer);
+            Ok(())
+        }
+    }
+    let vendor_initramfs = vendor_data.initramfs;
+    let generic_initramfs = init_data.initramfs;
+
+    let mut app = Appender {
+        end: 0,
+        buffer: initramfs_buffer,
+    };
+
+    // Copy the vendor_initramfs to the front of the buffer.
+    app.append_initramfs(vendor_initramfs)?;
+    // Append the generic_initramfs after the vendor_initramfs.
+    app.append_initramfs(generic_initramfs)?;
+
+    // Append the bootconfig at the end of the complete buffer.
+    // It must be at the end.
+    let bootconfig_size = bootconfig.write_size()?;
+
+    let bootconfig_start = initramfs_buffer
+        .len()
+        .checked_sub(bootconfig_size)
+        .ok_or(AvbError::BufferTooSmall)?;
+
+    let bootconfig_slice = initramfs_buffer
+        .get_mut(bootconfig_start..)
+        .ok_or(AvbError::BufferTooSmall)?;
+    bootconfig.write(bootconfig_slice)
+}
+
 /// Assemble the initramfs by concatenating the vendor and
 /// generic (init) ramdisks.
 /// Allocates a buffer to contain the assembled initramfs.
@@ -726,31 +786,7 @@ fn assemble_initramfs(
     )
     .map_err(AvbError::Allocation)?;
 
-    // Copy the vendor_initramfs to the front of the buffer.
-    initramfs_buffer
-        .get_mut(..vendor_initramfs.len())
-        .expect("buffer should be large enough")
-        .copy_from_slice(vendor_initramfs);
-
-    // Append the generic_initramfs after the vendor_initramfs.
-    let generic_initramfs_end = vendor_initramfs
-        .len()
-        .checked_add(generic_initramfs.len())
-        .expect("initramfs should fit generic_initramfs");
-    initramfs_buffer
-        .get_mut(vendor_initramfs.len()..generic_initramfs_end)
-        .expect("buffer should be large enough")
-        .copy_from_slice(generic_initramfs);
-
-    // Append the bootconfig after the generic_initramfs
-    let bootconfig_start = initramfs_buffer
-        .len()
-        .checked_sub(bootconfig_size)
-        .expect("initramfs should fit bootconfig");
-    let bootconfig_slice = initramfs_buffer
-        .get_mut(bootconfig_start..)
-        .expect("buffer should be large enough");
-    bootconfig.write(bootconfig_slice)?;
+    assemble_initramfs_buffer(&mut initramfs_buffer, vendor_data, init_data, &bootconfig)?;
 
     Ok(initramfs_buffer)
 }
@@ -1114,5 +1150,41 @@ androidboot.verifiedbootstate=orange
             TEST_CONFIG_STRING_2.as_bytes()
         );
         assert_eq!(&buffer[TEST_CONFIG_STRING_2.len()..], TEST_CONFIG_TRAILER_2);
+    }
+
+    #[test]
+    fn test_assemble_initramfs_buffer() {
+        let mut buffer = [0u8; 128];
+        // Use an expected buffer larger than needed to check
+        // for unmodified sections.
+        let mut expected = [0u8; 128];
+
+        let expected_ramdisk = b"vendor generic";
+
+        let vd = VendorData {
+            initramfs: b"vendor ",
+            cmdline: CString16::from(cstr16!("cmdline")),
+            bootconfig: b"",
+        };
+
+        let bi = BootImageParts {
+            kernel: b"kernel",
+            initramfs: b"generic",
+        };
+
+        let bootconfig = BootConfig::new(b"xyz").unwrap();
+
+        // Put the expected ramdisk data at the front of the buffer.
+        expected[..expected_ramdisk.len()].copy_from_slice(expected_ramdisk);
+
+        // Write the bootconfig at the end of the buffer, it must be at the end.
+        let bootconfig_start = expected.len() - bootconfig.write_size().unwrap();
+        bootconfig
+            .write(expected.get_mut(bootconfig_start..).unwrap())
+            .unwrap();
+
+        assemble_initramfs_buffer(&mut buffer, &vd, &bi, &bootconfig).unwrap();
+
+        assert_eq!(&buffer[..expected.len()], expected);
     }
 }
