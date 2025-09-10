@@ -537,10 +537,6 @@ impl<'a> VendorData<'a> {
             .and_then(|x| CString16::try_from(x).ok())
             .ok_or(AvbError::VendorCommandlineMalformed)?;
 
-        // TODO: return bootconfig information in a useful way.
-        // It might need to be modified or packed in a certain way.
-        // Find additional context in
-        // https://android-review.git.corp.google.com/c/platform/external/u-boot/+/1579246/7 for
         Ok(VendorData {
             initramfs,
             cmdline,
