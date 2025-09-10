@@ -97,7 +97,6 @@ pub struct VendorData<'a> {
     pub initramfs: &'a [u8],
     pub cmdline: CString16,
     pub bootconfig: &'a [u8],
-    #[cfg_attr(not(test), expect(unused))]
     pub dlkm_ramdisk: &'a [u8],
     #[cfg_attr(not(test), expect(unused))]
     pub recovery_ramdisk: &'a [u8],

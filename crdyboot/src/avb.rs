@@ -393,15 +393,17 @@ fn assemble_initramfs_buffer(
     }
     let vendor_initramfs = vendor_data.initramfs;
     let generic_initramfs = init_data.initramfs;
+    let dlkm_ramdisk = vendor_data.dlkm_ramdisk;
 
     let mut app = Appender {
         end: 0,
         buffer: initramfs_buffer,
     };
 
-    // Copy the vendor_initramfs to the front of the buffer.
+    // Concatenate initramfs fragments in order at the
+    // start of the buffer.
     app.append_initramfs(vendor_initramfs)?;
-    // Append the generic_initramfs after the vendor_initramfs.
+    app.append_initramfs(dlkm_ramdisk)?;
     app.append_initramfs(generic_initramfs)?;
 
     // Append the bootconfig at the end of the complete buffer.
@@ -436,6 +438,7 @@ fn assemble_initramfs(
 ) -> Result<ScopedPageAllocation, AvbError> {
     let vendor_initramfs = vendor_data.initramfs;
     let generic_initramfs = init_data.initramfs;
+    let dlkm_ramdisk = vendor_data.dlkm_ramdisk;
     let mut bootconfig = BootConfig::new(vendor_data.bootconfig)?;
     bootconfig.add_android_boot_values(slot, uefi)?;
 
@@ -452,6 +455,8 @@ fn assemble_initramfs(
         .checked_add(vendor_initramfs.len())
         .ok_or(AvbError::InitramfsTooLarge)?
         .checked_add(bootconfig_size)
+        .ok_or(AvbError::InitramfsTooLarge)?
+        .checked_add(dlkm_ramdisk.len())
         .ok_or(AvbError::InitramfsTooLarge)?;
 
     let mut initramfs_buffer = ScopedPageAllocation::new_unaligned(
@@ -849,7 +854,7 @@ androidboot.verifiedbootstate=orange
         // for unmodified sections.
         let mut expected = [0u8; 128];
 
-        let expected_ramdisk = b"vendor generic";
+        let expected_ramdisk = b"vendor dlkm generic";
 
         let vd = VendorData {
             initramfs: b"vendor ",
