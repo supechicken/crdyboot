@@ -26,7 +26,6 @@ pub enum AndroidBootMode {
 }
 
 impl AndroidBootMode {
-    #[cfg_attr(not(test), expect(unused))]
     pub fn from_command_str(command: &str) -> Option<Self> {
         Some(match command {
             "" => Self::Normal,
@@ -52,7 +51,6 @@ pub struct BootloaderMessage {
 }
 
 impl BootloaderMessage {
-    #[cfg_attr(not(test), expect(unused))]
     pub fn parse(source: &[u8]) -> Result<&BootloaderMessage, BcbError> {
         Self::ref_from(source).ok_or(BcbError::BufferWrongSize {
             required: Self::buffer_size(),
@@ -60,7 +58,6 @@ impl BootloaderMessage {
         })
     }
 
-    #[cfg_attr(not(test), expect(unused))]
     pub fn command(&self) -> Result<&str, BcbError> {
         CStr::from_bytes_until_nul(&self.command)
             .map_err(BcbError::CommandNotTerminated)?

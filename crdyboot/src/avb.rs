@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 use crate::alloc::string::{String, ToString};
+use crate::alloc::vec;
 use crate::boot_image::{BootImageParts, VendorData};
+use crate::boot_message::{AndroidBootMode, BcbError, BootloaderMessage};
 use crate::disk::{self, Gpt, GptDiskError, PartitionNum};
 use avb::avb_ops::{create_ops, AvbDiskOps, AvbDiskOpsRef};
 use avb::avb_sys::{
@@ -105,6 +107,22 @@ pub enum AvbError {
         name: &'static CStr16,
         error: GptDiskError,
     },
+
+    /// Failed to open the misc partition.
+    #[error("failed to open misc partition: {0}")]
+    FailedToOpenMisc(GptDiskError),
+
+    /// Failed to read from the misc partition.
+    #[error("failed to read from the misc partition: {0}")]
+    FailedToReadMisc(uefi::Error),
+
+    /// Failed to read the bootmode.
+    #[error("failed to read bootmode: {0}")]
+    FailedToReadBootmode(BcbError),
+
+    /// Unknown bootmessage command.
+    #[error("unknown bootloader command mode {0}")]
+    UnknownBootloaderCommand(String),
 
     /// No partitions are bootable.
     #[error("no partitions are bootable")]
@@ -484,6 +502,32 @@ fn debug_print_avb_vbmeta_data(verify_data: *const AvbSlotVerifyData) {
     }
 }
 
+/// Reads the bootmode from the misc partition.
+fn read_boot_mode(uefi: &dyn Uefi) -> Result<AndroidBootMode, AvbError> {
+    // Buffer to read the BootloaderMessage from the misc partition.
+    // It is 2KiB in length.
+    let mut buffer = vec![0u8; BootloaderMessage::buffer_size()];
+
+    // The bootloader message is at the start of the misc partition
+    // as described in [misc partition].
+    //
+    // [misc partition]: https://android.googlesource.com/platform/bootable/recovery/+/refs/heads/main/bootloader_message/include/bootloader_message/bootloader_message.h#25
+    let mut miscio =
+        disk::open_partition_by_name(uefi, cstr16!("misc")).map_err(AvbError::FailedToOpenMisc)?;
+    miscio
+        .read(0, buffer.as_mut_slice())
+        .map_err(AvbError::FailedToReadMisc)?;
+
+    let blm =
+        BootloaderMessage::parse(buffer.as_slice()).map_err(AvbError::FailedToReadBootmode)?;
+
+    let command = blm.command().map_err(AvbError::FailedToReadBootmode)?;
+
+    let abm = AndroidBootMode::from_command_str(command)
+        .ok_or_else(|| AvbError::UnknownBootloaderCommand(String::from(command)))?;
+    Ok(abm)
+}
+
 /// Use AVB to verify the partitions and return buffers
 /// including the loaded data from the partitions
 /// necessary to boot the kernel.
@@ -501,6 +545,15 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
         VENDOR_BOOT_PARTITION_NAME.as_ptr(),
         ptr::null(),
     ];
+
+    let bootmode = match read_boot_mode(&UefiImpl) {
+        Ok(bootmode) => bootmode,
+        Err(e) => {
+            warn!("Failed to read bootmode, defaulting to normal: {}", e);
+            AndroidBootMode::Normal
+        }
+    };
+    debug!("bootmode: {bootmode:?}");
 
     let mut gpt = Gpt::load_boot_disk(&UefiImpl).map_err(AvbError::FailedLoadBootDisk)?;
     let (slot, mut attributes, partition_num) = get_priority_slot(&UefiImpl, &mut gpt)?;
