@@ -390,6 +390,7 @@ fn assemble_initramfs_buffer(
     vendor_data: &VendorData,
     init_data: &BootImageParts,
     bootconfig: &BootConfig,
+    bootmode: AndroidBootMode,
 ) -> Result<(), AvbError> {
     struct Appender<'a> {
         end: usize,
@@ -422,6 +423,9 @@ fn assemble_initramfs_buffer(
     // start of the buffer.
     app.append_initramfs(vendor_initramfs)?;
     app.append_initramfs(dlkm_ramdisk)?;
+    if let AndroidBootMode::Recovery = bootmode {
+        app.append_initramfs(vendor_data.recovery_ramdisk)?;
+    }
     app.append_initramfs(generic_initramfs)?;
 
     // Append the bootconfig at the end of the complete buffer.
@@ -452,6 +456,7 @@ fn assemble_initramfs(
     vendor_data: &VendorData,
     init_data: &BootImageParts,
     slot: BootSlot,
+    bootmode: AndroidBootMode,
     uefi: &dyn Uefi,
 ) -> Result<ScopedPageAllocation, AvbError> {
     let vendor_initramfs = vendor_data.initramfs;
@@ -468,7 +473,7 @@ fn assemble_initramfs(
     let bootconfig_size = bootconfig.write_size()?;
 
     // Size of the combined initramfs data.
-    let initramfs_size = generic_initramfs
+    let mut initramfs_size = generic_initramfs
         .len()
         .checked_add(vendor_initramfs.len())
         .ok_or(AvbError::InitramfsTooLarge)?
@@ -477,6 +482,12 @@ fn assemble_initramfs(
         .checked_add(dlkm_ramdisk.len())
         .ok_or(AvbError::InitramfsTooLarge)?;
 
+    if let AndroidBootMode::Recovery = bootmode {
+        initramfs_size = initramfs_size
+            .checked_add(vendor_data.recovery_ramdisk.len())
+            .ok_or(AvbError::InitramfsTooLarge)?;
+    }
+
     let mut initramfs_buffer = ScopedPageAllocation::new_unaligned(
         AllocateType::AnyPages,
         MemoryType::LOADER_CODE,
@@ -484,7 +495,13 @@ fn assemble_initramfs(
     )
     .map_err(AvbError::Allocation)?;
 
-    assemble_initramfs_buffer(&mut initramfs_buffer, vendor_data, init_data, &bootconfig)?;
+    assemble_initramfs_buffer(
+        &mut initramfs_buffer,
+        vendor_data,
+        init_data,
+        &bootconfig,
+        bootmode,
+    )?;
 
     Ok(initramfs_buffer)
 }
@@ -620,7 +637,7 @@ pub fn do_avb_verify() -> Result<LoadedBuffersAvb, AvbError> {
     // Load the kernel buffer from the boot partition header.
     let kernel_buffer = load_kernel(&boot_data)?;
 
-    let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data, slot, &UefiImpl)?;
+    let initramfs_buffer = assemble_initramfs(&vendor_data, &init_data, slot, bootmode, &UefiImpl)?;
 
     let cmdline = generate_cmdline(verify_cmdline, &vendor_data)?;
 
@@ -900,30 +917,7 @@ androidboot.verifiedbootstate=orange
         assert_eq!(&buffer[TEST_CONFIG_STRING_2.len()..], TEST_CONFIG_TRAILER_2);
     }
 
-    #[test]
-    fn test_assemble_initramfs_buffer() {
-        let mut buffer = [0u8; 128];
-        // Use an expected buffer larger than needed to check
-        // for unmodified sections.
-        let mut expected = [0u8; 128];
-
-        let expected_ramdisk = b"vendor dlkm generic";
-
-        let vd = VendorData {
-            initramfs: b"vendor ",
-            cmdline: CString16::from(cstr16!("cmdline")),
-            bootconfig: b"",
-            dlkm_ramdisk: b"dlkm ",
-            recovery_ramdisk: b"recovery",
-        };
-
-        let bi = BootImageParts {
-            kernel: b"kernel",
-            initramfs: b"generic",
-        };
-
-        let bootconfig = BootConfig::new(b"xyz").unwrap();
-
+    fn set_expected_buffer(expected: &mut [u8], expected_ramdisk: &[u8], bootconfig: &BootConfig) {
         // Put the expected ramdisk data at the front of the buffer.
         expected[..expected_ramdisk.len()].copy_from_slice(expected_ramdisk);
 
@@ -932,9 +926,65 @@ androidboot.verifiedbootstate=orange
         bootconfig
             .write(expected.get_mut(bootconfig_start..).unwrap())
             .unwrap();
+    }
 
-        assemble_initramfs_buffer(&mut buffer, &vd, &bi, &bootconfig).unwrap();
+    #[test]
+    fn test_assemble_initramfs_normal() {
+        let mut buffer = [0u8; 128];
+        // Use an expected buffer larger than needed to check
+        // for unmodified sections.
+        let mut expected = [0u8; 128];
 
+        let vd = VendorData {
+            initramfs: b"vendor ",
+            cmdline: CString16::from(cstr16!("cmdline")),
+            bootconfig: b"",
+            dlkm_ramdisk: b"dlkm ",
+            recovery_ramdisk: b"recovery",
+        };
+        let bi = BootImageParts {
+            kernel: b"kernel",
+            initramfs: b"generic",
+        };
+        let bootconfig = BootConfig::new(b"xyz").unwrap();
+
+        set_expected_buffer(&mut expected, b"vendor dlkm generic", &bootconfig);
+
+        assemble_initramfs_buffer(&mut buffer, &vd, &bi, &bootconfig, AndroidBootMode::Normal)
+            .unwrap();
+        assert_eq!(&buffer[..expected.len()], expected);
+    }
+
+    #[test]
+    fn test_assemble_initramfs_recovery() {
+        let mut buffer = [0u8; 128];
+        // Use an expected buffer larger than needed to check
+        // for unmodified sections.
+        let mut expected = [0u8; 128];
+
+        let vd = VendorData {
+            initramfs: b"vendor ",
+            cmdline: CString16::from(cstr16!("cmdline")),
+            bootconfig: b"",
+            dlkm_ramdisk: b"dlkm ",
+            recovery_ramdisk: b"recovery ",
+        };
+        let bi = BootImageParts {
+            kernel: b"kernel",
+            initramfs: b"generic",
+        };
+        let bootconfig = BootConfig::new(b"xyz").unwrap();
+
+        set_expected_buffer(&mut expected, b"vendor dlkm recovery generic", &bootconfig);
+
+        assemble_initramfs_buffer(
+            &mut buffer,
+            &vd,
+            &bi,
+            &bootconfig,
+            AndroidBootMode::Recovery,
+        )
+        .unwrap();
         assert_eq!(&buffer[..expected.len()], expected);
     }
 }
