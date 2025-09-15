@@ -19,6 +19,25 @@ pub enum BcbError {
     CommandInvalidUtf8(#[from] core::str::Utf8Error),
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum AndroidBootMode {
+    Normal,
+    Recovery,
+}
+
+impl AndroidBootMode {
+    #[cfg_attr(not(test), expect(unused))]
+    pub fn from_command_str(command: &str) -> Option<Self> {
+        Some(match command {
+            "" => Self::Normal,
+            "boot-recovery" => Self::Recovery,
+            // Ignore commands that aren't being considered by
+            // this bootloader.
+            _ => return None,
+        })
+    }
+}
+
 /// `struct bootloader_message` from [recovery bootloader_message]
 ///
 /// [recovery bootloader_message]: https://android.googlesource.com/platform/bootable/recovery/+/refs/heads/main/bootloader_message/include/bootloader_message/bootloader_message.h#67
@@ -120,6 +139,22 @@ mod tests {
                 required: 2048,
                 got: 2049
             }
+        );
+    }
+
+    #[test]
+    fn test_boot_mode_normal() {
+        assert_eq!(
+            AndroidBootMode::from_command_str("").unwrap(),
+            AndroidBootMode::Normal
+        );
+    }
+
+    #[test]
+    fn test_boot_mode_recovery() {
+        assert_eq!(
+            AndroidBootMode::from_command_str("boot-recovery").unwrap(),
+            AndroidBootMode::Recovery
         );
     }
 }
