@@ -47,7 +47,7 @@ struct CompatEntryIter<'a> {
 }
 
 impl CompatEntryIter<'_> {
-    fn new(section: &[u8]) -> CompatEntryIter {
+    fn new(section: &[u8]) -> CompatEntryIter<'_> {
         CompatEntryIter {
             data: section,
             offset: 0,

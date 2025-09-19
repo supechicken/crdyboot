@@ -83,7 +83,7 @@ impl<'a> Disk<'a> {
         &mut *handle.cast::<Disk>()
     }
 
-    pub fn info(&mut self) -> DiskInfo {
+    pub fn info(&mut self) -> DiskInfo<'_> {
         DiskInfo {
             info: vb2_disk_info {
                 handle: self.as_handle(),

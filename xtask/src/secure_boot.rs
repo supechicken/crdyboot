@@ -186,7 +186,7 @@ pub fn create_detached_signature(
 type Defines<'a> = BTreeMap<&'a str, &'a str>;
 
 /// Parse `#defines` into a map.
-fn parse_defines(cpp_output: &str) -> Defines {
+fn parse_defines(cpp_output: &str) -> Defines<'_> {
     cpp_output
         .lines()
         .filter_map(|line| line.strip_prefix("#define ")?.split_once(' '))
