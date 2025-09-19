@@ -10,7 +10,9 @@ use uefi::data_types::PhysicalAddress;
 /// On the targets we care about, `usize` is always at least as large as `u32`.
 #[must_use]
 pub const fn u32_to_usize(v: u32) -> usize {
-    assert!(size_of::<u32>() <= size_of::<usize>());
+    const {
+        assert!(size_of::<u32>() <= size_of::<usize>());
+    }
     v as usize
 }
 
@@ -19,7 +21,9 @@ pub const fn u32_to_usize(v: u32) -> usize {
 /// On the targets we care about, `u64` is always at least as large as `usize`.
 #[must_use]
 pub const fn usize_to_u64(v: usize) -> u64 {
-    assert!(size_of::<usize>() <= size_of::<u64>());
+    const {
+        assert!(size_of::<usize>() <= size_of::<u64>());
+    }
     v as u64
 }
 
