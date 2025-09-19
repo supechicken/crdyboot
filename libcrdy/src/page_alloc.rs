@@ -129,7 +129,7 @@ impl ScopedPageAllocation {
         }
 
         // Reject the allocation if it's not a multiple of the page size.
-        if num_bytes % PAGE_SIZE != 0 {
+        if !num_bytes.is_multiple_of(PAGE_SIZE) {
             return Err(PageAllocationError::InvalidSize(num_bytes));
         }
 

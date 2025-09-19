@@ -102,7 +102,7 @@ impl<'a> Disk<'a> {
     fn bytes_to_blocks(&self, num_bytes: u64) -> Option<u64> {
         let bytes_per_lba = self.io.bytes_per_lba().get();
 
-        if num_bytes % bytes_per_lba != 0 {
+        if !num_bytes.is_multiple_of(bytes_per_lba) {
             error!("stream read size is not a multiple of the block size: {num_bytes}");
             return None;
         }
