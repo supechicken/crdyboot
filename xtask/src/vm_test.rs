@@ -359,7 +359,7 @@ fn test_missing_signature_prevents_crdyboot_launch(conf: &Config) -> Result<()> 
     delete_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_output = &[
-        "Boot error in crdyshim-.*: failed to read the next stage signature",
+        "Boot error in crdyshim-.*: failed to read the next stage signature.*",
         "Caused by:",
         "    file open failed: NOT_FOUND",
     ];
@@ -461,7 +461,7 @@ fn test_fatal_error_logs(conf: &Config) -> Result<()> {
     delete_crdyboot_signatures(&conf.test_disk_path())?;
 
     let expected_output = &[
-        "Boot error in crdyshim-.*: failed to read the next stage signature",
+        "Boot error in crdyshim-.*: failed to read the next stage signature.*",
         "",
         "Caused by:",
         "    file open failed: NOT_FOUND",

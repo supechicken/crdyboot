@@ -85,7 +85,9 @@ pub enum CrdyshimError {
     InvalidSignatureName,
 
     /// Failed to read the signature file.
-    #[error("failed to read the next stage signature")]
+    #[error(
+        "failed to read the next stage signature (signature is required with secure boot enabled)"
+    )]
     SignatureReadFailed(#[source] FsError),
 
     /// The next stage signature file has the wrong size.
