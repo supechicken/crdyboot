@@ -28,6 +28,7 @@ use std::fs::Permissions;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::process::ChildStdout;
+use std::sync::LazyLock;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -138,6 +139,24 @@ fn create_output_capture_thread(stdout: ChildStdout) -> JoinHandle<Vec<String>> 
     })
 }
 
+/// Print a line of QEMU output.
+///
+/// ANSI escape codes are removed to avoid messing up the log with
+/// unwanted blank lines. The line is prefixed with "QEMU: " to separate
+/// it from other xtask logs.
+///
+/// Adapted from uefi-rs:
+/// <https://github.com/rust-osdev/uefi-rs/blob/80f71fb1165dad336942bf3ce46f6a69dd7d990b/xtask/src/qemu.rs#L167>
+fn print_qemu_line(line: &str) {
+    // Regex to match escape codes. Cache in a LazyLock to avoid
+    // recomputing the regex each time.
+    static ANSI_ESCAPES: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(\x9b|\x1b\[)[0-?]*[ -/]*[@-~]").unwrap());
+
+    let line = ANSI_ESCAPES.replace_all(line.trim_end(), "");
+    println!("QEMU: {line}");
+}
+
 /// Test successful boots on both ia32 and x64.
 fn test_successful_boot(conf: &Config) -> Result<()> {
     for arch in Arch::all() {
@@ -179,7 +198,7 @@ fn test_successful_boot(conf: &Config) -> Result<()> {
             // Print the VM output.
             let vm_output = output_thread.join().unwrap();
             for line in vm_output {
-                print!(">>> {line}");
+                print_qemu_line(&line);
             }
 
             return Err(err);
@@ -241,7 +260,7 @@ fn launch_test_disk_and_expect_output(
             // EOF reached, which means the VM has stopped.
             bail!("QEMU no longer running");
         }
-        print!(">>> {line}");
+        print_qemu_line(&line);
 
         let regex = Regex::new(next_expected_error).unwrap();
         if regex.is_match(&line) {
@@ -427,7 +446,7 @@ fn test_no_verbose_logs(conf: &Config) -> Result<()> {
             // EOF reached, which means the VM has stopped.
             bail!("QEMU no longer running");
         }
-        print!(">>> {line}");
+        print_qemu_line(&line);
 
         // Note: use `contains` rather than stricter forms of comparison
         // to account for non-printing control characters.
@@ -520,6 +539,9 @@ pub fn run_vm_tests(conf: &Config) -> Result<()> {
     ];
 
     for test in tests {
+        // Blank line between each test.
+        println!();
+
         test(conf)?;
 
         reset_test_disk(conf)?;
