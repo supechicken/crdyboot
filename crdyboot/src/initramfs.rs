@@ -57,9 +57,15 @@ pub fn set_up_loadfile_protocol(initramfs_buffer: ScopedPageAllocation) -> Initr
     ph
 }
 
-/// C callback for [EFI_LOAD_FILE2_PROTOCOL.LoadFile].
+/// C callback for [`EFI_LOAD_FILE2_PROTOCOL.LoadFile`].
 ///
-/// [EFI_LOAD_FILE2_PROTOCOL.LoadFile]: https://uefi.org/specs/UEFI/2.10/13_Protocols_Media_Access.html#efi-load-file2-protocol-loadfile
+/// The `_file_path` is ignored as it will always point to a
+/// `DevicePath` end-entire node, since it is an exact match from
+/// [`LocateDevicePath`]. This callback is only registered for that
+/// exact path.
+///
+/// [`EFI_LOAD_FILE2_PROTOCOL.LoadFile`]: https://uefi.org/specs/UEFI/2.10/13_Protocols_Media_Access.html#efi-load-file2-protocol-loadfile
+/// [`LocateDevicePath`]: https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-locatedevicepath
 unsafe extern "efiapi" fn efi_load_file_initramfs(
     this: *mut LoadFile2Protocol,
     _file_path: *const DevicePathProtocol,
@@ -70,13 +76,6 @@ unsafe extern "efiapi" fn efi_load_file_initramfs(
     if boot_policy {
         return Status::UNSUPPORTED;
     }
-    // Ignorning `_file_path` as it will always point to
-    // the terminator `DeviceType::END`, `DeviceSubType::END_ENTIRE`
-    // since it is an exact match from [`LocateDevicePath`].
-    // This callback is only registered for that exact path.
-    //
-    // [`LocateDevicePath`]: https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-locatedevicepath
-    // DeviceSubType
     let this = &*this.cast::<InitramfsLoadFile2Protocol>();
     this.load_file(buffer_size, buffer.cast())
 }
