@@ -122,9 +122,14 @@ impl InitramfsProtoHolder {
             .finalize()
             .unwrap();
 
-        let proto = InitramfsLoadFile2Protocol::new(initramfs_buffer);
         InitramfsProtoHolder {
-            proto,
+            proto: Box::pin(InitramfsLoadFile2Protocol {
+                efi_protocol: LoadFile2Protocol {
+                    load_file: efi_load_file_initramfs,
+                },
+                initramfs_buffer,
+                _pin: PhantomPinned,
+            }),
             handle: None,
             device_path: Pin::new(device_path),
         }
@@ -222,16 +227,4 @@ struct InitramfsLoadFile2Protocol {
     efi_protocol: LoadFile2Protocol,
     initramfs_buffer: ScopedPageAllocation,
     _pin: PhantomPinned,
-}
-
-impl InitramfsLoadFile2Protocol {
-    fn new(initramfs_buffer: ScopedPageAllocation) -> Pin<Box<Self>> {
-        Box::pin(Self {
-            efi_protocol: LoadFile2Protocol {
-                load_file: efi_load_file_initramfs,
-            },
-            initramfs_buffer,
-            _pin: PhantomPinned,
-        })
-    }
 }
