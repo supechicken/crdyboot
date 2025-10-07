@@ -29,7 +29,6 @@ use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::marker::PhantomPinned;
 use core::pin::Pin;
-use core::ptr;
 use libcrdy::page_alloc::ScopedPageAllocation;
 use log::error;
 use uefi::proto::device_path::build;
@@ -132,7 +131,8 @@ impl InitramfsProtoHolder {
     }
 
     fn proto_ptr(&self) -> *const c_void {
-        ptr::from_ref(&*self.proto).cast()
+        let ptr: *const InitramfsLoadFile2Protocol = &raw const *self.proto;
+        ptr.cast()
     }
 
     /// Install the `LINUX_EFI_INITRD_MEDIA_GUID` vendor device path
