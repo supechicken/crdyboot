@@ -33,8 +33,7 @@ use core::ptr;
 use libcrdy::page_alloc::ScopedPageAllocation;
 use log::error;
 use uefi::proto::device_path::build;
-use uefi::runtime::VariableVendor;
-use uefi::{boot, guid, Handle};
+use uefi::{boot, guid, Guid, Handle};
 use uefi_raw::protocol::device_path::DevicePathProtocol;
 use uefi_raw::protocol::media::LoadFile2Protocol;
 use uefi_raw::Status;
@@ -45,8 +44,7 @@ use uefi_raw::Status;
 /// See [LINUX_EFI_INITRD_MEDIA_GUID].
 ///
 /// [LINUX_EFI_INITRD_MEDIA_GUID]: https://chromium.googlesource.com/chromiumos/third_party/kernel/+/dc4cbf9e2df4d2ad361659aa037f5a9b0d32691f/drivers/firmware/efi/libstub/efi-stub-helper.c#467
-const LINUX_EFI_INITRD_MEDIA_GUID: VariableVendor =
-    VariableVendor(guid!("5568e427-68fc-4f3d-ac74-ca555231cc68"));
+const LINUX_EFI_INITRD_MEDIA_GUID: Guid = guid!("5568e427-68fc-4f3d-ac74-ca555231cc68");
 
 /// Configure and install the protocol handler for the kernel during the
 /// UEFI boot process.
@@ -99,7 +97,7 @@ impl InitramfsProtoHolder {
         // Build the Linux initramfs media device path.
         build::DevicePathBuilder::with_vec(&mut device_path)
             .push(&build::media::Vendor {
-                vendor_guid: LINUX_EFI_INITRD_MEDIA_GUID.0,
+                vendor_guid: LINUX_EFI_INITRD_MEDIA_GUID,
                 vendor_defined_data: &[],
             })
             .unwrap()
