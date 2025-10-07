@@ -76,8 +76,28 @@ unsafe extern "efiapi" fn efi_load_file_initramfs(
     if boot_policy {
         return Status::UNSUPPORTED;
     }
+    if buffer_size.is_null() {
+        return Status::INVALID_PARAMETER;
+    }
+
     let this = &*this.cast::<InitramfsLoadFile2Protocol>();
-    this.load_file(buffer_size, buffer.cast())
+    let buffer_size = unsafe { &mut *buffer_size };
+
+    // If the buffer is too small, return the required size to the caller.
+    if buffer.is_null() || *buffer_size < this.initramfs_buffer.len() {
+        *buffer_size = this.initramfs_buffer.len();
+        return Status::BUFFER_TOO_SMALL;
+    }
+
+    // Copy the initramfs data into the output buffer.
+    unsafe {
+        buffer
+            .cast::<u8>()
+            .copy_from(this.initramfs_buffer.as_ptr(), this.initramfs_buffer.len());
+    }
+    *buffer_size = this.initramfs_buffer.len();
+
+    Status::SUCCESS
 }
 
 /// Manages the loadfile2 protocol handler for the kernel's EFI
@@ -213,33 +233,5 @@ impl InitramfsLoadFile2Protocol {
             initramfs_buffer,
             _pin: PhantomPinned,
         })
-    }
-
-    /// Perform the buffer loading part of [EFI_LOAD_FILE2_PROTOCOL.LoadFile].
-    ///
-    /// # Returns
-    ///
-    /// - `Status::BUFFER_TOO_SMALL` if `buf` is NULL or `buf_len` is too
-    ///   small and `buf_len` is set to the required size of the buffer.
-    /// - `Status::SUCCESS` and `buf_len` is set to the number of bytes
-    ///   copied to `buf`.
-    ///
-    /// [EFI_LOAD_FILE2_PROTOCOL.LoadFile]: https://uefi.org/specs/UEFI/2.10/13_Protocols_Media_Access.html#efi-load-file2-protocol-loadfile
-    fn load_file(&self, buf_len: *mut usize, buf: *mut c_void) -> Status {
-        let buf_len = unsafe { &mut *buf_len };
-        if buf.is_null() || *buf_len < self.initramfs_buffer.len() {
-            *buf_len = self.initramfs_buffer.len();
-            Status::BUFFER_TOO_SMALL
-        } else {
-            unsafe {
-                ptr::copy_nonoverlapping(
-                    self.initramfs_buffer.as_ptr(),
-                    buf.cast(),
-                    self.initramfs_buffer.len(),
-                );
-            }
-            *buf_len = self.initramfs_buffer.len();
-            Status::SUCCESS
-        }
     }
 }
