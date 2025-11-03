@@ -363,7 +363,7 @@ pub fn load_kernel<'kernel>(
     Ok(LoadedKernel {
         data: kernel_buffer,
         cros_config: cros_config_start..cros_config_end,
-        unique_partition_guid: Guid::from_bytes(params.partition_guid),
+        unique_partition_guid: Guid::from_bytes(unsafe { params.partition_guid.u.raw }),
     })
 }
 
