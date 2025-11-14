@@ -32,7 +32,7 @@ extern crate cmem as _;
 
 /// Bindgen wrappers for parts of vboot_reference.
 #[allow(missing_docs, unused)]
-#[expect(non_camel_case_types)]
+#[expect(non_camel_case_types, non_snake_case)]
 #[expect(clippy::pedantic)]
 mod vboot_sys {
     include!(concat!(env!("OUT_DIR"), "/vboot_bindgen.rs"));
