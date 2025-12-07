@@ -345,7 +345,7 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
     let vboot_kernel;
     let flexor_kernel;
     let kernel_data: &[u8];
-    let kernel_cmdline: String;
+    let mut kernel_cmdline: String;
 
     match vboot::load_kernel(
         LoadKernelInputs {
@@ -387,6 +387,9 @@ fn vboot_load_kernel(rk: &dyn RunKernel, uefi: &dyn Uefi) -> Result<(), Crdyboot
             info!("flexor cmdline: {kernel_cmdline}");
         }
     }
+
+    // HACK: Enable developer mode + disable Landlock LSM
+    kernel_cmdline.push_str(" cros_debug lsm=capability,yama,loadpin,safesetid,chromiumos,selinux");
 
     // Convert kernel command line to UCS-2.
     let kernel_cmdline = CString16::try_from(kernel_cmdline.as_str())
